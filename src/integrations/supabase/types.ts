@@ -998,7 +998,6 @@ export type Database = {
         Returns: undefined
       }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
-      generate_pegasus_ticket_ids: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_pending_verification_count: { Args: never; Returns: number }
       get_super_admin_stats: {
@@ -1027,7 +1026,6 @@ export type Database = {
         Returns: undefined
       }
       is_campus_admin: { Args: { _user_id: string }; Returns: boolean }
-      is_pegasus_admin: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       record_pegasus_purchase: {
         Args: { p_ip_address: string; p_user_id: string }
