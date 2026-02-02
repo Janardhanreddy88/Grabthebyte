@@ -984,10 +984,6 @@ export type Database = {
     Functions: {
       apply_promo_code: { Args: { p_code: string }; Returns: boolean }
       atomic_decrement_stock: { Args: { p_order_id: string }; Returns: Json }
-      check_pegasus_rate_limit: {
-        Args: { p_ip_address: string; p_user_id: string }
-        Returns: Json
-      }
       check_phone_exists: { Args: { phone_input: string }; Returns: boolean }
       cleanup_expired_admin_sessions: { Args: never; Returns: number }
       cleanup_old_orders: { Args: never; Returns: number }
@@ -1021,16 +1017,8 @@ export type Database = {
         }
         Returns: boolean
       }
-      increment_pegasus_sold_count: {
-        Args: { p_ticket_type_id: string }
-        Returns: undefined
-      }
       is_campus_admin: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
-      record_pegasus_purchase: {
-        Args: { p_ip_address: string; p_user_id: string }
-        Returns: undefined
-      }
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
