@@ -982,7 +982,6 @@ export type Database = {
       }
     }
     Functions: {
-      apply_promo_code: { Args: { p_code: string }; Returns: boolean }
       atomic_decrement_stock: { Args: { p_order_id: string }; Returns: Json }
       check_phone_exists: { Args: { phone_input: string }; Returns: boolean }
       cleanup_expired_admin_sessions: { Args: never; Returns: number }
@@ -1030,10 +1029,6 @@ export type Database = {
           p_payment_status: string
           p_status: string
         }
-        Returns: Json
-      }
-      validate_promo_code: {
-        Args: { p_amount: number; p_code: string }
         Returns: Json
       }
     }
