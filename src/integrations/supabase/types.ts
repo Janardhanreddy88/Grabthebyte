@@ -372,20 +372,13 @@ export type Database = {
           is_used: boolean
           notes: string | null
           order_number: string
-          payment_method: string | null
-          payment_status: string | null
           platform_fee: number | null
           qr_code: string | null
-          rejection_reason: string | null
           status: Database["public"]["Enums"]["order_status"]
           ticket_code: string | null
           total: number
           updated_at: string
           user_id: string | null
-          utr_number: string | null
-          verification_status: string | null
-          verified_at: string | null
-          verified_by: string | null
         }
         Insert: {
           amount?: number | null
@@ -398,20 +391,13 @@ export type Database = {
           is_used?: boolean
           notes?: string | null
           order_number: string
-          payment_method?: string | null
-          payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
-          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
           total: number
           updated_at?: string
           user_id?: string | null
-          utr_number?: string | null
-          verification_status?: string | null
-          verified_at?: string | null
-          verified_by?: string | null
         }
         Update: {
           amount?: number | null
@@ -424,20 +410,13 @@ export type Database = {
           is_used?: boolean
           notes?: string | null
           order_number?: string
-          payment_method?: string | null
-          payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
-          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
           total?: number
           updated_at?: string
           user_id?: string | null
-          utr_number?: string | null
-          verification_status?: string | null
-          verified_at?: string | null
-          verified_by?: string | null
         }
         Relationships: [
           {
@@ -452,94 +431,6 @@ export type Database = {
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_audit_log: {
-        Row: {
-          action: string
-          created_at: string | null
-          id: string
-          metadata: Json | null
-          new_payment_status: string | null
-          new_status: string | null
-          old_payment_status: string | null
-          old_status: string | null
-          order_id: string | null
-          triggered_by: string | null
-        }
-        Insert: {
-          action: string
-          created_at?: string | null
-          id?: string
-          metadata?: Json | null
-          new_payment_status?: string | null
-          new_status?: string | null
-          old_payment_status?: string | null
-          old_status?: string | null
-          order_id?: string | null
-          triggered_by?: string | null
-        }
-        Update: {
-          action?: string
-          created_at?: string | null
-          id?: string
-          metadata?: Json | null
-          new_payment_status?: string | null
-          new_status?: string | null
-          old_payment_status?: string | null
-          old_status?: string | null
-          order_id?: string | null
-          triggered_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_audit_log_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_webhooks: {
-        Row: {
-          cf_order_id: string
-          created_at: string | null
-          event_type: string
-          id: string
-          order_id: string
-          payload: Json | null
-          payment_id: string | null
-          processed_at: string | null
-        }
-        Insert: {
-          cf_order_id: string
-          created_at?: string | null
-          event_type: string
-          id?: string
-          order_id: string
-          payload?: Json | null
-          payment_id?: string | null
-          processed_at?: string | null
-        }
-        Update: {
-          cf_order_id?: string
-          created_at?: string | null
-          event_type?: string
-          id?: string
-          order_id?: string
-          payload?: Json | null
-          payment_id?: string | null
-          processed_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_webhooks_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -908,7 +799,6 @@ export type Database = {
       }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
-      get_pending_verification_count: { Args: never; Returns: number }
       get_super_admin_stats:
         | { Args: { p_campus_id?: string }; Returns: Json }
         | {
@@ -937,15 +827,6 @@ export type Database = {
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
-      }
-      update_order_from_webhook: {
-        Args: {
-          p_order_id: string
-          p_payment_id?: string
-          p_payment_status: string
-          p_status: string
-        }
-        Returns: Json
       }
     }
     Enums: {

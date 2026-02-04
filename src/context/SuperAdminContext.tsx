@@ -68,11 +68,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, [filters.campusId]);
 
   const fetchPendingCount = useCallback(async () => {
-    const { data, error } = await supabase.rpc('get_pending_verification_count');
-    
-    if (!error && data !== null) {
-      setPendingCount(data);
-    }
+    // Pending count no longer used - payment verification removed
+    setPendingCount(0);
   }, []);
 
   const refreshData = useCallback(async () => {
@@ -111,20 +108,18 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     fetchDashboardStats();
   }, [filters.campusId, fetchDashboardStats]);
 
-  // Real-time subscription for pending orders
+  // Real-time subscription for orders
   useEffect(() => {
     const channel = supabase
-      .channel('pending-orders')
+      .channel('orders-updates')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'orders',
-          filter: 'verification_status=eq.pending',
         },
         () => {
-          fetchPendingCount();
           fetchDashboardStats();
         }
       )
@@ -133,7 +128,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchPendingCount, fetchDashboardStats]);
+  }, [fetchDashboardStats]);
 
   return (
     <SuperAdminContext.Provider

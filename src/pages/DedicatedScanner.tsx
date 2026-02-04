@@ -53,7 +53,6 @@ interface OrderDetails {
   orderNumber: string;
   totalAmount: number;
   status: string;
-  paymentStatus: string;
   qrUsed: boolean;
   createdAt: string;
   items: OrderItem[];
@@ -135,7 +134,6 @@ export default function KioskScanner() {
         orderNumber: foundOrder.qrCode,
         totalAmount: foundOrder.total,
         status: foundOrder.status,
-        paymentStatus: foundOrder.paymentMethod || 'cash',
         qrUsed: foundOrder.isUsed,
         createdAt: foundOrder.createdAt.toISOString(),
         items: foundOrder.items.map(item => ({

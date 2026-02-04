@@ -152,7 +152,7 @@ export function Settlements() {
         .from('orders')
         .select('total, commission_amount')
         .eq('campus_id', newSettlement.campusId)
-        .eq('payment_status', 'success')
+        .eq('status', 'confirmed')
         .gte('created_at', newSettlement.periodStart)
         .lte('created_at', newSettlement.periodEnd);
 
