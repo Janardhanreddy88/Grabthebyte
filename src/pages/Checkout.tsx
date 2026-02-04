@@ -98,18 +98,19 @@ export default function Checkout() {
         return;
       }
       
-      // Create order directly
+      // Create order with pending payment status
       const order = await createOrder({
         items: cart,
         total: totalPrice,
-        paymentMethod: "counter",
+        paymentMethod: "cashfree",
         customerName: user.fullName,
         customerEmail: user.email,
       });
 
       if (order) {
         clearCart();
-        navigate(`/order-success?orderId=${order.id}`);
+        // Navigate to payment page
+        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`);
       } else {
         toast({ title: "Order Failed", description: "Could not create order. Please try again.", variant: "destructive" });
       }
@@ -193,17 +194,17 @@ export default function Checkout() {
           {/* Payment Info */}
           <section className="space-y-3">
             <motion.div variants={itemVariants} className="relative">
-              <div className="absolute inset-0 bg-green-500/5 rounded-2xl ring-2 ring-green-500 pointer-events-none" />
+              <div className="absolute inset-0 bg-primary/5 rounded-2xl ring-2 ring-primary pointer-events-none" />
               <div className="relative p-4 flex items-center gap-4 bg-card rounded-2xl">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-2 flex items-center justify-center shadow-sm">
-                  <Receipt className="w-6 h-6 text-white" />
+                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 p-2 flex items-center justify-center shadow-sm">
+                  <Receipt className="w-6 h-6 text-primary-foreground" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold">Pay at Counter</h3>
-                  <p className="text-xs text-muted-foreground">Show QR code to collect your order</p>
+                  <h3 className="font-bold">Online Payment</h3>
+                  <p className="text-xs text-muted-foreground">Pay via UPI, Cards, Netbanking</p>
                 </div>
-                <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
-                  <CheckCircle2 size={12} className="text-white" />
+                <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                  <CheckCircle2 size={12} className="text-primary-foreground" />
                 </div>
               </div>
             </motion.div>
@@ -220,18 +221,18 @@ export default function Checkout() {
           </div>
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
             <Button 
-              className="w-full h-14 rounded-xl text-base font-bold bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 transition-all" 
+              className="w-full h-14 rounded-xl text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all" 
               onClick={handlePlaceOrder} 
               disabled={isLoading}
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="animate-spin" size={18} />
-                  {isCreating ? "Placing Order..." : "Checking..."}
+                  {isCreating ? "Creating Order..." : "Checking..."}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  Place Order
+                  Proceed to Pay
                   <ArrowLeft className="rotate-180" size={18} />
                 </span>
               )}

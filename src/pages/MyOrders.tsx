@@ -35,12 +35,9 @@ interface Order {
   total: number;
   status: string;
   payment_status: string;
-  verification_status: string;
-  rejection_reason?: string | null; 
   created_at: string;
   items: OrderItem[];
   campus: { name: string };
-  canteen: { name: string };
 }
 
 export default function MyOrders() {
@@ -59,7 +56,6 @@ export default function MyOrders() {
         .select(`
           *,
           campus:campuses(name),
-          canteen:canteens(name),
           order_items(name, quantity, price)
         `)
         .eq('customer_email', user.email)
@@ -72,12 +68,9 @@ export default function MyOrders() {
         order_number: order.order_number,
         total: order.total || order.amount,
         status: order.status,
-        payment_status: order.payment_status,
-        verification_status: order.verification_status,
-        rejection_reason: order.rejection_reason, 
+        payment_status: order.payment_status || 'pending',
         created_at: order.created_at,
         campus: order.campus,
-        canteen: order.canteen,
         items: order.order_items || order.items || []
       }));
 
@@ -213,19 +206,14 @@ export default function MyOrders() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getStatusConfig = (status: string, paymentStatus: string, verification: string, rejectionReason?: string) => {
+  const getStatusConfig = (status: string, paymentStatus: string) => {
     if (status === 'collected') return { label: 'Collected', className: 'bg-gray-100 text-gray-700 border-gray-200' };
-    // Check if this is a "not collected" order (QR expired)
-    const isNotCollected = status === 'cancelled' && rejectionReason?.includes('Not collected');
-    if (isNotCollected) {
-      return { label: 'Not Collected', className: 'bg-red-100 text-red-700 border-red-200' };
-    }
-    if (status === 'cancelled' || verification === 'rejected' || paymentStatus === 'failed' || paymentStatus === 'expired') {
+    if (status === 'cancelled' || paymentStatus === 'failed' || paymentStatus === 'expired') {
       return { label: paymentStatus === 'expired' ? 'Expired' : 'Failed', className: 'bg-red-100 text-red-700 border-red-200' };
     }
-    if ((status === 'confirmed' || status === 'approved' || verification === 'approved') && paymentStatus === 'paid') return { label: 'Ready', className: 'bg-green-100 text-green-700 border-green-200' };
+    if (status === 'confirmed' && paymentStatus === 'completed') return { label: 'Ready', className: 'bg-green-100 text-green-700 border-green-200' };
     if (paymentStatus === 'pending') return { label: 'Payment Pending', className: 'bg-orange-100 text-orange-700 border-orange-200' };
-    return { label: 'Pending', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    return { label: 'Processing', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
   };
 
   return (
@@ -261,16 +249,15 @@ export default function MyOrders() {
           </div>
         ) : (
           orders.map((order) => {
-            const isNotCollected = order.status === 'cancelled' && order.rejection_reason?.includes('Not collected');
-            const statusConfig = getStatusConfig(order.status, order.payment_status, order.verification_status, order.rejection_reason);
+            const statusConfig = getStatusConfig(order.status, order.payment_status);
             const qrExpired = isQrExpired(order.created_at);
             const paymentTimedOut = isPaymentExpired(order.created_at);
             const remainingSeconds = getRemainingPaymentTime(order.created_at);
             
-            const isRejected = (order.status === 'cancelled' || order.verification_status === 'rejected' || order.payment_status === 'failed' || order.payment_status === 'expired') && !isNotCollected;
+            const isFailed = order.status === 'cancelled' || order.payment_status === 'failed' || order.payment_status === 'expired';
             const isPaymentPending = order.payment_status === 'pending' && order.status === 'pending' && !paymentTimedOut;
             const isCollected = order.status === 'collected';
-            const isReady = (order.status === 'confirmed' || order.status === 'approved' || order.verification_status === 'approved') && order.payment_status === 'paid' && !isCollected;
+            const isReady = order.status === 'confirmed' && order.payment_status === 'completed' && !isCollected;
 
             return (
               <Card key={order.id} className="border-none shadow-sm overflow-hidden">
@@ -286,7 +273,7 @@ export default function MyOrders() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                           <Clock size={12} />
-                          {format(new Date(order.created_at), 'h:mm a')} • {order.canteen?.name || 'Canteen'}
+                          {format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}
                         </p>
                       </div>
                       <span className="font-bold text-lg text-primary">₹{order.total}</span>
@@ -303,23 +290,21 @@ export default function MyOrders() {
                       ))}
                     </div>
 
-                    {isNotCollected ? (
-                      <div className="bg-red-50 p-3 rounded-xl border border-red-100">
-                        <div className="flex items-start gap-2">
-                          <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
-                          <div className="w-full">
-                            <p className="font-semibold text-sm text-red-700">Order Expired</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : isRejected ? (
+                    {isFailed ? (
                       <div className="bg-red-50 p-3 rounded-xl border border-red-100">
                         <div className="flex items-start gap-2">
                           <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
                           <div className="w-full">
                             <p className="font-semibold text-sm text-red-700">
-                              {order.payment_status === 'expired' ? 'Payment Expired' : 'Payment Rejected'}
+                              {order.payment_status === 'expired' ? 'Payment Expired' : 'Payment Failed'}
                             </p>
+                            <Button 
+                              size="sm" 
+                              className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-9 text-sm font-semibold"
+                              onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`)}
+                            >
+                              <RefreshCw size={14} className="mr-2" /> Try Again
+                            </Button>
                           </div>
                         </div>
                       </div>

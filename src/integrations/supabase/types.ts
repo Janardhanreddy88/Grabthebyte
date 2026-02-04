@@ -364,6 +364,8 @@ export type Database = {
         Row: {
           amount: number | null
           campus_id: string
+          cf_order_id: string | null
+          cf_payment_id: string | null
           commission_amount: number | null
           created_at: string
           customer_email: string | null
@@ -372,6 +374,8 @@ export type Database = {
           is_used: boolean
           notes: string | null
           order_number: string
+          payment_method: string | null
+          payment_status: string | null
           platform_fee: number | null
           qr_code: string | null
           status: Database["public"]["Enums"]["order_status"]
@@ -383,6 +387,8 @@ export type Database = {
         Insert: {
           amount?: number | null
           campus_id: string
+          cf_order_id?: string | null
+          cf_payment_id?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -391,6 +397,8 @@ export type Database = {
           is_used?: boolean
           notes?: string | null
           order_number: string
+          payment_method?: string | null
+          payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -402,6 +410,8 @@ export type Database = {
         Update: {
           amount?: number | null
           campus_id?: string
+          cf_order_id?: string | null
+          cf_payment_id?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -410,6 +420,8 @@ export type Database = {
           is_used?: boolean
           notes?: string | null
           order_number?: string
+          payment_method?: string | null
+          payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -434,6 +446,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      payment_webhooks: {
+        Row: {
+          cf_order_id: string
+          cf_payment_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json | null
+          processed_at: string | null
+        }
+        Insert: {
+          cf_order_id: string
+          cf_payment_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+        }
+        Update: {
+          cf_order_id?: string
+          cf_payment_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+        }
+        Relationships: []
       }
       platform_settings: {
         Row: {
