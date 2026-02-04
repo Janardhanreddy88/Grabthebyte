@@ -8,7 +8,6 @@ import { AuthProvider } from "@/context/AuthContext";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { PrinterProvider } from "@/context/PrinterContext";
 import { ThemeProvider } from "@/context/ThemeContext";
-import { AdminPinGate } from "@/components/AdminPinGate";
 import { SuperAdminProvider } from "@/context/SuperAdminContext";
 
 import { MenuProvider } from "@/context/MenuContext";
@@ -142,9 +141,7 @@ const App = () => (
                                   element={
                                     <CampusGate>
                                       <AdminRoute>
-                                        <AdminPinGate>
-                                          <AdminDashboard />
-                                        </AdminPinGate>
+                                        <AdminDashboard />
                                       </AdminRoute>
                                     </CampusGate>
                                   } 

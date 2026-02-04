@@ -235,4 +235,4 @@ export function useWeeklyAnalytics() {
     },
     enabled: !!campus?.id,
   });
-}
+} 
