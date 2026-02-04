@@ -182,72 +182,6 @@ export type Database = {
         }
         Relationships: []
       }
-      canteens: {
-        Row: {
-          bank_account_name: string | null
-          bank_account_number: string | null
-          bank_ifsc: string | null
-          campus_id: string
-          commission_rate: number | null
-          created_at: string | null
-          id: string
-          is_active: boolean | null
-          name: string
-          owner_email: string | null
-          owner_name: string | null
-          owner_phone: string | null
-          updated_at: string | null
-          upi_id: string | null
-        }
-        Insert: {
-          bank_account_name?: string | null
-          bank_account_number?: string | null
-          bank_ifsc?: string | null
-          campus_id: string
-          commission_rate?: number | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          name: string
-          owner_email?: string | null
-          owner_name?: string | null
-          owner_phone?: string | null
-          updated_at?: string | null
-          upi_id?: string | null
-        }
-        Update: {
-          bank_account_name?: string | null
-          bank_account_number?: string | null
-          bank_ifsc?: string | null
-          campus_id?: string
-          commission_rate?: number | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          name?: string
-          owner_email?: string | null
-          owner_name?: string | null
-          owner_phone?: string | null
-          updated_at?: string | null
-          upi_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "canteens_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campus_public_info"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "canteens_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       categories: {
         Row: {
           campus_id: string
@@ -430,7 +364,6 @@ export type Database = {
         Row: {
           amount: number | null
           campus_id: string
-          canteen_id: string | null
           commission_amount: number | null
           created_at: string
           customer_email: string | null
@@ -457,7 +390,6 @@ export type Database = {
         Insert: {
           amount?: number | null
           campus_id: string
-          canteen_id?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -484,7 +416,6 @@ export type Database = {
         Update: {
           amount?: number | null
           campus_id?: string
-          canteen_id?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -521,13 +452,6 @@ export type Database = {
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "orders_canteen_id_fkey"
-            columns: ["canteen_id"]
-            isOneToOne: false
-            referencedRelation: "canteens"
             referencedColumns: ["id"]
           },
         ]
@@ -701,7 +625,6 @@ export type Database = {
       settlements: {
         Row: {
           campus_id: string
-          canteen_id: string
           commission_amount: number | null
           created_at: string | null
           created_by: string | null
@@ -719,7 +642,6 @@ export type Database = {
         }
         Insert: {
           campus_id: string
-          canteen_id: string
           commission_amount?: number | null
           created_at?: string | null
           created_by?: string | null
@@ -737,7 +659,6 @@ export type Database = {
         }
         Update: {
           campus_id?: string
-          canteen_id?: string
           commission_amount?: number | null
           created_at?: string | null
           created_by?: string | null
@@ -766,13 +687,6 @@ export type Database = {
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "settlements_canteen_id_fkey"
-            columns: ["canteen_id"]
-            isOneToOne: false
-            referencedRelation: "canteens"
             referencedColumns: ["id"]
           },
         ]
@@ -995,10 +909,12 @@ export type Database = {
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_pending_verification_count: { Args: never; Returns: number }
-      get_super_admin_stats: {
-        Args: { p_campus_id?: string; p_canteen_id?: string }
-        Returns: Json
-      }
+      get_super_admin_stats:
+        | { Args: { p_campus_id?: string }; Returns: Json }
+        | {
+            Args: { p_campus_id?: string; p_canteen_id?: string }
+            Returns: Json
+          }
       get_ticket_stats: { Args: never; Returns: Json }
       get_user_campus_id: { Args: { _user_id: string }; Returns: string }
       has_role: {

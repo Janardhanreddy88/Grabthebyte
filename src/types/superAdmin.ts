@@ -23,7 +23,6 @@ export interface Campus {
 export interface Settlement {
   id: string;
   campus_id: string;
-  canteen_id: string; // Keep for backward compat, will be ignored
   period_start: string;
   period_end: string;
   total_sales: number;

@@ -166,7 +166,6 @@ export function Settlements() {
         .from('settlements')
         .insert({
           campus_id: newSettlement.campusId,
-          canteen_id: newSettlement.campusId, // Use campus_id as canteen_id for backward compat
           period_start: newSettlement.periodStart,
           period_end: newSettlement.periodEnd,
           total_sales: totalSales,
