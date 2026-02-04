@@ -109,21 +109,16 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
         const fetchedOrder: Order = {
           id: dbOrder.id,
-          // Removed 'orderNumber' (doesn't exist in type)
           qrCode: dbOrder.order_number, 
           total: dbOrder.total_amount || 0,
-          // Force cast the status (simplified token system)
           status: (['pending', 'confirmed', 'collected', 'cancelled'].includes(dbOrder.status) 
             ? dbOrder.status 
             : 'pending') as Order['status'],
-          paymentMethod: dbOrder.payment_status === 'paid' ? 'online' : 'cash',
           isUsed: dbOrder.is_used || dbOrder.status === 'collected',
           createdAt: new Date(dbOrder.created_at),
-          // Handle JSON parsing safely
           items: typeof dbOrder.items === 'string' 
             ? JSON.parse(dbOrder.items) 
             : (dbOrder.items || []),
-          // REMOVED 'userId' here to fix the error
         };
         return fetchedOrder;
       }

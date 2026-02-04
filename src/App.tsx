@@ -23,7 +23,6 @@ import Auth from "./pages/Auth";
 import SelectCampus from "./pages/SelectCampus";
 import Menu from "./pages/Menu";
 import Checkout from "./pages/Checkout";
-import Payment from "./pages/Payment";
 import OrderSuccess from "./pages/OrderSuccess";
 import AdminDashboard from "./pages/AdminDashboard";
 import DedicatedScanner from "./pages/DedicatedScanner";
@@ -41,7 +40,6 @@ import Support from "./pages/Support"; // <--- IMPORT ADDED HERE
 
 // Super Admin Pages
 import { SuperAdminDashboard } from "./pages/super-admin/SuperAdminDashboard";
-import { PaymentVerification } from "./pages/super-admin/PaymentVerification";
 import { SuperAdminOrders } from "./pages/super-admin/SuperAdminOrders";
 import { Settlements } from "./pages/super-admin/Settlements";
 import { CampusManagement } from "./pages/super-admin/CampusManagement";
@@ -99,11 +97,6 @@ const App = () => (
                                 <Route path="/checkout" element={
                                   <CampusGate>
                                     <Checkout />
-                                  </CampusGate>
-                                } />
-                                <Route path="/payment" element={
-                                  <CampusGate>
-                                    <Payment />
                                   </CampusGate>
                                 } />
                                 <Route path="/order-success" element={
@@ -164,16 +157,6 @@ const App = () => (
                                     <SuperAdminRoute>
                                       <SuperAdminLayout>
                                         <SuperAdminDashboard />
-                                      </SuperAdminLayout>
-                                    </SuperAdminRoute>
-                                  } 
-                                />
-                                <Route 
-                                  path="/super-admin/verification" 
-                                  element={
-                                    <SuperAdminRoute>
-                                      <SuperAdminLayout>
-                                        <PaymentVerification />
                                       </SuperAdminLayout>
                                     </SuperAdminRoute>
                                   } 

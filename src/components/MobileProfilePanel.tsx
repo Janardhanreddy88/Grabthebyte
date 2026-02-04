@@ -17,7 +17,6 @@ interface Order {
   created_at: string;
   total: number;
   status: string;
-  payment_status: string | null;
   items: string[];
 }
 
@@ -91,7 +90,7 @@ export function MobileProfilePanel({
       // Fetch orders with their items
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('id, order_number, created_at, total, status, payment_status')
+        .select('id, order_number, created_at, total, status')
         .eq('user_id', authUser.id)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -121,19 +120,15 @@ export function MobileProfilePanel({
     }
   };
 
-  // Get display status based on order and payment status
+  // Get display status based on order status
   const getStatusDisplay = (order: Order) => {
-    if (order.status === 'pending' && order.payment_status === 'paid') {
-      return { label: 'Verifying...', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' };
-    }
-    
     switch (order.status) {
       case 'confirmed':
-        return { label: 'Approved', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
+        return { label: 'Confirmed', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
       case 'collected':
         return { label: 'Collected', color: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' };
       case 'cancelled':
-        return { label: 'Failed', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
+        return { label: 'Cancelled', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
       case 'pending':
       default:
         return { label: 'Pending', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' };

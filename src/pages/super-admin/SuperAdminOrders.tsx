@@ -50,8 +50,6 @@ interface Order {
   customer_email: string | null;
   total: number;
   status: string;
-  payment_status: string;
-  verification_status: string;
   created_at: string;
   campus?: { name: string; code: string };
   order_items?: Array<{
@@ -83,8 +81,6 @@ export function SuperAdminOrders() {
         customer_email,
         total,
         status,
-        payment_status,
-        verification_status,
         created_at,
         campus:campuses(name, code),
         order_items(id, name, quantity, price)
@@ -174,16 +170,6 @@ export function SuperAdminOrders() {
         {config.label}
       </Badge>
     );
-  };
-
-  const getPaymentBadge = (status: string) => {
-    if (status === 'success' || status === 'paid') {
-      return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Paid</Badge>;
-    }
-    if (status === 'failed') {
-      return <Badge variant="destructive">Failed</Badge>;
-    }
-    return <Badge variant="secondary">Pending</Badge>;
   };
 
   const filteredOrders = orders.filter(order => {
@@ -339,7 +325,6 @@ export function SuperAdminOrders() {
                     <TableHead>Customer</TableHead>
                     <TableHead>Campus</TableHead>
                     <TableHead>Amount</TableHead>
-                    <TableHead>Payment</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -363,7 +348,6 @@ export function SuperAdminOrders() {
                       <TableCell className="font-semibold">
                         {formatCurrency(order.total)}
                       </TableCell>
-                      <TableCell>{getPaymentBadge(order.payment_status)}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(order.created_at), 'MMM d, h:mm a')}
@@ -410,15 +394,9 @@ export function SuperAdminOrders() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Order Status</p>
-                  {getStatusBadge(selectedOrder.status)}
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Payment Status</p>
-                  {getPaymentBadge(selectedOrder.payment_status)}
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Order Status</p>
+                {getStatusBadge(selectedOrder.status)}
               </div>
 
               <div>

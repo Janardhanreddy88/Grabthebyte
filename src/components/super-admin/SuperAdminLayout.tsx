@@ -2,7 +2,6 @@ import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  CreditCard, 
   ShoppingBag, 
   Wallet, 
   Building2, 
@@ -44,7 +43,6 @@ interface SuperAdminLayoutProps {
 
 const navItems = [
   { path: '/super-admin', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/super-admin/verification', icon: CreditCard, label: 'Payment Verification', badge: true },
   { path: '/super-admin/orders', icon: ShoppingBag, label: 'Orders' },
   { path: '/super-admin/settlements', icon: Wallet, label: 'Settlements' },
   { path: '/super-admin/campuses', icon: Building2, label: 'Campuses' },
@@ -146,11 +144,6 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
               >
                 <item.icon className="h-5 w-5" />
                 <span className="flex-1">{item.label}</span>
-                {item.badge && pendingCount > 0 && (
-                  <Badge variant="destructive" className="h-5 min-w-5 flex items-center justify-center text-xs">
-                    {pendingCount > 99 ? '99+' : pendingCount}
-                  </Badge>
-                )}
               </Link>
             ))}
           </nav>
@@ -220,13 +213,8 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon">
               <Bell className="h-5 w-5" />
-              {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center">
-                  {pendingCount > 9 ? '9+' : pendingCount}
-                </span>
-              )}
             </Button>
           </div>
         </header>

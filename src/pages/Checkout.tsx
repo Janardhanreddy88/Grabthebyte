@@ -3,10 +3,7 @@ import {
   ShoppingBag,
   Loader2,
   AlertCircle,
-  Shield,
   Receipt,
-  Wallet,
-  Smartphone,
   CheckCircle2,
   Minus,
   Plus
@@ -17,19 +14,20 @@ import { Logo } from "@/components/Logo";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { useState, useRef } from "react";
-import { useToast } from "@/hooks/use-toast"; // Fixed import
-import { useStockCheck } from "@/hooks/useStockCheck"; // Fixed import
+import { useToast } from "@/hooks/use-toast";
+import { useStockCheck } from "@/hooks/useStockCheck";
 import { useAuth } from "@/context/AuthContext"; 
+import { useOrders } from "@/hooks/useOrders";
 import { EmptyState } from "@/components/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { ImageWithFallback } from "@/components/ImageWithFallback";
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { cart, totalPrice, totalItems, updateQuantity, removeFromCart } = useCart();
+  const { cart, totalPrice, totalItems, updateQuantity, removeFromCart, clearCart } = useCart();
   const { user } = useAuth(); 
+  const { createOrder, isCreating } = useOrders();
   
-  // --- FIX: Added these missing hooks ---
   const { toast } = useToast();
   const { checkStock } = useStockCheck();
   
@@ -74,7 +72,7 @@ export default function Checkout() {
     );
   }
 
-  const handleOpenGateway = async () => {
+  const handlePlaceOrder = async () => {
     if (!user) {
       toast({ title: "Login Required", description: "You must be logged in to place an order.", variant: "destructive" });
       navigate("/auth");
@@ -100,14 +98,30 @@ export default function Checkout() {
         return;
       }
       
-      navigate(`/payment?amount=${totalPrice}&mode=create`);
+      // Create order directly
+      const order = await createOrder({
+        items: cart,
+        total: totalPrice,
+        paymentMethod: "counter",
+        customerName: user.fullName,
+        customerEmail: user.email,
+      });
+
+      if (order) {
+        clearCart();
+        navigate(`/order-success?orderId=${order.id}`);
+      } else {
+        toast({ title: "Order Failed", description: "Could not create order. Please try again.", variant: "destructive" });
+      }
 
     } catch (error) {
-      navigate(`/payment?amount=${totalPrice}&mode=create`);
+      toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setIsCheckingStock(false);
     }
   };
+
+  const isLoading = isCheckingStock || isCreating;
 
   return (
     <div className="min-h-screen bg-gray-50/50 dark:bg-background flex flex-col">
@@ -154,9 +168,9 @@ export default function Checkout() {
                     <div className="flex items-center justify-between mt-2">
                       <p className="text-xs text-muted-foreground">₹{item.price} / item</p>
                       <div className="flex items-center bg-secondary/50 rounded-lg p-1 gap-3 border border-border/50">
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-6 h-6 rounded-md bg-background flex items-center justify-center shadow-sm hover:text-primary disabled:opacity-50" disabled={isCheckingStock}> <Minus size={12} /> </motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-6 h-6 rounded-md bg-background flex items-center justify-center shadow-sm hover:text-primary disabled:opacity-50" disabled={isLoading}> <Minus size={12} /> </motion.button>
                         <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center shadow-sm disabled:opacity-50" disabled={isCheckingStock}> <Plus size={12} /> </motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center shadow-sm disabled:opacity-50" disabled={isLoading}> <Plus size={12} /> </motion.button>
                       </div>
                     </div>
                   </div>
@@ -176,18 +190,23 @@ export default function Checkout() {
             </motion.div>
           </section>
 
-          {/* Payment Method */}
+          {/* Payment Info */}
           <section className="space-y-3">
-            <div className="flex items-center gap-2 text-muted-foreground px-1"> <Wallet size={16} /> <h2 className="text-sm font-medium uppercase tracking-wider">Payment Method</h2> </div>
-            <motion.div variants={itemVariants} className="relative group cursor-pointer">
+            <motion.div variants={itemVariants} className="relative">
               <div className="absolute inset-0 bg-green-500/5 rounded-2xl ring-2 ring-green-500 pointer-events-none" />
               <div className="relative p-4 flex items-center gap-4 bg-card rounded-2xl">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-2 flex items-center justify-center shadow-sm"> <Smartphone className="w-6 h-6 text-white" /> </div>
-                <div className="flex-1"> <div className="flex items-center gap-2"> <h3 className="font-bold">UPI Payment</h3> </div> <p className="text-xs text-muted-foreground">GPay, PhonePe, Paytm & More</p> </div>
-                <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center"> <CheckCircle2 size={12} className="text-white" /> </div>
+                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-2 flex items-center justify-center shadow-sm">
+                  <Receipt className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold">Pay at Counter</h3>
+                  <p className="text-xs text-muted-foreground">Show QR code to collect your order</p>
+                </div>
+                <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
+                  <CheckCircle2 size={12} className="text-white" />
+                </div>
               </div>
             </motion.div>
-            <div className="flex items-center justify-center gap-2 py-2 text-muted-foreground/60"> <Shield size={12} /> <span className="text-[10px] uppercase tracking-widest font-semibold">Manual Verification</span> </div>
           </section>
         </motion.div>
       </main>
@@ -200,8 +219,22 @@ export default function Checkout() {
             <p className="text-2xl font-black text-foreground">₹{totalPrice}</p>
           </div>
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
-            <Button className="w-full h-14 rounded-xl text-base font-bold bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 transition-all" onClick={handleOpenGateway} disabled={isCheckingStock}>
-              {isCheckingStock ? ( <span className="flex items-center gap-2"> <Loader2 className="animate-spin" size={18} /> Checking... </span> ) : ( <span className="flex items-center gap-2"> Pay with UPI <ArrowLeft className="rotate-180" size={18} /> </span> )}
+            <Button 
+              className="w-full h-14 rounded-xl text-base font-bold bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 transition-all" 
+              onClick={handlePlaceOrder} 
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={18} />
+                  {isCreating ? "Placing Order..." : "Checking..."}
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  Place Order
+                  <ArrowLeft className="rotate-180" size={18} />
+                </span>
+              )}
             </Button>
           </motion.div>
         </div>
