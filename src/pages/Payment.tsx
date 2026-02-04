@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 
 declare global {
   interface Window {
-    Cashfree?: {
+    Cashfree?: (config: { mode: string }) => {
       checkout: (options: {
         paymentSessionId: string;
         redirectTarget?: string;
@@ -36,6 +36,7 @@ export default function Payment() {
   const [paymentState, setPaymentState] = useState<PaymentState>('loading');
   const [orderNumber, setOrderNumber] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [sdkReady, setSdkReady] = useState(false);
   
   const paymentInitiated = useRef(false);
   const verificationAttempts = useRef(0);
@@ -43,13 +44,32 @@ export default function Payment() {
 
   // Load Cashfree SDK
   useEffect(() => {
-    if (!document.getElementById('cashfree-sdk')) {
+    const loadSdk = () => {
+      if (document.getElementById('cashfree-sdk')) {
+        // SDK script already exists, check if loaded
+        if (window.Cashfree) {
+          setSdkReady(true);
+        }
+        return;
+      }
+
       const script = document.createElement('script');
       script.id = 'cashfree-sdk';
       script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
       script.async = true;
-      document.body.appendChild(script);
-    }
+      script.onload = () => {
+        console.log('Cashfree SDK loaded');
+        setSdkReady(true);
+      };
+      script.onerror = () => {
+        console.error('Failed to load Cashfree SDK');
+        setPaymentState('error');
+        setErrorMessage('Payment SDK failed to load. Please refresh the page.');
+      };
+      document.head.appendChild(script);
+    };
+
+    loadSdk();
   }, []);
 
   // Verify payment status
@@ -157,8 +177,10 @@ export default function Payment() {
 
       setPaymentState('processing');
 
-      // Open Cashfree checkout
-      const result = await window.Cashfree.checkout({
+      // Initialize Cashfree SDK and open checkout
+      // Mode should be 'production' for live, 'sandbox' for testing
+      const cashfree = window.Cashfree({ mode: 'production' });
+      const result = await cashfree.checkout({
         paymentSessionId: data.sessionId,
         redirectTarget: '_self',
       });
