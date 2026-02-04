@@ -16,8 +16,11 @@ Deno.serve(async (req) => {
 
     console.log("Payment redirect:", { orderId, cfOrderId });
 
+    // Use environment variable for production URL, fallback to referer or default
+    const appBaseUrl = Deno.env.get("APP_URL") || "https://id-preview--ac6a2be2-d4c6-41d7-810b-cbdebecd6536.lovable.app";
+    
     // Redirect to app payment page for status check
-    const redirectUrl = `https://id-preview--ac6a2be2-d4c6-41d7-810b-cbdebecd6536.lovable.app/payment?order_id=${orderId}&cf_order_id=${cfOrderId}&redirect=true`;
+    const redirectUrl = `${appBaseUrl}/payment?order_id=${orderId}&cf_order_id=${cfOrderId}&redirect=true`;
 
     return new Response(null, {
       status: 302,
