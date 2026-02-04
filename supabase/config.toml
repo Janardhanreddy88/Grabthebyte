@@ -1,15 +1,16 @@
 project_id = "dlaudfrhokdjtcmnhhap"
 
-[functions.stripe-payment]
-verify_jwt = false
-
 [functions.admin-auth]
 verify_jwt = false
 
 [functions.create-payment]
-enabled = true
-verify_jwt = true
+verify_jwt = false
 
 [functions.handle-webhook]
-enabled = true
+verify_jwt = false
+
+[functions.payment-redirect]
+verify_jwt = false
+
+[functions.verify-payment]
 verify_jwt = false

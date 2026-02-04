@@ -23,6 +23,7 @@ import Auth from "./pages/Auth";
 import SelectCampus from "./pages/SelectCampus";
 import Menu from "./pages/Menu";
 import Checkout from "./pages/Checkout";
+import Payment from "./pages/Payment";
 import OrderSuccess from "./pages/OrderSuccess";
 import AdminDashboard from "./pages/AdminDashboard";
 import DedicatedScanner from "./pages/DedicatedScanner";
@@ -102,6 +103,11 @@ const App = () => (
                                 <Route path="/order-success" element={
                                   <CampusGate>
                                     <OrderSuccess />
+                                  </CampusGate>
+                                } />
+                                <Route path="/payment" element={
+                                  <CampusGate>
+                                    <Payment />
                                   </CampusGate>
                                 } />
                                 <Route path="/forgot-password" element={<ForgotPassword />} />
