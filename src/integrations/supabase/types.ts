@@ -841,12 +841,7 @@ export type Database = {
       }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
-      get_super_admin_stats:
-        | { Args: { p_campus_id?: string }; Returns: Json }
-        | {
-            Args: { p_campus_id?: string; p_canteen_id?: string }
-            Returns: Json
-          }
+      get_super_admin_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_ticket_stats: { Args: never; Returns: Json }
       get_user_campus_id: { Args: { _user_id: string }; Returns: string }
       has_role: {

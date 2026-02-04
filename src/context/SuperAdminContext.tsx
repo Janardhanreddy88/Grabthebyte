@@ -59,7 +59,6 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   const fetchDashboardStats = useCallback(async () => {
     const { data, error } = await supabase.rpc('get_super_admin_stats', {
       p_campus_id: filters.campusId,
-      p_canteen_id: null, // No longer used
     });
     
     if (!error && data) {
