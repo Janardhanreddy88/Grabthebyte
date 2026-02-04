@@ -1,5 +1,6 @@
 # Enable Rewrite Engine
 RewriteEngine On
+RewriteBase /
 
 # Force HTTPS
 RewriteCond %{HTTPS} off
@@ -10,9 +11,10 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)/$ /$1 [L,R=301]
 
 # Handle SPA routing - serve index.html for all routes
+RewriteRule ^index\.html$ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [L]
+RewriteRule . /index.html [L]
 
 # Cache static assets
 <IfModule mod_expires.c>
