@@ -296,52 +296,6 @@ export type Database = {
           },
         ]
       }
-      favorites: {
-        Row: {
-          campus_id: string
-          created_at: string
-          id: string
-          menu_item_id: string
-          user_id: string
-        }
-        Insert: {
-          campus_id: string
-          created_at?: string
-          id?: string
-          menu_item_id: string
-          user_id: string
-        }
-        Update: {
-          campus_id?: string
-          created_at?: string
-          id?: string
-          menu_item_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "favorites_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campus_public_info"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "favorites_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "favorites_menu_item_id_fkey"
-            columns: ["menu_item_id"]
-            isOneToOne: false
-            referencedRelation: "menu_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       menu_items: {
         Row: {
           available_days: Database["public"]["Enums"]["day_of_week"][] | null
@@ -491,6 +445,7 @@ export type Database = {
           qr_code: string | null
           rejection_reason: string | null
           status: Database["public"]["Enums"]["order_status"]
+          ticket_code: string | null
           total: number
           updated_at: string
           user_id: string | null
@@ -517,6 +472,7 @@ export type Database = {
           qr_code?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
+          ticket_code?: string | null
           total: number
           updated_at?: string
           user_id?: string | null
@@ -543,6 +499,7 @@ export type Database = {
           qr_code?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
+          ticket_code?: string | null
           total?: number
           updated_at?: string
           user_id?: string | null
@@ -571,6 +528,94 @@ export type Database = {
             columns: ["canteen_id"]
             isOneToOne: false
             referencedRelation: "canteens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          new_payment_status: string | null
+          new_status: string | null
+          old_payment_status: string | null
+          old_status: string | null
+          order_id: string | null
+          triggered_by: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          new_payment_status?: string | null
+          new_status?: string | null
+          old_payment_status?: string | null
+          old_status?: string | null
+          order_id?: string | null
+          triggered_by?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          new_payment_status?: string | null
+          new_status?: string | null
+          old_payment_status?: string | null
+          old_status?: string | null
+          order_id?: string | null
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_webhooks: {
+        Row: {
+          cf_order_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          order_id: string
+          payload: Json | null
+          payment_id: string | null
+          processed_at: string | null
+        }
+        Insert: {
+          cf_order_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          order_id: string
+          payload?: Json | null
+          payment_id?: string | null
+          processed_at?: string | null
+        }
+        Update: {
+          cf_order_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          order_id?: string
+          payload?: Json | null
+          payment_id?: string | null
+          processed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhooks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -937,14 +982,17 @@ export type Database = {
       }
     }
     Functions: {
+      atomic_decrement_stock: { Args: { p_order_id: string }; Returns: Json }
       check_phone_exists: { Args: { phone_input: string }; Returns: boolean }
       cleanup_expired_admin_sessions: { Args: never; Returns: number }
       cleanup_old_orders: { Args: never; Returns: number }
       cleanup_orders_older_than_48h: { Args: never; Returns: number }
+      cleanup_stuck_pending_orders: { Args: never; Returns: number }
       decrement_stock: {
         Args: { p_item_id: string; p_quantity: number }
         Returns: undefined
       }
+      fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_pending_verification_count: { Args: never; Returns: number }
       get_super_admin_stats: {
@@ -973,6 +1021,15 @@ export type Database = {
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
+      }
+      update_order_from_webhook: {
+        Args: {
+          p_order_id: string
+          p_payment_id?: string
+          p_payment_status: string
+          p_status: string
+        }
+        Returns: Json
       }
     }
     Enums: {
