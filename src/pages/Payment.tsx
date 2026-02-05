@@ -40,7 +40,7 @@ export default function Payment() {
   
   const paymentInitiated = useRef(false);
   const verificationAttempts = useRef(0);
-  const maxVerificationAttempts = 10;
+  const maxVerificationAttempts = 5; // Reduced for faster feedback
 
   // Load Cashfree SDK
   useEffect(() => {
@@ -101,14 +101,16 @@ export default function Payment() {
         }, 2000);
       } else if (data.status === 'failed') {
         setPaymentState('failed');
-        setErrorMessage('Payment was not successful. You can try again.');
+        setErrorMessage('Payment was not completed. Please try again.');
       } else {
         // Still pending - retry verification
         verificationAttempts.current += 1;
         if (verificationAttempts.current < maxVerificationAttempts) {
-          setTimeout(() => verifyPayment(), 3000);
+          setTimeout(() => verifyPayment(), 2000); // Faster polling
         } else {
-          setPaymentState('processing');
+          // After max attempts, treat as failed/incomplete
+          setPaymentState('failed');
+          setErrorMessage('Payment verification timed out. If you completed the payment, check My Orders shortly.');
         }
       }
     } catch (err) {
