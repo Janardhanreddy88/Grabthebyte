@@ -70,9 +70,23 @@ export default function Auth() {
       if (session?.user) {
         const { data: roles } = await supabase
           .from('user_roles')
-          .select('role')
+          .select('role, campus_id')
           .eq('user_id', session.user.id)
           .maybeSingle();
+
+        // CAMPUS VALIDATION: Super admins can access any campus
+        if (roles?.role !== 'super_admin' && campus?.id) {
+          if (roles?.campus_id && roles.campus_id !== campus.id) {
+            // Wrong campus - sign out and stay on auth page
+            await supabase.auth.signOut();
+            toast({ 
+              title: 'Wrong Campus', 
+              description: 'Your account is registered with a different campus. Please switch campus.', 
+              variant: 'destructive' 
+            });
+            return;
+          }
+        }
 
         if (roles?.role === 'admin') {
           navigate('/admin');
@@ -85,7 +99,7 @@ export default function Auth() {
     };
 
     checkSession();
-  }, [navigate, isLoggingOut]);
+  }, [navigate, isLoggingOut, campus, toast]);
 
   // Auth state listener
   useEffect(() => {
@@ -106,6 +120,22 @@ export default function Auth() {
           ]);
 
           const userRole = rolesResult.data?.role;
+          const userCampusId = rolesResult.data?.campus_id || profileResult.data?.campus_id;
+
+          // CAMPUS VALIDATION in auth state change
+          // Super admins can access any campus
+          if (userRole !== 'super_admin' && campus?.id) {
+            if (userCampusId && userCampusId !== campus.id) {
+              // User belongs to different campus - sign out
+              await supabase.auth.signOut();
+              toast({ 
+                title: 'Wrong Campus', 
+                description: 'Your account is registered with a different campus.', 
+                variant: 'destructive' 
+              });
+              return;
+            }
+          }
           
           if (userRole === 'admin' || userRole === 'kiosk') {
             navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner');
@@ -145,6 +175,13 @@ export default function Auth() {
     setRateLimitMessage(null);
     if (!validateLoginForm()) return;
 
+    // Require campus selection
+    if (!campus?.id) {
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
+      navigate('/select-campus');
+      return;
+    }
+
     const sanitizedEmail = sanitizeEmail(loginEmail);
     const rateLimit = checkLoginRateLimit(sanitizedEmail);
     if (!rateLimit.allowed) {
@@ -164,6 +201,31 @@ export default function Auth() {
         toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' });
         return;
       }
+
+      // CAMPUS VALIDATION: Check if user belongs to selected campus
+      if (data.user) {
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('campus_id, role')
+          .eq('user_id', data.user.id)
+          .maybeSingle();
+
+        // Super admins can access any campus
+        if (userRole?.role !== 'super_admin') {
+          // Check if user's campus matches selected campus
+          if (userRole?.campus_id && userRole.campus_id !== campus.id) {
+            // User belongs to a different campus - sign them out and show error
+            await supabase.auth.signOut();
+            toast({ 
+              title: 'Wrong Campus', 
+              description: `Your account is registered with a different campus. Please select the correct campus.`, 
+              variant: 'destructive' 
+            });
+            return;
+          }
+        }
+      }
+
       recordLoginAttempt(sanitizedEmail, true);
       if (data.user) toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
     } catch (error) {
