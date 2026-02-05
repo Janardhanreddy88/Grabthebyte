@@ -66,5 +66,7 @@ export interface User {
   phone?: string;
   collegeId?: string;
   role: UserRole;
+  /** Campus this user belongs to (UUID from public.campuses.id) */
+  campusId?: string;
   adminPin?: string; // Hashed PIN for admin access
 }

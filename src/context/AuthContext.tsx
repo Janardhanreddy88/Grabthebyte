@@ -3,6 +3,8 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { User, UserRole } from "@/types/canteen";
 
+type UserAccess = { role: UserRole; campusId?: string };
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -37,28 +39,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
- // REPLACE THIS FUNCTION INSIDE AuthContext.tsx
-const fetchUserRole = useCallback(async (userId: string): Promise<UserRole> => {
-    console.log("🔍 FETCHING ROLE FOR:", userId);
+  const fetchUserAccess = useCallback(async (userId: string): Promise<UserAccess> => {
+    // Fetch role + campus from user_roles; also fall back to profiles.campus_id
+    const [rolesResult, profileResult] = await Promise.all([
+      supabase.from("user_roles").select("role, campus_id").eq("user_id", userId).maybeSingle(),
+      supabase.from("profiles").select("campus_id").eq("user_id", userId).maybeSingle(),
+    ]);
 
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    // --- DEBUGGING LOGS ---
-    if (error) {
-        console.error("❌ SUPABASE ERROR:", error);
-        console.log("⚠️ Defaulting to 'student' due to error.");
-        return "student";
-    }
-
-    console.log("✅ ROLE FOUND IN DB:", data?.role);
-    // ----------------------
-
-    return mapRole(data?.role);
-}, []);
+    const role = mapRole(rolesResult.data?.role);
+    const campusId = (rolesResult.data?.campus_id as string | undefined) || (profileResult.data?.campus_id as string | undefined);
+    return { role, campusId };
+  }, []);
 
   const setFromSession = useCallback(
     async (nextSession: Session | null) => {
@@ -69,16 +60,17 @@ const fetchUserRole = useCallback(async (userId: string): Promise<UserRole> => {
         return;
       }
 
-      const role = await fetchUserRole(nextSession.user.id);
+      const access = await fetchUserAccess(nextSession.user.id);
       setUser({
         id: nextSession.user.id,
         email: nextSession.user.email ?? "",
         fullName: getFullName(nextSession.user.email, nextSession.user.user_metadata?.full_name),
         phone: typeof nextSession.user.phone === "string" && nextSession.user.phone ? nextSession.user.phone : undefined,
-        role,
+        role: access.role,
+        campusId: access.campusId,
       });
     },
-    [fetchUserRole]
+    [fetchUserAccess]
   );
 
   // Validate session - checks if user still exists in Supabase Auth
@@ -156,7 +148,7 @@ const fetchUserRole = useCallback(async (userId: string): Promise<UserRole> => {
 
         if (error) return { success: false, error: error.message };
 
-        const role = data.user ? await fetchUserRole(data.user.id) : undefined;
+        const role = data.user ? (await fetchUserAccess(data.user.id)).role : undefined;
         // navigation is handled elsewhere via onAuthStateChange
         return { success: true, role };
       } catch {
@@ -165,7 +157,7 @@ const fetchUserRole = useCallback(async (userId: string): Promise<UserRole> => {
         setIsLoading(false);
       }
     },
-    [fetchUserRole]
+    [fetchUserAccess]
   );
 
   const signup = useCallback(async (email: string, password: string, fullName: string) => {
