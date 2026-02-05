@@ -131,8 +131,11 @@ Deno.serve(async (req) => {
     if (cfStatus === "PAID") {
       newPaymentStatus = "completed";
       newOrderStatus = "confirmed";
-    } else if (cfStatus === "EXPIRED" || cfStatus === "CANCELLED") {
+  } else if (cfStatus === "EXPIRED" || cfStatus === "CANCELLED" || cfStatus === "TERMINATED") {
       newPaymentStatus = "failed";
+  } else if (cfStatus === "ACTIVE" && order.payment_status === "failed") {
+    // Webhook already marked as failed (user dropped/cancelled)
+    newPaymentStatus = "failed";
     }
 
     // Update if status changed
