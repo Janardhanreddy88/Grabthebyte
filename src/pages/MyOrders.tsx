@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -9,7 +9,8 @@ import {
   ShoppingBag,
   RefreshCw,
   AlertCircle,
-  Timer
+  Timer,
+  Ban
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,11 +34,13 @@ interface Order {
   id: string;
   order_number: string;
   total: number;
-  status: string;
-  payment_status: string;
+  status: string;         
+  payment_status: string; 
   created_at: string;
   items: OrderItem[];
   campus: { name: string };
+  rejection_reason?: string;
+  collection_token: string; // <--- NEW SECRET TOKEN
 }
 
 export default function MyOrders() {
@@ -46,6 +49,11 @@ export default function MyOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
+  
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  const processingExpiryIds = useRef<Set<string>>(new Set());
+
+  const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
   const fetchOrders = async () => {
     try {
@@ -71,7 +79,9 @@ export default function MyOrders() {
         payment_status: order.payment_status || 'pending',
         created_at: order.created_at,
         campus: order.campus,
-        items: order.order_items || order.items || []
+        items: order.order_items || order.items || [],
+        rejection_reason: order.rejection_reason,
+        collection_token: order.collection_token // <--- Capture the token
       }));
 
       setOrders(formattedOrders);
@@ -101,118 +111,90 @@ export default function MyOrders() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // 10-minute timer for pending payments
-  const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-  // 5-hour expiry for confirmed orders (QR code expiry)
-  const QR_EXPIRY_MS = 5 * 60 * 60 * 1000; // 5 hours
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Check if QR code is expired (for confirmed/ready orders)
-  const isQrExpired = (createdAtString: string) => {
-    const createdAt = new Date(createdAtString);
-    const now = new Date();
-    return now.getTime() - createdAt.getTime() > QR_EXPIRY_MS;
-  };
+  const getOrderTimestamp = (createdAt: string) => new Date(createdAt).getTime();
 
-  // Check if payment window expired (for pending orders)
-  const isPaymentExpired = (createdAtString: string) => {
-    const createdAt = new Date(createdAtString);
-    const now = new Date();
-    return now.getTime() - createdAt.getTime() > PAYMENT_TIMEOUT_MS;
-  };
-
-  // Get remaining time for pending payment (in seconds)
-  const getRemainingPaymentTime = (createdAtString: string) => {
-    const createdAt = new Date(createdAtString);
-    const now = new Date();
-    const elapsed = now.getTime() - createdAt.getTime();
+  const getRemainingSeconds = (createdAt: string) => {
+    const created = getOrderTimestamp(createdAt);
+    const elapsed = currentTime - created;
     const remaining = PAYMENT_TIMEOUT_MS - elapsed;
     return Math.max(0, Math.floor(remaining / 1000));
   };
 
-  // Timer state for countdown
-  const [currentTime, setCurrentTime] = useState(Date.now());
-
-  // Update timer every second for pending orders
-  useEffect(() => {
-    const hasPendingOrders = orders.some(
-      o => o.payment_status === 'pending' && o.status === 'pending'
-    );
-    
-    if (hasPendingOrders) {
-      const interval = setInterval(() => {
-        setCurrentTime(Date.now());
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [orders]);
-
-  // Auto-expire pending orders that passed 10 minutes
   const expirePendingOrder = useCallback(async (orderId: string) => {
+    if (processingExpiryIds.current.has(orderId)) return;
+    processingExpiryIds.current.add(orderId);
+
     try {
       await supabase
         .from('orders')
         .update({ 
-          status: 'cancelled', 
-          payment_status: 'expired',
+          status: 'failed', 
+          payment_status: 'not_confirmed', 
           rejection_reason: 'Payment timeout - 10 minutes expired'
         })
         .eq('id', orderId);
-      
       toast.info('Order expired due to payment timeout');
-      fetchOrders();
     } catch (error) {
       console.error('Error expiring order:', error);
+      processingExpiryIds.current.delete(orderId);
     }
   }, []);
 
-  // Auto-expire confirmed orders not collected within 5 hours
-  const expireQrCode = useCallback(async (orderId: string) => {
-    try {
-      await supabase
-        .from('orders')
-        .update({ 
-          status: 'cancelled',
-          rejection_reason: 'Not collected - QR code expired after 5 hours'
-        })
-        .eq('id', orderId);
-      
-      fetchOrders();
-    } catch (error) {
-      console.error('Error expiring QR:', error);
-    }
-  }, []);
-
-  // Check for expired orders on mount and when orders change
   useEffect(() => {
+    if (isLoading || orders.length === 0) return;
+
     orders.forEach(order => {
-      const isPendingPayment = order.payment_status === 'pending' && order.status === 'pending';
-      const orderIsReady = (order.status === 'confirmed' || order.status === 'approved') && 
-                      order.payment_status === 'paid';
-      
-      if (isPendingPayment && isPaymentExpired(order.created_at)) {
-        expirePendingOrder(order.id);
-      }
-      
-      if (orderIsReady && isQrExpired(order.created_at)) {
-        expireQrCode(order.id);
+      const createdTime = getOrderTimestamp(order.created_at);
+      const timeSinceCreation = currentTime - createdTime;
+
+      if (order.status === 'pending' && order.payment_status === 'pending') {
+        if (timeSinceCreation > PAYMENT_TIMEOUT_MS) {
+          expirePendingOrder(order.id);
+        }
       }
     });
-  }, [orders, expirePendingOrder, expireQrCode]);
+  }, [orders, currentTime, expirePendingOrder]);
 
-  // Format remaining time as MM:SS
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getStatusConfig = (status: string, paymentStatus: string) => {
-    if (status === 'collected') return { label: 'Collected', className: 'bg-gray-100 text-gray-700 border-gray-200' };
-    if (status === 'cancelled' || paymentStatus === 'failed' || paymentStatus === 'expired') {
-      return { label: paymentStatus === 'expired' ? 'Expired' : 'Failed', className: 'bg-red-100 text-red-700 border-red-200' };
+  const checkIsExpired = (order: Order) => {
+    if (order.status === 'expired') return true;
+    if (order.rejection_reason && order.rejection_reason.includes('Not collected')) return true;
+    return false;
+  };
+
+  const getStatusConfig = (order: Order) => {
+    const isExpired = checkIsExpired(order);
+
+    if (order.status === 'confirmed' && order.payment_status === 'confirmed') {
+      return { label: 'Successful', className: 'bg-green-100 text-green-700 border-green-200' };
     }
-    if (status === 'confirmed' && paymentStatus === 'completed') return { label: 'Ready', className: 'bg-green-100 text-green-700 border-green-200' };
-    if (paymentStatus === 'pending') return { label: 'Payment Pending', className: 'bg-orange-100 text-orange-700 border-orange-200' };
+    
+    if (order.status === 'pending' && order.payment_status === 'pending') {
+      return { label: 'Payment Pending', className: 'bg-orange-100 text-orange-700 border-orange-200' };
+    }
+
+    if (!isExpired && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.status === 'cancelled')) {
+      return { label: 'Payment Failed', className: 'bg-red-100 text-red-700 border-red-200' };
+    }
+    
+    if (order.status === 'collected') {
+      return { label: 'Collected', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+    }
+    
+    if (isExpired) {
+      return { label: 'Order Expired', className: 'bg-gray-100 text-gray-500 border-gray-200' };
+    }
+
     return { label: 'Processing', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
   };
 
@@ -249,15 +231,24 @@ export default function MyOrders() {
           </div>
         ) : (
           orders.map((order) => {
-            const statusConfig = getStatusConfig(order.status, order.payment_status);
-            const qrExpired = isQrExpired(order.created_at);
-            const paymentTimedOut = isPaymentExpired(order.created_at);
-            const remainingSeconds = getRemainingPaymentTime(order.created_at);
+            const statusConfig = getStatusConfig(order);
+            const createdTime = getOrderTimestamp(order.created_at);
+            const remainingSeconds = getRemainingSeconds(order.created_at);
+            const isPaymentTimedOut = (currentTime - createdTime) > PAYMENT_TIMEOUT_MS;
+
+            const isSuccessful = order.status === 'confirmed' && order.payment_status === 'confirmed';
             
-            const isFailed = order.status === 'cancelled' || order.payment_status === 'failed' || order.payment_status === 'expired';
-            const isPaymentPending = order.payment_status === 'pending' && order.status === 'pending' && !paymentTimedOut;
+            const isPending = order.status === 'pending' && order.payment_status === 'pending' && !isPaymentTimedOut;
+            
             const isCollected = order.status === 'collected';
-            const isReady = order.status === 'confirmed' && order.payment_status === 'completed' && !isCollected;
+            
+            const isExpired = checkIsExpired(order);
+
+            const isFailed = !isExpired && (
+                order.status === 'failed' || 
+                order.status === 'cancelled' || 
+                order.payment_status === 'not_confirmed'
+            );
 
             return (
               <Card key={order.id} className="border-none shadow-sm overflow-hidden">
@@ -290,73 +281,42 @@ export default function MyOrders() {
                       ))}
                     </div>
 
-                    {isFailed ? (
-                      <div className="bg-red-50 p-3 rounded-xl border border-red-100">
-                        <div className="flex items-start gap-2">
-                          <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
-                          <div className="w-full">
-                            <p className="font-semibold text-sm text-red-700">
-                              {order.payment_status === 'expired' ? 'Payment Expired' : 'Payment Failed'}
-                            </p>
-                            <Button 
-                              size="sm" 
-                              className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-9 text-sm font-semibold"
-                              onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`)}
-                            >
-                              <RefreshCw size={14} className="mr-2" /> Try Again
-                            </Button>
+                    {isSuccessful && !isCollected && !isExpired ? (
+                      <div 
+                        className="bg-green-50 p-3 rounded-xl border border-green-100 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
+                        onClick={() => navigate(`/order-success?orderId=${order.id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-white p-1.5 rounded-lg border border-green-100">
+                            {/* --- THIS IS THE SECURITY UPGRADE: Use Token, not ID --- */}
+                            <QRCodeSVG 
+                                value={order.collection_token || order.id} 
+                                size={32} 
+                            />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm text-green-700">Successful</p>
+                            <p className="text-xs text-green-600">Tap to view full QR Code</p>
                           </div>
                         </div>
+                        <ChevronRight className="h-5 w-5 text-green-400" />
                       </div>
-                    ) : isCollected ? (
-                      <div className="bg-gray-100 p-3 rounded-xl border border-gray-200 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-5 w-5 text-gray-500" />
-                            <div>
-                               <p className="font-semibold text-sm text-gray-700">Order Collected</p>
-                               <p className="text-xs text-gray-500">Enjoy your meal!</p>
-                            </div>
-                          </div>
-                      </div>
-                    ) : isReady ? (
-                      qrExpired ? (
-                        <div className="bg-red-50 p-3 rounded-xl border border-red-200 text-center">
-                          <p className="text-sm font-medium text-red-600 flex items-center justify-center gap-1">
-                            <XCircle size={16} /> Not Collected
-                          </p>
-                          <p className="text-xs text-red-500 mt-1">Order Expired</p>
-                        </div>
-                      ) : (
-                        <div 
-                          className="bg-green-50 p-3 rounded-xl border border-green-100 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
-                          onClick={() => navigate(`/order-success?orderId=${order.id}`)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="bg-white p-1.5 rounded-lg border border-green-100">
-                              <QRCodeSVG value={order.id} size={32} />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-sm text-green-700">Order Ready!</p>
-                              <p className="text-xs text-green-600">Tap to view full QR Code</p>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-green-400" />
-                        </div>
-                      )
-                    ) : isPaymentPending ? (
+                    ) : null}
+
+                    {isPending ? (
                       <div className="bg-orange-50 p-3 rounded-xl border border-orange-100">
                         <div className="flex items-start gap-2">
                           <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
                           <div className="w-full">
                             <div className="flex items-center justify-between">
-                              <p className="font-semibold text-sm text-orange-700">Payment Incomplete</p>
+                              <p className="font-semibold text-sm text-orange-700">Payment Pending</p>
                               <div className="flex items-center gap-1 text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
                                 <Timer size={12} />
                                 <span className="text-xs font-bold font-mono">{formatTime(remainingSeconds)}</span>
                               </div>
                             </div>
                             <p className="text-xs text-orange-600 mt-0.5">
-                              Complete payment before timer expires
+                              Complete payment within 10 mins
                             </p>
                             <Button 
                               size="sm" 
@@ -368,14 +328,43 @@ export default function MyOrders() {
                           </div>
                         </div>
                       </div>
-                    ) : (
-                      <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-100 text-center">
-                        <p className="text-sm font-medium text-yellow-700 flex items-center justify-center gap-2">
-                          <Clock size={16} /> Processing Payment
-                        </p>
-                        <p className="text-xs text-yellow-600 mt-1">Verifying your payment...</p>
+                    ) : null}
+
+                    {isFailed ? (
+                      <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+                        <div className="flex items-start gap-2">
+                          <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                          <div className="w-full">
+                            <p className="font-semibold text-sm text-red-700">Payment Failed</p>
+                            <p className="text-xs text-red-600 mt-1 mb-2">
+                              {order.rejection_reason || "Transaction incomplete or timed out."}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    )}
+                    ) : null}
+
+                    {isCollected ? (
+                      <div className="bg-gray-100 p-3 rounded-xl border border-gray-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5 text-gray-500" />
+                          <div>
+                             <p className="font-semibold text-sm text-gray-700">Order Collected</p>
+                             <p className="text-xs text-gray-500">Enjoy your meal!</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    
+                    {isExpired ? (
+                       <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-center">
+                         <p className="text-sm font-medium text-gray-600 flex items-center justify-center gap-1">
+                           <Ban size={16} /> Order Expired
+                         </p>
+                         <p className="text-xs text-gray-500 mt-1">Not collected in time</p>
+                       </div>
+                    ) : null}
+
                   </div>
                 </CardContent>
               </Card>

@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
           status: "completed",
           orderId: order.id,
           orderNumber: order.order_number,
+          source: "db_cache"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -131,29 +132,44 @@ Deno.serve(async (req) => {
     if (cfStatus === "PAID") {
       newPaymentStatus = "completed";
       newOrderStatus = "confirmed";
-  } else if (cfStatus === "EXPIRED" || cfStatus === "CANCELLED" || cfStatus === "TERMINATED") {
+    } else if (cfStatus === "EXPIRED" || cfStatus === "CANCELLED" || cfStatus === "TERMINATED") {
       newPaymentStatus = "failed";
-  } else if (cfStatus === "ACTIVE" && order.payment_status === "failed") {
-    // Webhook already marked as failed (user dropped/cancelled)
-    newPaymentStatus = "failed";
+    } else if (cfStatus === "ACTIVE" && order.payment_status === "failed") {
+      // Webhook already marked as failed (user dropped/cancelled)
+      newPaymentStatus = "failed";
     }
 
-    // Update if status changed
+    // --- UPDATED LOGIC STARTS HERE ---
     if (newPaymentStatus !== order.payment_status) {
-      await supabase
+      
+      // 1. Try to get the Payment ID (Bank Reference)
+      // Note: Depending on API version, this might be in 'cf_payment_id' or 'payment_session_id'
+      const bankReference = cashfreeData.cf_payment_id || null;
+
+      const { data: updatedRows, error: updateError } = await supabase
         .from("orders")
         .update({
           status: newOrderStatus,
           payment_status: newPaymentStatus,
           updated_at: new Date().toISOString(),
+          cf_payment_id: bankReference // <--- NEW: Saving Bank ID
         })
-        .eq("id", order.id);
+        .eq("id", order.id)
+        .eq("payment_status", "pending") // <--- NEW: Race Condition Lock
+        .select();
 
-      // Decrement stock if payment completed
-      if (newPaymentStatus === "completed") {
+      if (updateError) {
+        console.error("Database update error:", updateError);
+        throw updateError;
+      }
+
+      // 2. Decrement stock ONLY if we successfully updated the row
+      // This ensures we don't decrement twice if the webhook ran at the same time
+      if (updatedRows && updatedRows.length > 0 && newPaymentStatus === "completed") {
         await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
       }
     }
+    // --- UPDATED LOGIC ENDS HERE ---
 
     return new Response(
       JSON.stringify({
