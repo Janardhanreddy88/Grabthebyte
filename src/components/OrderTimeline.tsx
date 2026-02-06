@@ -7,7 +7,7 @@ interface OrderTimelineProps {
   status: OrderStatus;
 }
 
-// Simplified token system - only 3 steps (cancelled shows as failed state)
+// Simplified token system - only 3 steps (failed/expired shows as failed state)
 const steps = [
   { id: 'pending', label: 'Pending', icon: Clock },
   { id: 'confirmed', label: 'Approved', icon: Check },
@@ -18,15 +18,16 @@ const statusIndex: Record<string, number> = {
   pending: 0,
   confirmed: 1,
   collected: 2,
-  cancelled: -1, // Special state
+  failed: -1, // Special state
+  expired: -1, // Special state
 };
 
 export function OrderTimeline({ status }: OrderTimelineProps) {
-  const isCancelled = status === 'cancelled';
-  const currentIndex = isCancelled ? -1 : (statusIndex[status] ?? 0);
+  const isFailed = status === 'failed' || status === 'expired';
+  const currentIndex = isFailed ? -1 : (statusIndex[status] ?? 0);
 
-  // For cancelled orders, show a different UI
-  if (isCancelled) {
+  // For failed/expired orders, show a different UI
+  if (isFailed) {
     return (
       <div className="py-4">
         <div className="flex items-center justify-center">
@@ -39,10 +40,10 @@ export function OrderTimeline({ status }: OrderTimelineProps) {
               <XCircle className="w-6 h-6 text-destructive" />
             </div>
             <span className="text-sm mt-2 font-medium text-destructive">
-              Payment Failed
+              {status === 'expired' ? 'Order Expired' : 'Payment Failed'}
             </span>
             <span className="text-xs text-muted-foreground mt-1">
-              Order cancelled
+              {status === 'expired' ? 'Not collected in time' : 'Order failed'}
             </span>
           </motion.div>
         </div>

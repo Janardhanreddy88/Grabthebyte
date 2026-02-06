@@ -330,8 +330,8 @@ export default function AdminDashboard() {
     }
   };
 
-  // Simplified token system - only 4 statuses
-  const handleOrderStatusChange = async (id: string, status: 'pending' | 'confirmed' | 'collected' | 'cancelled') => {
+  // Simplified token system - only 5 statuses
+  const handleOrderStatusChange = async (id: string, status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed') => {
     try {
       await updateOrderStatus.mutateAsync({ id, status });
       toast.success("Order status updated");
@@ -1270,7 +1270,7 @@ export default function AdminDashboard() {
                                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                         order.status === "collected"
                                           ? "bg-green-500/10 text-green-600"
-                                          : order.status === "cancelled"
+                                          : order.status === "failed" || order.status === "expired"
                                             ? "bg-destructive/10 text-destructive"
                                             : order.status === "confirmed"
                                               ? "bg-blue-500/10 text-blue-600"

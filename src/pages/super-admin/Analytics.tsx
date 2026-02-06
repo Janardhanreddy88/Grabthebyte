@@ -78,7 +78,7 @@ export function Analytics() {
         .from('orders')
         .select('created_at, total, commission_amount, status')
         .gte('created_at', startDate.toISOString())
-        .neq('status', 'cancelled');
+        .neq('status', 'failed');
 
       if (filters.campusId) {
         ordersQuery = ordersQuery.eq('campus_id', filters.campusId);
@@ -140,7 +140,7 @@ export function Analytics() {
             .select('*', { count: 'exact', head: true })
             .eq('campus_id', campus.id)
             .gte('created_at', startDate.toISOString())
-            .neq('status', 'cancelled');
+            .neq('status', 'failed');
 
           if (!error) {
             performanceData.push({

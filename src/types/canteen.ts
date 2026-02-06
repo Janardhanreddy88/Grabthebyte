@@ -16,11 +16,12 @@ export interface CartItem extends MenuItem {
 }
 
 // Simplified token system order status:
-// - pending: Awaiting payment verification
+// - pending: Awaiting payment (10 min timeout)
 // - confirmed: Payment verified, QR code active
 // - collected: Scanned at counter, order complete
-// - cancelled: Payment rejected/failed
-export type OrderStatus = 'pending' | 'confirmed' | 'collected' | 'cancelled';
+// - expired: Not collected within 5 hours
+// - failed: Payment failed or 10-min timeout exceeded
+export type OrderStatus = 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed';
 
 export interface Order {
   id: string;
