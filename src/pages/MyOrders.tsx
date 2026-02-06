@@ -175,7 +175,8 @@ export default function MyOrders() {
   const getStatusConfig = (order: Order) => {
     const isExpired = checkIsExpired(order);
 
-    if (order.status === 'confirmed' && order.payment_status === 'confirmed') {
+    // Payment successful - check for both 'confirmed' and 'completed' payment status
+    if (order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed')) {
       return { label: 'Successful', className: 'bg-green-100 text-green-700 border-green-200' };
     }
     
@@ -183,7 +184,7 @@ export default function MyOrders() {
       return { label: 'Payment Pending', className: 'bg-orange-100 text-orange-700 border-orange-200' };
     }
 
-    if (!isExpired && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.status === 'cancelled')) {
+    if (!isExpired && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed')) {
       return { label: 'Payment Failed', className: 'bg-red-100 text-red-700 border-red-200' };
     }
     
@@ -236,7 +237,7 @@ export default function MyOrders() {
             const remainingSeconds = getRemainingSeconds(order.created_at);
             const isPaymentTimedOut = (currentTime - createdTime) > PAYMENT_TIMEOUT_MS;
 
-            const isSuccessful = order.status === 'confirmed' && order.payment_status === 'confirmed';
+            const isSuccessful = order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed');
             
             const isPending = order.status === 'pending' && order.payment_status === 'pending' && !isPaymentTimedOut;
             
