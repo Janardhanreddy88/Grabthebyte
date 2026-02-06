@@ -366,7 +366,6 @@ export type Database = {
           campus_id: string
           cf_order_id: string | null
           cf_payment_id: string | null
-          collection_token: string | null
           commission_amount: number | null
           created_at: string
           customer_email: string | null
@@ -379,7 +378,6 @@ export type Database = {
           payment_status: string | null
           platform_fee: number | null
           qr_code: string | null
-          rejection_reason: string | null
           status: Database["public"]["Enums"]["order_status"]
           ticket_code: string | null
           total: number
@@ -391,7 +389,6 @@ export type Database = {
           campus_id: string
           cf_order_id?: string | null
           cf_payment_id?: string | null
-          collection_token?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -404,7 +401,6 @@ export type Database = {
           payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
-          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
           total: number
@@ -416,7 +412,6 @@ export type Database = {
           campus_id?: string
           cf_order_id?: string | null
           cf_payment_id?: string | null
-          collection_token?: string | null
           commission_amount?: number | null
           created_at?: string
           customer_email?: string | null
@@ -429,7 +424,6 @@ export type Database = {
           payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
-          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
           total?: number
@@ -845,7 +839,6 @@ export type Database = {
         Args: { p_item_id: string; p_quantity: number }
         Returns: undefined
       }
-      expire_old_orders: { Args: never; Returns: undefined }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_super_admin_stats: { Args: { p_campus_id?: string }; Returns: Json }
@@ -868,11 +861,6 @@ export type Database = {
       }
       is_campus_admin: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
-      mark_order_collected: { Args: { p_order_id: string }; Returns: Json }
-      mark_order_collected_secure: {
-        Args: { p_secret_token: string }
-        Returns: Json
-      }
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
@@ -888,8 +876,6 @@ export type Database = {
         | "cancelled"
         | "preparing"
         | "ready"
-        | "failed"
-        | "expired"
       time_period: "breakfast" | "lunch" | "snacks" | "dinner"
     }
     CompositeTypes: {
@@ -1027,8 +1013,6 @@ export const Constants = {
         "cancelled",
         "preparing",
         "ready",
-        "failed",
-        "expired",
       ],
       time_period: ["breakfast", "lunch", "snacks", "dinner"],
     },

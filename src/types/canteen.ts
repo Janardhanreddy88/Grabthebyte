@@ -15,16 +15,12 @@ export interface CartItem extends MenuItem {
   quantity: number;
 }
 
-// Order status matching database enum:
+// Simplified token system order status:
 // - pending: Awaiting payment verification
 // - confirmed: Payment verified, QR code active
 // - collected: Scanned at counter, order complete
-// - cancelled: Order cancelled
-// - preparing: Being prepared (if used)
-// - ready: Ready for pickup (if used)
-// - failed: Payment failed
-// - expired: Not collected in time
-export type OrderStatus = 'pending' | 'confirmed' | 'collected' | 'cancelled' | 'preparing' | 'ready' | 'failed' | 'expired';
+// - cancelled: Payment rejected/failed
+export type OrderStatus = 'pending' | 'confirmed' | 'collected' | 'cancelled';
 
 export interface Order {
   id: string;

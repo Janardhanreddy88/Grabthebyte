@@ -17,8 +17,7 @@ import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useStockCheck } from "@/hooks/useStockCheck";
 import { useAuth } from "@/context/AuthContext"; 
-import { useCampus } from "@/context/CampusContext";
-import { supabase } from "@/integrations/supabase/client";
+import { useOrders } from "@/hooks/useOrders";
 import { EmptyState } from "@/components/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { ImageWithFallback } from "@/components/ImageWithFallback";
@@ -27,13 +26,12 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { cart, totalPrice, totalItems, updateQuantity, removeFromCart, clearCart } = useCart();
   const { user } = useAuth(); 
-  const { campus } = useCampus();
+  const { createOrder, isCreating } = useOrders();
   
   const { toast } = useToast();
   const { checkStock } = useStockCheck();
   
   const [isCheckingStock, setIsCheckingStock] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
   
   const lastSubmitRef = useRef<number>(0);
@@ -81,11 +79,6 @@ export default function Checkout() {
       return;
     }
 
-    if (!campus?.id) {
-      toast({ title: "Campus Required", description: "Please select a campus first.", variant: "destructive" });
-      return;
-    }
-
     const now = Date.now();
     if (now - lastSubmitRef.current < SUBMIT_COOLDOWN_MS) {
       return; 
@@ -102,61 +95,30 @@ export default function Checkout() {
         setStockError(`${itemNames} just sold out.`);
         toast({ title: "Items Unavailable", description: `Sorry! ${itemNames} just sold out.`, variant: "destructive" });
         result.unavailableItems.forEach((item) => { removeFromCart(item.id); });
-        setIsCheckingStock(false);
         return;
       }
       
-      setIsCheckingStock(false);
-      setIsCreating(true);
+      // Create order with pending payment status
+      const order = await createOrder({
+        items: cart,
+        total: totalPrice,
+        paymentMethod: "cashfree",
+        customerName: user.fullName,
+        customerEmail: user.email,
+      });
 
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      // Create order in database
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          campus_id: campus.id,
-          user_id: user.id,
-          total: totalPrice,
-          order_number: '',
-          status: 'pending',
-          customer_name: profile?.full_name || user.fullName || 'Guest',
-          customer_email: profile?.email || user.email,
-        }])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Insert order items
-      const orderItems = cart.map(item => ({
-        order_id: orderData.id,
-        menu_item_id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      clearCart();
-      navigate(`/payment?order_id=${orderData.id}&amount=${totalPrice}`);
+      if (order) {
+        clearCart();
+        // Navigate to payment page
+        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`);
+      } else {
+        toast({ title: "Order Failed", description: "Could not create order. Please try again.", variant: "destructive" });
+      }
 
     } catch (error) {
-      console.error('Order creation error:', error);
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setIsCheckingStock(false);
-      setIsCreating(false);
     }
   };
 
