@@ -133,7 +133,7 @@ export default function MyOrders() {
       await supabase
         .from('orders')
         .update({ 
-          status: 'failed', 
+          status: 'failed' as const, 
           payment_status: 'not_confirmed', 
           rejection_reason: 'Payment timeout - 10 minutes expired'
         })
