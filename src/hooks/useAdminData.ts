@@ -34,7 +34,7 @@ const menuItemUpdateSchema = z.object({
 });
 
 // Simplified token system - no preparing/ready states
-const orderStatusSchema = z.enum(['pending', 'confirmed', 'collected', 'cancelled']);
+const orderStatusSchema = z.enum(['pending', 'confirmed', 'collected', 'expired', 'failed']);
 
 // Types matching Supabase schema
 interface MenuItem {
@@ -311,7 +311,7 @@ export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'confirmed' | 'collected' | 'cancelled' }) => {
+    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' }) => {
       // Validate status
       const statusResult = orderStatusSchema.safeParse(status);
       if (!statusResult.success) {
@@ -394,7 +394,7 @@ export function useOrderStats() {
         .select('total, created_at, status')
         .eq('campus_id', campus.id)
         .gte('created_at', sevenDaysAgo.toISOString())
-        .neq('status', 'cancelled');
+        .neq('status', 'failed');
 
       if (error) throw error;
 
