@@ -2,10 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { useOrdersContext } from '@/context/OrdersContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePrinter } from '@/context/PrinterContext';
-import { LogOut, CheckCircle, XCircle, AlertCircle, RefreshCw, Bluetooth, Volume2, VolumeX, Loader2, Printer } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { LogOut, CheckCircle, XCircle, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import jsQR from 'jsqr';
 
 // Audio feedback
@@ -61,16 +61,14 @@ interface OrderDetails {
 export default function KioskScanner() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { markOrderCollected, verifyQrCode } = useOrdersContext();
   const { logout } = useAuth();
-  const { isPrinterConnected, isConnecting, isPrinting, connectPrinter, printTicket } = usePrinter();
+  const { isPrinterConnected, printTicket } = usePrinter();
   
   const [scanning, setScanning] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   
-  // Results State
   const [showResult, setShowResult] = useState(false);
   const [resultType, setResultType] = useState<'success' | 'invalid' | 'expired' | 'used' | null>(null);
 
@@ -82,14 +80,7 @@ export default function KioskScanner() {
   const streamRef = useRef<MediaStream | null>(null);
   const animationRef = useRef<number | null>(null);
   const scannedOrdersRef = useRef<Set<string>>(new Set());
-  const resultTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const restartCameraRef = useRef<() => void>(() => {});
-
-  const isOrderExpired = (createdAt: string) => {
-    const orderDate = new Date(createdAt);
-    const now = new Date();
-    return (now.getTime() - orderDate.getTime()) > (5 * 60 * 60 * 1000); // 5 hours
-  };
 
   const stopCamera = useCallback(() => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
@@ -97,84 +88,112 @@ export default function KioskScanner() {
     setCameraActive(false);
   }, []);
 
+  // Use secure database function to verify and mark collected
+  const verifyAndCollectOrder = async (token: string): Promise<{ success: boolean; message: string; order?: any }> => {
+    try {
+      const { data, error } = await supabase.rpc('mark_order_collected_secure', {
+        p_secret_token: token
+      });
+
+      if (error) {
+        console.error('RPC error:', error);
+        return { success: false, message: 'Database error' };
+      }
+
+      return data as { success: boolean; message: string };
+    } catch (err) {
+      console.error('Verification error:', err);
+      return { success: false, message: 'Connection error' };
+    }
+  };
+
+  // Fetch order details for display
+  const fetchOrderDetails = async (token: string): Promise<OrderDetails | null> => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        order_number,
+        total,
+        status,
+        is_used,
+        created_at,
+        order_items(id, name, quantity, price)
+      `)
+      .eq('collection_token', token)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      orderNumber: data.order_number,
+      totalAmount: data.total,
+      status: data.status,
+      qrUsed: data.is_used,
+      createdAt: data.created_at,
+      items: data.order_items || []
+    };
+  };
+
   const handleScan = useCallback(async (qrData: string) => {
     if (scanning) return;
     setScanning(true);
 
     try {
-      const cleanedTerm = qrData.replace('ORDER-', '').trim();
+      const cleanedToken = qrData.trim();
 
-      // 1. Check Local Session Duplicate
-      if (scannedOrdersRef.current.has(cleanedTerm)) {
+      // Check local session duplicate
+      if (scannedOrdersRef.current.has(cleanedToken)) {
         setResultType('used');
         setShowResult(true);
         if (soundEnabled) playErrorSound();
+        setScanning(false);
         return;
       }
 
-      // 2. Verify with Database
-      const foundOrder = await verifyQrCode(cleanedTerm);
+      // Try to verify and collect using secure RPC
+      const result = await verifyAndCollectOrder(cleanedToken);
 
-      if (!foundOrder) {
-        setResultType('invalid');
+      if (!result.success) {
+        // Determine error type
+        if (result.message.includes('Not Found') || result.message.includes('Fake')) {
+          setResultType('invalid');
+        } else if (result.message.includes('Expired')) {
+          setResultType('expired');
+        } else if (result.message.includes('Already')) {
+          setResultType('used');
+        } else {
+          setResultType('invalid');
+        }
+        
         setShowResult(true);
         if (soundEnabled) playErrorSound();
+        scannedOrdersRef.current.add(cleanedToken);
         
         toast({
-          title: "Order Not Found",
-          description: `Code: ${cleanedTerm}`,
+          title: "Scan Failed",
+          description: result.message,
           variant: "destructive"
         });
         return;
       }
 
-      // 3. Prepare Order Object
-      const order: OrderDetails = {
-        id: foundOrder.id,
-        orderNumber: foundOrder.qrCode,
-        totalAmount: foundOrder.total,
-        status: foundOrder.status,
-        qrUsed: foundOrder.isUsed,
-        createdAt: foundOrder.createdAt.toISOString(),
-        items: foundOrder.items.map(item => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-        })),
-      };
-
-      setOrderDetails(order);
-
-      // 4. Validate Logic
-      if (isOrderExpired(order.createdAt)) {
-        setResultType('expired');
-        scannedOrdersRef.current.add(cleanedTerm);
-        setShowResult(true);
-        if (soundEnabled) playErrorSound();
-        return;
+      // SUCCESS - fetch order details for display
+      const order = await fetchOrderDetails(cleanedToken);
+      if (order) {
+        setOrderDetails(order);
       }
 
-      if (order.qrUsed) {
-        setResultType('used');
-        scannedOrdersRef.current.add(cleanedTerm);
-        setShowResult(true);
-        if (soundEnabled) playErrorSound();
-        return;
-      }
-
-      // 5. SUCCESS!
       stopCamera();
-      markOrderCollected(foundOrder.id);
-      scannedOrdersRef.current.add(cleanedTerm);
-      scannedOrdersRef.current.add(foundOrder.id);
+      scannedOrdersRef.current.add(cleanedToken);
       
       setResultType('success');
       setShowResult(true);
       if (soundEnabled) playSuccessSound();
 
-      // Auto Print Logic
-      if (isPrinterConnected) {
+      // Auto Print
+      if (isPrinterConnected && order) {
         setPrintingOrder(true);
         toast({ title: '✓ Verified', description: 'Printing ticket...' });
         
@@ -188,7 +207,6 @@ export default function KioskScanner() {
         
         printTicket(printData).then(() => {
           setPrintingOrder(false);
-          // Auto restart after print
           setTimeout(() => restartCameraRef.current(), 1500);
         });
       }
@@ -197,12 +215,11 @@ export default function KioskScanner() {
       console.error('Scan Error:', err);
       setCameraError('Scanner crashed. Please restart.');
     } finally {
-      // Always allow new scans after processing, unless we stopped camera for success
       if (resultType !== 'success') {
         setScanning(false);
       }
     }
-  }, [scanning, verifyQrCode, markOrderCollected, soundEnabled, isPrinterConnected, printTicket, toast, stopCamera, resultType]);
+  }, [scanning, soundEnabled, isPrinterConnected, printTicket, toast, stopCamera, resultType]);
 
   const handleQRDetected = useCallback((qrData: string) => {
     if (!scanning && !showResult) {
@@ -284,7 +301,7 @@ export default function KioskScanner() {
     if (showResult && resultType !== 'success') {
       const timer = setTimeout(() => {
         setShowResult(false);
-        setScanning(false); // Re-enable scanning
+        setScanning(false);
       }, 2500);
       return () => clearTimeout(timer);
     }
@@ -292,7 +309,7 @@ export default function KioskScanner() {
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
-      {/* 1. HEADER */}
+      {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-2">
            <div className={`w-3 h-3 rounded-full ${isPrinterConnected ? 'bg-green-500' : 'bg-yellow-500'} animate-pulse`} />
@@ -308,13 +325,13 @@ export default function KioskScanner() {
         </div>
       </div>
 
-      {/* 2. CAMERA VIDEO LAYER (Always render if active) */}
+      {/* Camera Video */}
       {cameraActive && (
         <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
       )}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* 3. SCANNING RETICLE (Only show when searching) */}
+      {/* Scanning Reticle */}
       {!showResult && cameraActive && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
           <div className="relative w-72 h-72 border-2 border-white/30 rounded-lg">
@@ -330,7 +347,7 @@ export default function KioskScanner() {
         </div>
       )}
 
-      {/* 4. ERROR OVERLAYS (Invalid/Expired/Used) - Z-INDEX 40 */}
+      {/* Error Overlays */}
       {showResult && resultType !== 'success' && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
            <div className={`p-8 rounded-3xl flex flex-col items-center shadow-2xl ${
@@ -339,15 +356,15 @@ export default function KioskScanner() {
               <XCircle className="w-16 h-16 text-white mb-4" />
               <h2 className="text-2xl font-bold text-white uppercase">{resultType?.replace('-', ' ')}</h2>
               <p className="text-white/80 mt-2">
-                {resultType === 'invalid' && "Order not found in database"}
-                {resultType === 'used' && "Order already claimed"}
-                {resultType === 'expired' && "Order is too old"}
+                {resultType === 'invalid' && "Order not found"}
+                {resultType === 'used' && "Already collected"}
+                {resultType === 'expired' && "Order expired"}
               </p>
            </div>
         </div>
       )}
 
-      {/* 5. SUCCESS SCREEN - Z-INDEX 50 */}
+      {/* Success Screen */}
       {showResult && resultType === 'success' && (
         <div className="absolute inset-0 z-50 bg-green-600 flex flex-col items-center justify-center p-6 animate-in slide-in-from-bottom-10">
            <CheckCircle className="w-24 h-24 text-white mb-6 animate-bounce" />
@@ -368,7 +385,7 @@ export default function KioskScanner() {
         </div>
       )}
 
-      {/* 6. CAMERA ERROR */}
+      {/* Camera Error */}
       {cameraError && (
         <div className="absolute inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center">
            <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
