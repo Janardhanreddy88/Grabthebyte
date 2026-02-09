@@ -6,8 +6,9 @@ interface OrdersContextType {
   orders: Order[];
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
-  markOrderCollected: (orderId: string) => void;
+  markOrderCollected: (orderId: string) => Promise<{ success: boolean; message: string }>;
   verifyQrCode: (qrCode: string) => Promise<Order | undefined>;
+  verifyByCollectionToken: (token: string) => Promise<{ success: boolean; message: string }>;
   getOrderById: (orderId: string) => Order | undefined;
 }
 
@@ -60,29 +61,79 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const markOrderCollected = useCallback(async (orderId: string) => {
-    // 1. Update Local State (Instant UI feedback)
-    setOrders(prev => {
-      const updated = prev.map(order =>
-        // Force cast status to satisfy TypeScript
-        order.id === orderId ? { ...order, status: 'collected' as Order['status'], isUsed: true } : order
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
-
-    // 2. Update Database (The Source of Truth)
+  /**
+   * Mark order as collected using the SECURE RPC function.
+   * This uses the collection_token (secret UUID) for verification.
+   */
+  const markOrderCollected = useCallback(async (orderId: string): Promise<{ success: boolean; message: string }> => {
     try {
-      await supabase
+      // First get the collection_token for this order
+      const { data: orderData, error: fetchError } = await supabase
         .from('orders')
-        .update({ is_used: true, status: 'collected' })
-        .eq('id', orderId);
-    } catch (error) {
-      console.error('Failed to update order in database:', error);
+        .select('collection_token')
+        .eq('id', orderId)
+        .maybeSingle();
+
+      if (fetchError || !orderData?.collection_token) {
+        return { success: false, message: 'Order not found or missing collection token.' };
+      }
+
+      // Use the secure RPC function
+      const { data, error } = await supabase.rpc('mark_order_collected_secure', {
+        p_secret_token: orderData.collection_token,
+      });
+
+      if (error) {
+        console.error('RPC error:', error);
+        return { success: false, message: error.message };
+      }
+
+      const result = data as { success: boolean; message: string };
+
+      // Update local state on success
+      if (result.success) {
+        setOrders(prev => {
+          const updated = prev.map(order =>
+            order.id === orderId ? { ...order, status: 'collected' as Order['status'], isUsed: true } : order
+          );
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      return result;
+    } catch (err) {
+      console.error('markOrderCollected error:', err);
+      return { success: false, message: 'Unexpected error marking order collected.' };
     }
   }, []);
 
-  // --- FETCH FROM DATABASE IF NOT FOUND LOCALLY ---
+  /**
+   * Verify using the collection_token directly (from QR code).
+   * Uses mark_order_collected_secure RPC.
+   */
+  const verifyByCollectionToken = useCallback(async (token: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data, error } = await supabase.rpc('mark_order_collected_secure', {
+        p_secret_token: token,
+      });
+
+      if (error) {
+        console.error('RPC error:', error);
+        return { success: false, message: error.message };
+      }
+
+      return data as { success: boolean; message: string };
+    } catch (err) {
+      console.error('verifyByCollectionToken error:', err);
+      return { success: false, message: 'Unexpected error verifying order.' };
+    }
+  }, []);
+
+  /**
+   * Look up an order by order_number or ID.
+   * Fetches from DB with order_items.
+   */
   const verifyQrCode = useCallback(async (qrCode: string): Promise<Order | undefined> => {
     // 1. Try Local Search First
     const localOrder = orders.find(order => order.qrCode === qrCode || order.id === qrCode);
@@ -90,11 +141,19 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
     console.log("🔍 Order not found locally, checking Supabase for:", qrCode);
 
-    // 2. If not found, Ask Supabase
+    // 2. Fetch from Supabase with order_items
     try {
       const { data, error } = await supabase
         .from('orders')
-        .select('*')
+        .select(`
+          *,
+          order_items (
+            id,
+            name,
+            price,
+            quantity
+          )
+        `)
         .or(`id.eq.${qrCode},order_number.eq.${qrCode}`)
         .maybeSingle();
 
@@ -104,28 +163,36 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
 
       if (data) {
-        // --- FIX: Cast data to 'any' to bypass strict Type checks ---
-        const dbOrder = data as any;
-
         const fetchedOrder: Order = {
-          id: dbOrder.id,
-          qrCode: dbOrder.order_number, 
-          total: dbOrder.total_amount || 0,
-          status: (['pending', 'confirmed', 'collected', 'cancelled'].includes(dbOrder.status) 
-            ? dbOrder.status 
+          id: data.id,
+          qrCode: data.order_number,
+          total: Number(data.total),
+          status: (['pending', 'confirmed', 'collected', 'expired', 'failed'].includes(data.status)
+            ? data.status
             : 'pending') as Order['status'],
-          isUsed: dbOrder.is_used || dbOrder.status === 'collected',
-          createdAt: new Date(dbOrder.created_at),
-          items: typeof dbOrder.items === 'string' 
-            ? JSON.parse(dbOrder.items) 
-            : (dbOrder.items || []),
+          isUsed: data.is_used || data.status === 'collected',
+          createdAt: new Date(data.created_at),
+          customerName: data.customer_name || undefined,
+          customerEmail: data.customer_email || undefined,
+          items: (data.order_items || []).map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            description: '',
+            price: Number(item.price),
+            image: '',
+            category: '',
+            isVeg: true,
+            isAvailable: true,
+            availableTimePeriods: [],
+            quantity: item.quantity,
+          })),
         };
         return fetchedOrder;
       }
     } catch (err) {
       console.error("Unexpected scan error:", err);
     }
-    
+
     return undefined;
   }, [orders]);
 
@@ -140,6 +207,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       updateOrderStatus,
       markOrderCollected,
       verifyQrCode,
+      verifyByCollectionToken,
       getOrderById,
     }}>
       {children}
