@@ -16,11 +16,11 @@ export default function OrderSuccess() {
   const orderId = searchParams.get('orderId');
 
   const [orderNumber, setOrderNumber] = useState<string>('');
+  const [collectionToken, setCollectionToken] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!orderId) {
-      // If no ID is found, THEN go to menu
       navigate('/menu'); 
       return;
     }
@@ -28,12 +28,13 @@ export default function OrderSuccess() {
     const fetchOrderDetails = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('order_number')
+        .select('order_number, collection_token')
         .eq('id', orderId)
         .single();
       
       if (data) {
         setOrderNumber(data.order_number);
+        setCollectionToken(data.collection_token || orderId);
       }
       setLoading(false);
     };
@@ -61,7 +62,7 @@ export default function OrderSuccess() {
 
           <CardContent className="p-8 text-center space-y-6 bg-white">
             <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200 inline-block">
-              <QRCodeSVG value={orderId || ''} size={180} level="H" />
+              <QRCodeSVG value={collectionToken || orderId || ''} size={180} level="H" />
             </div>
 
             <div className="space-y-1">
