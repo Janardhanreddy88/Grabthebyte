@@ -48,12 +48,7 @@ export default function Menu() {
     navigate("/auth?logout=true");
   };
 
-  // --- TEMP FIX FOR TESTING ---
-  // If filteredItems is empty (due to time), we use popularItems as a fallback
-  // just so you can see *something* to click on.
-  // Ideally, you should update the 'available_time_periods' in Supabase,
-  // but this code change forces items to show up if the time filter hides everything.
-  const itemsToShow = filteredItems.length > 0 ? filteredItems : popularItems;
+  const itemsToShow = filteredItems;
 
   // Filter items by search query
   const searchedItems = searchQuery

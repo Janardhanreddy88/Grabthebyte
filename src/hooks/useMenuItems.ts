@@ -51,29 +51,17 @@ export function useMenuItems(): UseMenuItemsReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter items based on category and time period
+  // Filter items based on category only (time filtering removed)
   const filteredItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    
-    const matchesTime = currentPeriod 
-      ? item.availableTimePeriods.includes(currentPeriod.id)
-      : false; 
-
-    // ✅ FIX: REMOVED "&& isAvailable"
-    // Now "Sold Out" items (where isAvailable is false) will PASS this filter
-    // and show up on the screen with the red badge.
-    return matchesCategory && matchesTime;
+    return matchesCategory;
   });
 
-  // Get popular items
+  // Get popular items (no time filtering)
   const popularItems = menuItems.filter(item => {
     if (!item.isPopular) return false;
-    
-    // Optional: Hide sold out items from the "Popular Slider" to keep it clean
-    if (!item.isAvailable) return false; 
-    
-    if (!currentPeriod) return false; 
-    return item.availableTimePeriods.includes(currentPeriod.id);
+    if (!item.isAvailable) return false;
+    return true;
   });
 
   return {
