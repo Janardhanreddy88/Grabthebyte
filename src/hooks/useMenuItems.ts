@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MenuItem, TimePeriod } from '@/types/canteen';
 import { useMenu } from '@/context/MenuContext';
-import { getCurrentTimePeriod, categories } from '@/data/menuData';
+import { getCurrentTimePeriod, categories, timePeriods } from '@/data/menuData';
 
 interface UseMenuItemsReturn {
   items: MenuItem[];
@@ -9,6 +9,8 @@ interface UseMenuItemsReturn {
   popularItems: MenuItem[];
   categories: typeof categories;
   currentPeriod: TimePeriod | null;
+  canteenClosed: boolean;
+  nextOpenTime: string | null;
   isLoading: boolean;
   error: string | null;
   selectedCategory: string;
@@ -51,16 +53,37 @@ export function useMenuItems(): UseMenuItemsReturn {
     return () => clearInterval(interval);
   }, []);
 
+  // Determine if canteen is closed
+  const canteenClosed = !currentPeriod;
+
+  // Compute next opening time
+  const getNextOpenTime = (): string | null => {
+    if (!canteenClosed) return null;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // Find the next period that starts after now
+    const upcoming = timePeriods
+      .filter(p => p.startHour * 60 + p.startMinute > currentMinutes)
+      .sort((a, b) => (a.startHour * 60 + a.startMinute) - (b.startHour * 60 + b.startMinute));
+    const next = upcoming.length > 0 ? upcoming[0] : timePeriods[0]; // wrap to first period tomorrow
+    const h = next.startHour % 12 || 12;
+    const m = next.startMinute.toString().padStart(2, '0');
+    const ampm = next.startHour < 12 ? 'AM' : 'PM';
+    const label = upcoming.length > 0 ? 'today' : 'tomorrow';
+    return `${next.name} at ${h}:${m} ${ampm} ${label}`;
+  };
+  const nextOpenTime = getNextOpenTime();
+
   // Filter items based on category and current time period
-  const filteredItems = menuItems.filter(item => {
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    // If a time period is active, only show items for that period
-    // If no time period is active (outside hours), show all items
-    const matchesTime = currentPeriod
-      ? item.availableTimePeriods.includes(currentPeriod.id)
-      : true;
-    return matchesCategory && matchesTime;
-  });
+  const filteredItems = canteenClosed
+    ? [] // Hide all items when canteen is closed
+    : menuItems.filter(item => {
+        const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+        const matchesTime = currentPeriod
+          ? item.availableTimePeriods.includes(currentPeriod.id)
+          : true;
+        return matchesCategory && matchesTime;
+      });
 
   // Get popular items for current time period
   const popularItems = menuItems.filter(item => {
@@ -77,6 +100,8 @@ export function useMenuItems(): UseMenuItemsReturn {
     popularItems,
     categories,
     currentPeriod,
+    canteenClosed,
+    nextOpenTime,
     isLoading,
     error,
     selectedCategory,
