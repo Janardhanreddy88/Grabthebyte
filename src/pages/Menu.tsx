@@ -140,7 +140,7 @@ export default function Menu() {
                   {searchQuery
                     ? `Results for "${searchQuery}"`
                     : selectedCategory === "all"
-                      ? "All Items (Test Mode)" // Changed title to indicate test mode
+                      ? "All Items"
                       : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
                 </h2>
                 {!isLoading && !error && (
