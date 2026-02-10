@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, UtensilsCrossed, LayoutDashboard, MapPin } from "lucide-react";
+import { LogOut, UtensilsCrossed, LayoutDashboard, MapPin, Clock } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -34,9 +34,9 @@ export default function Menu() {
   const {
     filteredItems,
     popularItems,
-    // We will use 'allItems' if it exists in your hook, otherwise we fallback
-    // assuming your hook exposes the raw list. If not, we use this trick:
     currentPeriod,
+    canteenClosed,
+    nextOpenTime,
     isLoading,
     error,
     selectedCategory,
@@ -119,31 +119,46 @@ export default function Menu() {
                 />
               </div>
 
+              {/* Canteen Closed State */}
+              {!isLoading && canteenClosed && (
+                <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+                  <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mb-5">
+                    <Clock className="w-12 h-12 text-muted-foreground" />
+                  </div>
+                  <h2 className="font-semibold text-xl text-foreground mb-2">Canteen is Closed</h2>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    We're currently not serving. {nextOpenTime ? `Next opening: ${nextOpenTime}.` : 'Please check back later.'}
+                  </p>
+                </div>
+              )}
+
               {/* Time Period Banner */}
               {currentPeriod && !searchQuery && selectedCategory === "all" && (
                 <TimePeriodBanner period={currentPeriod} />
               )}
 
               {/* Popular Now Section */}
-              {!isLoading && !error && popularItems.length > 0 && selectedCategory === "all" && !searchQuery && (
+              {!isLoading && !error && !canteenClosed && popularItems.length > 0 && selectedCategory === "all" && !searchQuery && (
                 <PopularNow items={popularItems} />
               )}
 
               {/* Section Header */}
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display text-lg lg:text-xl font-semibold text-foreground">
-                  {searchQuery
-                    ? `Results for "${searchQuery}"`
-                    : selectedCategory === "all"
-                      ? "All Items"
-                      : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
-                </h2>
-                {!isLoading && !error && (
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                    {searchedItems.length} items
-                  </span>
-                )}
-              </div>
+              {!canteenClosed && (
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-display text-lg lg:text-xl font-semibold text-foreground">
+                    {searchQuery
+                      ? `Results for "${searchQuery}"`
+                      : selectedCategory === "all"
+                        ? "All Items"
+                        : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
+                  </h2>
+                  {!isLoading && !error && (
+                    <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                      {searchedItems.length} items
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Loading State */}
               {isLoading && <MenuItemSkeletonGrid count={6} />}
@@ -154,7 +169,7 @@ export default function Menu() {
               )}
 
               {/* Menu Grid */}
-              {!isLoading && !error && searchedItems.length > 0 && (
+              {!isLoading && !error && !canteenClosed && searchedItems.length > 0 && (
                 <motion.div
                   variants={staggerContainer}
                   initial="initial"
@@ -169,8 +184,8 @@ export default function Menu() {
                 </motion.div>
               )}
 
-              {/* Empty State */}
-              {!isLoading && !error && searchedItems.length === 0 && (
+              {/* Empty State (only when canteen is open but no results) */}
+              {!isLoading && !error && !canteenClosed && searchedItems.length === 0 && (
                 <EmptyState
                   icon={UtensilsCrossed}
                   title={searchQuery ? "No results found" : "No items available"}
