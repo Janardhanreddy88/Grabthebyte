@@ -51,16 +51,23 @@ export function useMenuItems(): UseMenuItemsReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter items based on category only (time filtering removed)
+  // Filter items based on category and current time period
   const filteredItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    return matchesCategory;
+    // If a time period is active, only show items for that period
+    // If no time period is active (outside hours), show all items
+    const matchesTime = currentPeriod
+      ? item.availableTimePeriods.includes(currentPeriod.id)
+      : true;
+    return matchesCategory && matchesTime;
   });
 
-  // Get popular items (no time filtering)
+  // Get popular items for current time period
   const popularItems = menuItems.filter(item => {
     if (!item.isPopular) return false;
     if (!item.isAvailable) return false;
+    // If a time period is active, only show popular items for that period
+    if (currentPeriod) return item.availableTimePeriods.includes(currentPeriod.id);
     return true;
   });
 
