@@ -146,7 +146,9 @@ export function MobileProfilePanel({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const handleChangePassword = () => {
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const handleChangePassword = async () => {
     if (passwordForm.new !== passwordForm.confirm) {
       toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
       return;
@@ -155,13 +157,53 @@ export function MobileProfilePanel({
       toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
       return;
     }
-    setChangePasswordOpen(false);
-    setPasswordForm({ old: '', new: '', confirm: '' });
-    toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
+    
+    setIsChangingPassword(true);
+    try {
+      // Verify current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: passwordForm.old,
+      });
+      
+      if (signInError) {
+        toast({ title: "Error", description: "Current password is incorrect.", variant: "destructive" });
+        return;
+      }
+      
+      // Update to new password
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      
+      setChangePasswordOpen(false);
+      setPasswordForm({ old: '', new: '', confirm: '' });
+      toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
+    } catch {
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
-  const handleForgotPassword = () => {
-    toast({ title: "Reset Link Sent!", description: `Password reset link sent to ${userEmail}` });
+  const handleForgotPassword = async () => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      
+      toast({ title: "Reset Link Sent!", description: `Password reset link sent to ${userEmail}` });
+    } catch {
+      toast({ title: "Error", description: "Failed to send reset link.", variant: "destructive" });
+    }
   };
 
   return (
@@ -425,7 +467,9 @@ export function MobileProfilePanel({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>Cancel</Button>
-            <Button onClick={handleChangePassword}>Update Password</Button>
+            <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+              {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
