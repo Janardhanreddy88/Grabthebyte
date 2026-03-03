@@ -30,10 +30,10 @@ Deno.serve(async (req) => {
     const { orderId, cfOrderId } = await req.json();
 
     if (!orderId && !cfOrderId) {
-      return new Response(
-        JSON.stringify({ error: "orderId or cfOrderId required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "orderId or cfOrderId required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Get order from database
@@ -44,12 +44,12 @@ Deno.serve(async (req) => {
         .select("id, cf_order_id, status, payment_status, order_number")
         .eq("id", orderId)
         .maybeSingle();
-      
+
       if (error || !data) {
-        return new Response(
-          JSON.stringify({ error: "Order not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Order not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       order = data;
     } else {
@@ -58,12 +58,12 @@ Deno.serve(async (req) => {
         .select("id, cf_order_id, status, payment_status, order_number")
         .eq("cf_order_id", cfOrderId)
         .maybeSingle();
-      
+
       if (error || !data) {
-        return new Response(
-          JSON.stringify({ error: "Order not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Order not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       order = data;
     }
@@ -76,9 +76,9 @@ Deno.serve(async (req) => {
           status: "completed",
           orderId: order.id,
           orderNumber: order.order_number,
-          source: "db_cache"
+          source: "db_cache",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -91,22 +91,19 @@ Deno.serve(async (req) => {
           orderId: order.id,
           message: "Payment not initiated",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     // Verify with Cashfree API
-    const cashfreeResponse = await fetch(
-      `https://api.cashfree.com/pg/orders/${order.cf_order_id}`,
-      {
-        method: "GET",
-        headers: {
-          "x-api-version": "2023-08-01",
-          "x-client-id": CASHFREE_APP_ID,
-          "x-client-secret": CASHFREE_SECRET_KEY,
-        },
-      }
-    );
+    const cashfreeResponse = await fetch(`https://api.cashfree.com/pg/orders/${order.cf_order_id}`, {
+      method: "GET",
+      headers: {
+        "x-api-version": "2023-08-01",
+        "x-client-id": CASHFREE_APP_ID,
+        "x-client-secret": CASHFREE_SECRET_KEY,
+      },
+    });
 
     const cashfreeData = await cashfreeResponse.json();
     console.log("Cashfree order status:", cashfreeData);
@@ -120,7 +117,7 @@ Deno.serve(async (req) => {
           orderId: order.id,
           message: "Could not verify with Cashfree",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -141,7 +138,6 @@ Deno.serve(async (req) => {
 
     // --- UPDATED LOGIC STARTS HERE ---
     if (newPaymentStatus !== order.payment_status) {
-      
       // 1. Try to get the Payment ID (Bank Reference)
       // Note: Depending on API version, this might be in 'cf_payment_id' or 'payment_session_id'
       const bankReference = cashfreeData.cf_payment_id || null;
@@ -152,7 +148,7 @@ Deno.serve(async (req) => {
           status: newOrderStatus,
           payment_status: newPaymentStatus,
           updated_at: new Date().toISOString(),
-          cf_payment_id: bankReference // <--- NEW: Saving Bank ID
+          cf_payment_id: bankReference, // <--- NEW: Saving Bank ID
         })
         .eq("id", order.id)
         .eq("payment_status", "pending") // <--- NEW: Race Condition Lock
@@ -179,14 +175,14 @@ Deno.serve(async (req) => {
         orderNumber: order.order_number,
         cfStatus: cfStatus,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
     console.error("Verify payment error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
