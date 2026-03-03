@@ -38,10 +38,10 @@ Deno.serve(async (req) => {
     const { orderId, amount, customerName, customerEmail, customerPhone }: CreatePaymentRequest = await req.json();
 
     if (!orderId || !amount || !customerEmail) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: orderId, amount, customerEmail" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Missing required fields: orderId, amount, customerEmail" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Verify order exists and is pending
@@ -53,18 +53,18 @@ Deno.serve(async (req) => {
 
     if (orderError || !order) {
       console.error("Order lookup error:", orderError);
-      return new Response(
-        JSON.stringify({ error: "Order not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Order not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Allow retry for pending payments
     if (order.payment_status === "completed") {
-      return new Response(
-        JSON.stringify({ error: "Payment already completed for this order" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Payment already completed for this order" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Generate unique Cashfree order ID
@@ -101,10 +101,10 @@ Deno.serve(async (req) => {
 
     if (!cashfreeResponse.ok) {
       console.error("Cashfree API error:", cashfreeData);
-      return new Response(
-        JSON.stringify({ error: "Failed to create payment session", details: cashfreeData }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Failed to create payment session", details: cashfreeData }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Update order with Cashfree order ID
@@ -130,14 +130,14 @@ Deno.serve(async (req) => {
         cfOrderId: cfOrderId,
         orderId: orderId,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
     console.error("Create payment error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
