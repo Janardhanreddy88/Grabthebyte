@@ -2,42 +2,32 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-signature, x-webhook-timestamp",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-webhook-signature, x-webhook-timestamp",
 };
 
-// Helper: Verify the Cashfree Signature to block hackers
+// 🛡️ Helper: Verify the Cashfree Signature to block hackers
 async function verifySignature(ts: string, rawBody: string, signature: string, secretKey: string) {
   const data = ts + rawBody;
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secretKey);
   const dataToSign = encoder.encode(data);
 
-  // Use the global 'crypto' API (built-in to Deno)
-  const key = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
+  // IMPORT KEY WITH "sign" PERMISSION (This fixes the InvalidAccessError!)
+  const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 
+  // Generate the HMAC-SHA256 signature
   const signatureBytes = await crypto.subtle.sign("HMAC", key, dataToSign);
-  
-  // Convert binary signature to Base64
-  let binary = '';
-  const bytes = new Uint8Array(signatureBytes);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const computedSignature = btoa(binary);
 
-  // Compare the calculated signature with the header
+  // Convert binary signature to Base64 safely and efficiently
+  const computedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+
+  // Compare the calculated signature with the header sent by Cashfree
   return computedSignature === signature;
 }
 
 Deno.serve(async (req) => {
-  // 1. Handle CORS
+  // 1. Handle CORS Preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -56,16 +46,16 @@ Deno.serve(async (req) => {
     const timestamp = req.headers.get("x-webhook-timestamp");
 
     if (!signature || !timestamp) {
-       console.error("Missing signature/timestamp headers");
-       return new Response(JSON.stringify({ message: "Missing headers" }), { status: 200, headers: corsHeaders });
+      console.error("Missing signature/timestamp headers");
+      return new Response(JSON.stringify({ message: "Missing headers" }), { status: 200, headers: corsHeaders });
     }
 
-    // 3. READ RAW BODY (Required for signature math)
+    // 3. READ RAW BODY (Required for exact signature math)
     const rawBody = await req.text();
-    
+
     // 4. VERIFY SIGNATURE (Security Check)
     const isValid = await verifySignature(timestamp, rawBody, signature, CASHFREE_SECRET_KEY);
-    
+
     if (!isValid) {
       console.error("Invalid Signature! Potential hacking attempt.");
       return new Response(JSON.stringify({ message: "Invalid Signature" }), { status: 200, headers: corsHeaders });
@@ -75,10 +65,9 @@ Deno.serve(async (req) => {
     const payload = JSON.parse(rawBody);
     console.log("Webhook Verified & Received:", JSON.stringify(payload, null, 2));
 
-    const { data, type: eventType } = payload;
-    const cfOrderId = data.order?.order_id;
-    // Cashfree sends payment ID inside the 'payment' object
-    const cfPaymentId = data.payment?.cf_payment_id;
+    const eventType = payload.type;
+    const cfOrderId = payload.data?.order?.order_id;
+    const cfPaymentId = payload.data?.payment?.cf_payment_id;
 
     if (!cfOrderId) {
       return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
@@ -96,7 +85,7 @@ Deno.serve(async (req) => {
 
     if (logError) console.error("Webhook Log Error:", logError);
 
-    // 7. GET CURRENT ORDER STATUS
+    // 7. GET CURRENT ORDER STATUS (From your Food App 'orders' table)
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select("id, status, payment_status")
@@ -104,25 +93,27 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (orderError || !order) {
-      console.error("Order not found:", cfOrderId);
+      console.error("Order not found in DB:", cfOrderId);
       return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
     }
 
     // 8. DETERMINE NEW STATUS
     let newPaymentStatus = order.payment_status;
     let newOrderStatus = order.status;
-    const paymentStatus = data.payment?.payment_status;
+    const paymentStatus = payload.data?.payment?.payment_status;
 
     if (eventType === "PAYMENT_SUCCESS_WEBHOOK" || paymentStatus === "SUCCESS") {
       newPaymentStatus = "completed";
       newOrderStatus = "confirmed";
-    } else if (["FAILED", "CANCELLED", "USER_DROPPED"].includes(paymentStatus) || eventType === "PAYMENT_FAILED_WEBHOOK") {
+    } else if (
+      ["FAILED", "CANCELLED", "USER_DROPPED"].includes(paymentStatus) ||
+      eventType === "PAYMENT_FAILED_WEBHOOK"
+    ) {
       newPaymentStatus = "failed";
     }
 
     // 9. UPDATE DATABASE (With Race Condition Safety Lock)
     if (newPaymentStatus !== order.payment_status) {
-      
       const { data: updatedRows, error: updateError } = await supabase
         .from("orders")
         .update({
@@ -138,7 +129,7 @@ Deno.serve(async (req) => {
       if (updateError) console.error("Update Error:", updateError);
 
       // 10. ATOMIC STOCK DECREMENT
-      // Only runs if WE updated the row (updatedRows.length > 0)
+      // Only runs if WE successfully updated the row to 'completed'
       if (updatedRows && updatedRows.length > 0 && newPaymentStatus === "completed") {
         await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
         console.log("Stock decremented via Webhook for:", order.id);
@@ -147,17 +138,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ success: true, message: "Webhook processed" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (error) {
-    console.error("Webhook processing error:", error);
-    // Return 200 to prevent Cashfree from retrying constantly
-    return new Response(
-      JSON.stringify({ success: false, message: "Internal Error" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true, message: "Webhook processed perfectly" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("Webhook processing error:", error.message || error);
+    // Return 200 to prevent Cashfree from retrying constantly on code failures
+    return new Response(JSON.stringify({ success: false, message: "Internal Error" }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
