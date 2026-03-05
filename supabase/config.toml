@@ -1,16 +1,1 @@
 project_id = "dlaudfrhokdjtcmnhhap"
-
-[functions.admin-auth]
-verify_jwt = false
-
-[functions.create-payment]
-verify_jwt = false
-
-[functions.handle-webhook]
-verify_jwt = false
-
-[functions.payment-redirect]
-verify_jwt = false
-
-[functions.verify-payment]
-verify_jwt = false
