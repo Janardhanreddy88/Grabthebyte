@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -13,24 +14,24 @@ interface EmptyStateProps {
   children?: ReactNode;
 }
 
-export function EmptyState({ 
-  icon: Icon, 
-  title, 
-  description, 
-  action,
-  children 
-}: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, children }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-      <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
-        <Icon className="w-10 h-10 text-muted-foreground" />
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-16 px-6 text-center"
+    >
+      <div className="w-20 h-20 rounded-3xl bg-muted flex items-center justify-center mb-5">
+        <Icon className="w-9 h-9 text-muted-foreground" />
       </div>
-      <h2 className="font-semibold text-lg text-foreground mb-1">{title}</h2>
-      <p className="text-sm text-muted-foreground mb-4 max-w-xs">{description}</p>
+      <h2 className="font-display font-bold text-lg text-foreground mb-1.5">{title}</h2>
+      <p className="text-sm text-muted-foreground mb-5 max-w-xs leading-relaxed">{description}</p>
       {action && (
-        <Button onClick={action.onClick}>{action.label}</Button>
+        <Button onClick={action.onClick} className="rounded-2xl h-10 px-6 font-bold text-sm">
+          {action.label}
+        </Button>
       )}
       {children}
-    </div>
+    </motion.div>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function CartPanel() {
   const navigate = useNavigate();
@@ -14,20 +14,20 @@ export function CartPanel() {
       <div className="flex flex-col h-full">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-secondary/10 flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4 text-secondary" />
+            <div className="w-10 h-10 rounded-2xl bg-secondary/10 flex items-center justify-center">
+              <ShoppingBag className="w-5 h-5 text-secondary" />
             </div>
             <div>
-              <h2 className="font-display font-semibold text-base">Your Order</h2>
+              <h2 className="font-display font-bold text-base">Your Order</h2>
               <p className="text-xs text-muted-foreground">0 items</p>
             </div>
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center py-12 text-center px-6">
-          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
-            <Package className="w-6 h-6 text-muted-foreground" />
+          <div className="w-16 h-16 rounded-3xl bg-muted flex items-center justify-center mb-4">
+            <Package className="w-7 h-7 text-muted-foreground" />
           </div>
-          <h3 className="font-display font-semibold text-base text-foreground">Cart is empty</h3>
+          <h3 className="font-display font-bold text-base text-foreground">Cart is empty</h3>
           <p className="text-sm text-muted-foreground mt-1">Add items from the menu</p>
         </div>
       </div>
@@ -39,74 +39,85 @@ export function CartPanel() {
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
-            <ShoppingBag className="w-4 h-4 text-secondary-foreground" />
+          <div
+            className="w-10 h-10 rounded-2xl bg-secondary flex items-center justify-center"
+            style={{ boxShadow: '0 4px 12px -2px hsl(152 69% 31% / 0.3)' }}
+          >
+            <ShoppingBag className="w-5 h-5 text-secondary-foreground" />
           </div>
           <div>
-            <h2 className="font-display font-semibold text-base">Your Order</h2>
-            <p className="text-xs text-muted-foreground">{totalItems} items</p>
+            <h2 className="font-display font-bold text-base">Your Order</h2>
+            <p className="text-xs text-muted-foreground">{totalItems} item{totalItems > 1 ? 's' : ''}</p>
           </div>
         </div>
       </div>
 
       {/* Items */}
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
-          {cart.map((item) => (
-            <div
-              key={item.id}
-              className="flex gap-3 p-2.5 rounded-xl bg-muted/30 border border-border/50"
-            >
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                <p className="text-primary font-bold text-sm mt-0.5">₹{item.price}</p>
-                
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    className="w-6 h-6 rounded-md bg-background border border-border flex items-center justify-center hover:bg-muted transition-colors"
-                  >
-                    <Minus size={12} />
-                  </button>
-                  <span className="font-bold text-sm min-w-[1.25rem] text-center tabular-nums">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    className="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors"
-                  >
-                    <Plus size={12} />
-                  </button>
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="ml-auto w-6 h-6 rounded-md bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+        <div className="p-4 space-y-2.5">
+          <AnimatePresence>
+            {cart.map((item) => (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10, height: 0 }}
+                className="flex gap-3 p-3 rounded-2xl bg-muted/30 border border-border/50"
+              >
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm truncate text-foreground">{item.name}</h4>
+                  <p className="text-primary font-bold text-sm mt-0.5 tabular-nums">₹{item.price}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <motion.button
+                      whileTap={{ scale: 0.85 }}
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                    >
+                      <Minus size={13} />
+                    </motion.button>
+                    <span className="font-bold text-sm min-w-[1.25rem] text-center tabular-nums">
+                      {item.quantity}
+                    </span>
+                    <motion.button
+                      whileTap={{ scale: 0.85 }}
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors"
+                    >
+                      <Plus size={13} />
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.85 }}
+                      onClick={() => removeFromCart(item.id)}
+                      className="ml-auto w-7 h-7 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </motion.button>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       </ScrollArea>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border bg-muted/20">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-muted-foreground">Subtotal</span>
-          <span className="text-lg font-bold text-foreground">₹{totalPrice}</span>
+      <div className="p-4 border-t border-border bg-card">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm text-muted-foreground font-medium">Subtotal</span>
+          <span className="text-xl font-bold text-foreground tabular-nums">₹{totalPrice}</span>
         </div>
-        <Separator className="mb-3" />
-        <Button 
-          className="w-full h-11 font-semibold rounded-xl bg-secondary hover:bg-secondary/90 text-secondary-foreground gap-2"
+        <Button
+          className="w-full h-12 font-bold rounded-2xl bg-secondary hover:bg-secondary/90 text-secondary-foreground gap-2 text-sm btn-glow"
+          style={{ boxShadow: '0 4px 16px -3px hsl(152 69% 31% / 0.35)' }}
           onClick={() => navigate('/checkout')}
         >
-          Checkout
+          Proceed to Checkout
           <ArrowRight size={16} />
         </Button>
       </div>
