@@ -34,10 +34,10 @@ Deno.serve(async (req) => {
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const SUPABASE_SECRET_KEY = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const CASHFREE_SECRET_KEY = Deno.env.get("CASHFREE_SECRET_KEY");
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !CASHFREE_SECRET_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !CASHFREE_SECRET_KEY) {
       throw new Error("Credentials not configured");
     }
 
