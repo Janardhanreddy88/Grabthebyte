@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
           customer_phone: customerPhone || "9999999999",
         },
         order_meta: {
-          return_url: `https://dlaudfrhokdjtcmnhhap.supabase.co/functions/v1/payment-redirect?order_id=${orderId}&cf_order_id=${cfOrderId}`,
-          notify_url: `https://dlaudfrhokdjtcmnhhap.supabase.co/functions/v1/handle-webhook`,
+          return_url: `${SUPABASE_URL}/functions/v1/payment-redirect?order_id=${orderId}&cf_order_id=${cfOrderId}`,
+          notify_url: `${SUPABASE_URL}/functions/v1/handle-webhook`,
         },
         order_note: `Order #${order.order_number}`,
       }),
