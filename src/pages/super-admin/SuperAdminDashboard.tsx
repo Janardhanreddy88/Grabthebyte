@@ -124,7 +124,7 @@ export function SuperAdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome to BiteOS Command Center
+            Welcome to GrabTheByte Command Center
           </p>
         </div>
         <div className="flex items-center gap-2">

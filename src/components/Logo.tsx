@@ -48,10 +48,10 @@ export function Logo({ size = 'md', showText = true, className }: LogoProps) {
       {showText && (
         <div className="flex items-baseline leading-none">
           <span className={cn('font-display font-semibold text-foreground tracking-tight', textSizes[size])}>
-            Bite
+            Grab
           </span>
           <span className={cn('font-display font-bold text-primary tracking-tight', textSizes[size])}>
-            OS
+            TheByte
           </span>
         </div>
       )}

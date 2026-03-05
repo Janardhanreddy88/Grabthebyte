@@ -56,7 +56,7 @@ export default function SelectCampus() {
           <div className="flex justify-center mb-4">
             <Logo size="lg" showText={false} />
           </div>
-          <h1 className="font-display text-xl font-semibold text-foreground">BiteOS</h1>
+          <h1 className="font-display text-xl font-semibold text-foreground">GrabTheByte</h1>
           <p className="text-sm text-muted-foreground mt-1">Find your campus to get started</p>
         </div>
 

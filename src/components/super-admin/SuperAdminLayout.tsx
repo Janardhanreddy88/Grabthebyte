@@ -93,7 +93,7 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
             <div className="flex items-center gap-2">
               <Logo size="sm" showText={false} />
               <div>
-                <span className="font-semibold text-foreground">BiteOS</span>
+                <span className="font-semibold text-foreground">GrabTheByte</span>
                 <span className="text-xs text-muted-foreground ml-1">Super Admin</span>
               </div>
             </div>

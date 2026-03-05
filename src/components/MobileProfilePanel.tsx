@@ -416,7 +416,7 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
             {/* Copyright Footer */}
             <div className="p-4 pt-2">
               <p className="text-xs text-muted-foreground text-center">
-                © {new Date().getFullYear()} BiteOS Tech. All rights reserved.
+                © {new Date().getFullYear()} GrabTheByte. All rights reserved.
               </p>
             </div>
           </div>

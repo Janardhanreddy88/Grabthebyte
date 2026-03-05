@@ -33,7 +33,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-lg font-semibold text-foreground">Introduction</h2>
               <p>
-                This Privacy Policy describes how <strong>BiteOS Tech</strong> ("we", "our", "us") collects, uses, shares, and protects your personal data through our Campus Food Ordering Platform. By using BiteOS, you agree to the terms of this Privacy Policy. If you do not agree, please do not use our platform.
+                This Privacy Policy describes how <strong>GrabTheByte</strong> ("we", "our", "us") collects, uses, shares, and protects your personal data through our Campus Food Ordering Platform. By using GrabTheByte, you agree to the terms of this Privacy Policy. If you do not agree, please do not use our platform.
               </p>
             </section>
 
@@ -52,7 +52,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-lg font-semibold text-foreground">2. Payment Data & Security</h2>
               <p>
-                <strong>Important:</strong> BiteOS Tech does <strong>NOT</strong> store your Credit/Debit card numbers, UPI PINs, or Net Banking passwords.
+                <strong>Important:</strong> GrabTheByte does <strong>NOT</strong> store your Credit/Debit card numbers, UPI PINs, or Net Banking passwords.
               </p>
               <p>
                 All payments are processed securely through our authorized payment gateway partner, <strong>Cashfree Payments India Pvt Ltd</strong>. When you make a payment, you are redirected to Cashfree's secure server. Your payment data is governed by Cashfree's privacy policy and security standards (PCI-DSS compliant).
@@ -87,7 +87,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-lg font-semibold text-foreground">5. Data Retention</h2>
               <p>
-                We retain your order history and profile information as long as you are a registered user of BiteOS Tech. You may request the deletion of your account by contacting our Grievance Officer. Upon deletion, we may retain transaction logs for financial auditing purposes as required by Indian tax laws.
+                We retain your order history and profile information as long as you are a registered user of GrabTheByte. You may request the deletion of your account by contacting our Grievance Officer. Upon deletion, we may retain transaction logs for financial auditing purposes as required by Indian tax laws.
               </p>
             </section>
 
@@ -106,9 +106,9 @@ export default function PrivacyPolicy() {
               <div className="bg-muted/50 rounded-lg p-4 space-y-2 mt-2 border border-border">
                 <p><strong>Name:</strong> Mr. Bareddy Janardhan Reddy</p>
                 <p><strong>Designation:</strong> Founder</p>
-                <p><strong>Company:</strong> BiteOS Tech</p>
+                <p><strong>Company:</strong> GrabTheByte</p>
                 <p><strong>Address:</strong> 29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh</p>
-                <p><strong>Email:</strong> biteostech@gmail.com</p>
+                <p><strong>Email:</strong> support@grabthebyte.com</p>
                 <p><strong>Operating Hours:</strong> Mon - Fri (10:00 AM - 6:00 PM)</p>
               </div>
             </section>
@@ -117,7 +117,7 @@ export default function PrivacyPolicy() {
           {/* Footer */}
           <footer className="mt-12 pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground text-center">
-              © {new Date().getFullYear()} BiteOS Tech. All rights reserved.
+              © {new Date().getFullYear()} GrabTheByte. All rights reserved.
             </p>
           </footer>
         </main>

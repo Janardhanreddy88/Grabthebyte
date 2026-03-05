@@ -319,7 +319,7 @@ export function SuperAdminPinGate({ children }: SuperAdminPinGateProps) {
           </form>
 
           <p className="text-xs text-center text-muted-foreground mt-4">
-            Protected by BiteOS Security
+            Protected by GrabTheByte Security
           </p>
         </CardContent>
       </Card>

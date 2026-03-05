@@ -154,8 +154,8 @@ export default function Support() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-sm">Email Support</h3>
-                      <a href="mailto:biteostech@gmail.com" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                        biteostech@gmail.com
+                      <a href="mailto:support@grabthebyte.com" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                        support@grabthebyte.com
                       </a>
                       <p className="text-xs text-muted-foreground mt-0.5">Response within 24 hours</p>
                     </div>
@@ -169,7 +169,7 @@ export default function Support() {
                     <div>
                       <h3 className="font-semibold text-sm">Registered Office</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed mt-0.5">
-                        BiteOS Tech<br/>
+                        GrabTheByte<br/>
                         29-178-32/D6, SBI Colony<br/>
                         Nandyal, Andhra Pradesh - 518501
                       </p>
@@ -281,7 +281,7 @@ export default function Support() {
           </div>
 
           <footer className="mt-12 text-center border-t border-border pt-8">
-            <p className="text-sm text-muted-foreground">© 2026 BiteOS Tech. All rights reserved.</p>
+            <p className="text-sm text-muted-foreground">© 2026 GrabTheByte. All rights reserved.</p>
           </footer>
         </main>
       </div>
