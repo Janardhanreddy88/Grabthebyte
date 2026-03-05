@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 import { Mail, ArrowLeft, Loader2, CheckCircle2, Send } from 'lucide-react';
 
-const emailSchema = z.string().trim().email('Please enter a valid email address').max(255, 'Email is too long');
+const emailSchema = z.string().trim().email('Please enter a valid email address').max(255);
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -19,97 +19,30 @@ export default function ForgotPassword() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validateEmail = () => {
-    try {
-      emailSchema.parse(email);
-      setError(null);
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        setError(err.errors[0].message);
-      }
-      return false;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateEmail()) return;
-
+    try { emailSchema.parse(email); setError(null); } catch (err: any) { setError(err.errors[0].message); return; }
     setIsLoading(true);
-    
     try {
-      const redirectUrl = `${window.location.origin}/reset-password`;
-      
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: redirectUrl,
-      });
-      
-      if (error) {
-        toast({
-          title: 'Error',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/reset-password` });
+      if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
       setIsSubmitted(true);
-      toast({
-        title: 'Email Sent!',
-        description: 'Check your inbox for the password reset link.',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+      toast({ title: 'Email Sent!', description: 'Check your inbox for the reset link.' });
+    } catch { toast({ title: 'Error', description: 'An unexpected error occurred.', variant: 'destructive' }); }
+    finally { setIsLoading(false); }
   };
 
   if (isSubmitted) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <div className="fixed inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-secondary/[0.02]" />
-        
-        <div className="relative w-full max-w-[380px] text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
-              <CheckCircle2 className="w-8 h-8 text-green-500" />
-            </div>
+        <div className="relative w-full max-w-[320px] text-center">
+          <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3"><CheckCircle2 className="w-6 h-6 text-green-500" /></div>
+          <h1 className="text-base font-bold mb-1">Check Your Email</h1>
+          <p className="text-xs text-muted-foreground mb-4">Reset link sent to <strong className="text-foreground">{email}</strong></p>
+          <div className="bg-card rounded-xl border border-border p-3 mb-3">
+            <p className="text-xs text-muted-foreground">Didn't receive it? <button onClick={() => setIsSubmitted(false)} className="text-primary hover:underline font-medium">Try again</button></p>
           </div>
-          
-          <h1 className="font-display text-xl font-semibold text-foreground mb-2">
-            Check Your Email
-          </h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            We've sent a password reset link to <strong className="text-foreground">{email}</strong>
-          </p>
-          
-          <div className="bg-card rounded-2xl shadow-soft border border-border p-5 mb-4">
-            <p className="text-sm text-muted-foreground">
-              Didn't receive the email? Check your spam folder or{' '}
-              <button 
-                onClick={() => setIsSubmitted(false)}
-                className="text-primary hover:underline font-medium"
-              >
-                try again
-              </button>
-            </p>
-          </div>
-          
-          <Button
-            variant="ghost"
-            className="gap-2"
-            onClick={() => navigate('/auth')}
-          >
-            <ArrowLeft size={16} />
-            Back to Login
-          </Button>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => navigate('/auth')}><ArrowLeft size={12} />Back to Login</Button>
         </div>
       </div>
     );
@@ -117,82 +50,30 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="fixed inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-secondary/[0.02]" />
-      
-      <div className="relative w-full max-w-[380px]">
-        {/* Logo Section */}
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-4">
-            <Logo size="lg" showText={false} />
-          </div>
-          <h1 className="font-display text-xl font-semibold text-foreground">
-            Forgot Password?
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            No worries, we'll send you reset instructions
-          </p>
+      <div className="relative w-full max-w-[320px]">
+        <div className="text-center mb-4">
+          <div className="flex justify-center mb-3"><Logo size="md" showText={false} /></div>
+          <h1 className="text-base font-bold">Forgot Password?</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">We'll send you reset instructions</p>
         </div>
-
-        {/* Form Card */}
-        <div className="bg-card rounded-2xl shadow-soft border border-border p-5">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-                Email Address
-              </Label>
+        <div className="bg-card rounded-xl border border-border p-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="email" className="text-[11px] font-semibold text-muted-foreground">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@college.edu"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError(null);
-                  }}
-                  className={`h-11 pl-10 rounded-xl ${error ? 'border-destructive' : ''}`}
-                  required
-                  disabled={isLoading}
-                  autoComplete="email"
-                  autoFocus
-                />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input id="email" type="email" placeholder="you@college.edu" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                  className={`h-9 pl-9 text-sm rounded-xl ${error ? 'border-destructive' : ''}`} required disabled={isLoading} autoFocus />
               </div>
-              {error && (
-                <p className="text-xs text-destructive">{error}</p>
-              )}
+              {error && <p className="text-[10px] text-destructive">{error}</p>}
             </div>
-
-            <Button 
-              type="submit" 
-              className="w-full h-11 font-semibold rounded-xl gap-2" 
-              disabled={isLoading || !email.trim()}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  Send Reset Link
-                </>
-              )}
+            <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs" disabled={isLoading || !email.trim()}>
+              {isLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending...</> : <><Send size={13} /> Send Reset Link</>}
             </Button>
           </form>
         </div>
-
-        {/* Back to Login */}
-        <div className="text-center mt-5">
-          <Button
-            variant="ghost"
-            className="text-sm text-muted-foreground hover:text-foreground gap-2"
-            onClick={() => navigate('/auth')}
-          >
-            <ArrowLeft size={14} />
-            Back to Login
-          </Button>
+        <div className="text-center mt-4">
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1.5" onClick={() => navigate('/auth')}><ArrowLeft size={12} />Back to Login</Button>
         </div>
       </div>
     </div>
