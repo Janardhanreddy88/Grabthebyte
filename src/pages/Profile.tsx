@@ -33,7 +33,7 @@ export default function Profile() {
         const fCampusId = profile?.campus_id || roleData?.campus_id || safeUser.user_metadata?.campus_id;
         setCampusId(fCampusId || null);
         if (fCampusId) {
-          const { data: cd } = await supabase.from('campuses').select('code, name').eq('id', fCampusId).maybeSingle();
+          const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', fCampusId).maybeSingle();
           if (cd) setCampusCode(cd.code || cd.name || 'Unknown');
         }
       } catch {} finally { setLoading(false); }
