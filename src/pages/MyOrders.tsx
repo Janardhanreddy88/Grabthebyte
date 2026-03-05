@@ -28,7 +28,7 @@ export default function MyOrders() {
   const fetchOrders = async () => {
     try {
       if (!user) return;
-      const { data, error } = await supabase.from('orders').select(`*, campus:campuses(name), order_items(name, quantity, price)`).eq('user_id', user.id).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('orders').select(`*, campus:campus_public_info(name), order_items(name, quantity, price)`).eq('user_id', user.id).order('created_at', { ascending: false });
       if (error) throw error;
       setOrders((data || []).map((o: any) => ({ id: o.id, order_number: o.order_number, total: o.total || o.amount, status: o.status, payment_status: o.payment_status || 'pending', created_at: o.created_at, campus: o.campus, items: o.order_items || [], rejection_reason: o.rejection_reason, collection_token: o.collection_token })));
     } catch { toast.error('Failed to load orders'); } finally { setIsLoading(false); setIsRefetching(false); }
@@ -92,7 +92,7 @@ export default function MyOrders() {
           const isPending = order.status === 'pending' && order.payment_status === 'pending' && !timedOut;
           const isCollected = order.status === 'collected';
           const isExp = checkIsExpired(order);
-          const isFailed = !isExp && (order.status === 'failed' || order.status === 'cancelled' || order.payment_status === 'not_confirmed');
+          const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed');
 
           return (
             <div key={order.id} className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">

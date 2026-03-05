@@ -76,7 +76,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       setMenuItems(items);
     } catch {
       setError('Failed to load menu items');
-      setError('Failed to load menu items');
       setMenuItems([]);
     } finally {
       setIsLoading(false);
