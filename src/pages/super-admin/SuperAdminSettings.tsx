@@ -346,7 +346,7 @@ export function SuperAdminSettings() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="p-4 rounded-lg border">
                 <p className="text-sm text-muted-foreground">Platform</p>
-                <p className="font-semibold">BiteOS</p>
+                <p className="font-semibold">GrabTheByte</p>
               </div>
               <div className="p-4 rounded-lg border">
                 <p className="text-sm text-muted-foreground">Version</p>

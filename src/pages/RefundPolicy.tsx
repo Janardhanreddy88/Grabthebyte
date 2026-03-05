@@ -31,7 +31,7 @@ export default function RefundPolicy() {
 
           <div className="prose prose-sm dark:prose-invert max-w-none space-y-4 text-muted-foreground">
             <p>
-              Thank you for ordering with <strong>BiteOS Tech</strong>. Since we deal in perishable food items prepared on-demand, strictly the following refund and cancellation policies apply:
+              Thank you for ordering with <strong>GrabTheByte</strong>. Since we deal in perishable food items prepared on-demand, strictly the following refund and cancellation policies apply:
             </p>
 
             <ol className="list-decimal pl-6 space-y-4">
@@ -78,7 +78,7 @@ export default function RefundPolicy() {
             <div className="mt-8 p-4 bg-muted/50 rounded-lg border border-border">
               <h3 className="font-semibold text-foreground mb-2">Need Help?</h3>
               <p className="text-xs">
-                For any payment-related issues, please email us at <strong>biteostech@gmail.com</strong> or contact the Canteen Manager directly.
+                For any payment-related issues, please email us at <strong>support@grabthebyte.com</strong> or contact the Canteen Manager directly.
               </p>
             </div>
           </div>
@@ -86,7 +86,7 @@ export default function RefundPolicy() {
           {/* Footer */}
           <footer className="mt-12 pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground text-center">
-              © {new Date().getFullYear()} BiteOS Tech. All rights reserved.
+              © {new Date().getFullYear()} GrabTheByte. All rights reserved.
             </p>
           </footer>
         </main>

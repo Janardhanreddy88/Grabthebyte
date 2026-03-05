@@ -39,7 +39,7 @@ export default function TermsAndConditions() {
             </p>
 
             <p>
-              3. The Platform is owned by <strong>BiteOS Tech</strong>, a proprietorship/company operating with its registered office at <strong>29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
+              3. The Platform is owned by <strong>GrabTheByte</strong>, a proprietorship/company operating with its registered office at <strong>29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
             </p>
 
             <p>
@@ -94,7 +94,7 @@ export default function TermsAndConditions() {
           {/* Footer */}
           <footer className="mt-12 pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground text-center">
-              © {new Date().getFullYear()} BiteOS Tech. All rights reserved.
+              © {new Date().getFullYear()} GrabTheByte. All rights reserved.
             </p>
           </footer>
         </main>

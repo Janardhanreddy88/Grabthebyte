@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.biteos.app',
-  appName: 'BiteOS',
+  appId: 'com.grabthebyte.app',
+  appName: 'GrabTheByte',
   webDir: 'dist'
 };
 
