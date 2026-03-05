@@ -14,7 +14,6 @@ import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/rateLimit';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
-// Validation schemas
 const emailSchema = z.string().trim().email('Please enter a valid email address').max(255, 'Email is too long');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters').max(72, 'Password is too long');
 const nameSchema = z.string().trim().min(2, 'Name must be at least 2 characters').max(100, 'Name is too long');
@@ -27,7 +26,6 @@ export default function Auth() {
   const { campus } = useCampus();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
@@ -53,7 +51,6 @@ export default function Auth() {
     return () => { cancelled = true; };
   }, [searchParams, navigate]);
 
-  // Check for existing session
   useEffect(() => {
     if (isLoggingOut) return;
     const checkSession = async () => {
@@ -75,7 +72,6 @@ export default function Auth() {
     checkSession();
   }, [navigate, isLoggingOut, campus, toast]);
 
-  // Auth state listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
@@ -93,11 +89,8 @@ export default function Auth() {
               return;
             }
           }
-          if (userRole === 'admin' || userRole === 'kiosk') {
-            navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner');
-          } else {
-            navigate('/menu');
-          }
+          if (userRole === 'admin' || userRole === 'kiosk') navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner');
+          else navigate('/menu');
         }, 0);
       }
     });
@@ -125,199 +118,128 @@ export default function Auth() {
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearErrors();
-    setRateLimitMessage(null);
+    e.preventDefault(); clearErrors(); setRateLimitMessage(null);
     if (!validateLoginForm()) return;
-    if (!campus?.id) {
-      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
-      navigate('/select-campus');
-      return;
-    }
+    if (!campus?.id) { toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); navigate('/select-campus'); return; }
     const sanitizedEmail = sanitizeEmail(loginEmail);
     const rateLimit = checkLoginRateLimit(sanitizedEmail);
     if (!rateLimit.allowed) { setRateLimitMessage(rateLimit.message || 'Too many login attempts.'); return; }
-
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: loginPassword });
-      if (error) {
-        recordLoginAttempt(sanitizedEmail, false);
-        toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' });
-        return;
-      }
+      if (error) { recordLoginAttempt(sanitizedEmail, false); toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' }); return; }
       if (data.user) {
         const { data: userRole } = await supabase.from('user_roles').select('campus_id, role').eq('user_id', data.user.id).maybeSingle();
-        if (userRole?.role !== 'super_admin') {
-          if (userRole?.campus_id && userRole.campus_id !== campus.id) {
-            await supabase.auth.signOut();
-            toast({ title: 'Wrong Campus', description: 'Your account is registered with a different campus.', variant: 'destructive' });
-            return;
-          }
+        if (userRole?.role !== 'super_admin' && userRole?.campus_id && userRole.campus_id !== campus.id) {
+          await supabase.auth.signOut(); toast({ title: 'Wrong Campus', description: 'Your account is registered with a different campus.', variant: 'destructive' }); return;
         }
       }
       recordLoginAttempt(sanitizedEmail, true);
       if (data.user) toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
-    } catch {
-      toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
-    }
+    } catch { toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' }); }
+    finally { setIsLoading(false); }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearErrors();
+    e.preventDefault(); clearErrors();
     if (!validateSignupForm()) return;
-    if (!campus?.id) {
-      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
-      navigate('/select-campus');
-      return;
-    }
+    if (!campus?.id) { toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); navigate('/select-campus'); return; }
     setIsLoading(true);
     try {
-      const { data: phoneExists, error: rpcError } = await supabase.rpc('check_phone_exists' as any, { phone_input: signupPhone.trim() });
-      if (!rpcError && phoneExists) {
-        toast({ title: 'Phone Already Registered', description: 'This number is already in use. Please login instead.', variant: 'destructive' });
-        setIsLoading(false);
-        return;
-      }
-      const redirectUrl = `${window.location.origin}/`;
+      const { data: phoneExists } = await supabase.rpc('check_phone_exists' as any, { phone_input: signupPhone.trim() });
+      if (phoneExists) { toast({ title: 'Phone Already Registered', description: 'This number is already in use.', variant: 'destructive' }); setIsLoading(false); return; }
       const { data, error } = await supabase.auth.signUp({
-        email: signupEmail.trim(),
-        password: signupPassword,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() },
-        },
+        email: signupEmail.trim(), password: signupPassword,
+        options: { emailRedirectTo: `${window.location.origin}/`, data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() } },
       });
-      if (error) {
-        let msg = error.message;
-        if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered. Please login.';
-        toast({ title: 'Signup Failed', description: msg, variant: 'destructive' });
-        return;
-      }
+      if (error) { let msg = error.message; if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered.'; toast({ title: 'Signup Failed', description: msg, variant: 'destructive' }); return; }
       if (data.user) {
         if (data.session) await supabase.from('profiles').update({ phone: signupPhone.trim() }).eq('id', data.user.id);
         toast({ title: 'Account Created!', description: 'Welcome to GrabTheByte.' });
       }
-    } catch {
-      toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
-    }
+    } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
+    finally { setIsLoading(false); }
   };
 
   const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled }: any) => (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{label}</Label>
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-[11px] font-semibold text-muted-foreground">{label}</Label>
       <div className="relative">
-        <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          id={id}
-          type={type}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-          className="h-12 pl-10 rounded-2xl border-2 border-border focus:border-primary transition-colors"
-          required
-          disabled={disabled}
-        />
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange}
+          className="h-9 pl-9 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
       </div>
-      {fieldError && (
-        <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-xs text-destructive flex items-center gap-1">
-          <AlertTriangle size={12} /> {fieldError}
-        </motion.p>
-      )}
+      {fieldError && <p className="text-[10px] text-destructive flex items-center gap-1"><AlertTriangle size={10} /> {fieldError}</p>}
     </div>
   );
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
-      {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-[400px] h-[400px] rounded-full bg-primary/[0.04] blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 w-[350px] h-[350px] rounded-full bg-secondary/[0.04] blur-3xl" />
+        <div className="absolute -top-32 -right-32 w-[300px] h-[300px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute -bottom-32 -left-32 w-[250px] h-[250px] rounded-full bg-secondary/[0.03] blur-3xl" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[400px]"
-      >
-        {/* Campus badge */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-[340px]">
         {campus && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-center gap-2 mb-5"
-          >
-            <div className="badge-vibrant">
-              <Building2 size={12} />
-              <span>{campus.name}</span>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="h-7 px-2 text-xs text-muted-foreground gap-1 rounded-lg">
-              <RefreshCw size={11} /> Switch
+          <div className="flex items-center justify-center gap-1.5 mb-4">
+            <div className="badge-vibrant text-[10px]"><Building2 size={10} />{campus.name}</div>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="h-6 px-2 text-[10px] text-muted-foreground gap-1 rounded-md">
+              <RefreshCw size={10} /> Switch
             </Button>
-          </motion.div>
+          </div>
         )}
 
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-4"><Logo size="lg" showText={false} /></div>
-          <h1 className="font-display text-2xl font-bold text-foreground">{campus?.name || 'Campus'} Canteen</h1>
-          <p className="text-sm text-muted-foreground mt-1.5">Sign in to order your favorite food</p>
+        <div className="text-center mb-4">
+          <div className="flex justify-center mb-3"><Logo size="md" showText={false} /></div>
+          <h1 className="font-display text-lg font-bold text-foreground">{campus?.name || 'Campus'} Canteen</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Sign in to order your favorite food</p>
         </div>
 
-        {/* Auth Card */}
-        <div className="bg-card rounded-3xl shadow-medium border border-border p-6">
+        <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
           <Tabs defaultValue="login" className="w-full" onValueChange={clearErrors}>
-            <TabsList className="grid w-full grid-cols-2 mb-6 h-11 rounded-2xl bg-muted p-1">
-              <TabsTrigger value="login" className="rounded-xl text-sm font-bold data-[state=active]:shadow-sm">Login</TabsTrigger>
-              <TabsTrigger value="signup" className="rounded-xl text-sm font-bold data-[state=active]:shadow-sm">Sign Up</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-4 h-8 rounded-xl bg-muted p-0.5">
+              <TabsTrigger value="login" className="rounded-lg text-xs font-bold">Login</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-lg text-xs font-bold">Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="mt-0">
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-3">
                 <InputField id="login-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} error={errors.loginEmail} disabled={isLoading} />
                 <InputField id="login-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={loginPassword} onChange={(e: any) => setLoginPassword(e.target.value)} error={errors.loginPassword} disabled={isLoading} />
-                <Button type="submit" className="w-full h-12 font-bold rounded-2xl gap-2 text-sm btn-glow" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
+                <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Sign In <ArrowRight size={14} /></>}
                 </Button>
                 {rateLimitMessage && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-xl bg-canteen-warning/10 text-canteen-warning">
-                    <AlertTriangle size={16} /><span className="text-xs font-medium">{rateLimitMessage}</span>
-                  </motion.div>
+                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-canteen-warning/10 text-canteen-warning">
+                    <AlertTriangle size={12} /><span className="text-[10px] font-medium">{rateLimitMessage}</span>
+                  </div>
                 )}
-                <div className="text-center pt-1">
-                  <button type="button" onClick={() => navigate('/forgot-password')} className="text-xs text-muted-foreground hover:text-primary transition-colors font-medium">
-                    Forgot your password?
-                  </button>
+                <div className="text-center">
+                  <button type="button" onClick={() => navigate('/forgot-password')} className="text-[10px] text-muted-foreground hover:text-primary transition-colors font-medium">Forgot your password?</button>
                 </div>
               </form>
             </TabsContent>
 
             <TabsContent value="signup" className="mt-0">
-              <form onSubmit={handleSignup} className="space-y-4">
+              <form onSubmit={handleSignup} className="space-y-3">
                 <InputField id="signup-name" label="Full Name" icon={User} placeholder="John Doe" value={signupName} onChange={(e: any) => setSignupName(e.target.value)} error={errors.signupName} disabled={isLoading} />
                 <InputField id="signup-phone" label="Phone Number" icon={Phone} type="tel" placeholder="99999 99999" value={signupPhone} onChange={(e: any) => setSignupPhone(e.target.value)} error={errors.signupPhone} disabled={isLoading} />
                 <InputField id="signup-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={signupEmail} onChange={(e: any) => setSignupEmail(e.target.value)} error={errors.signupEmail} disabled={isLoading} />
                 <InputField id="signup-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={signupPassword} onChange={(e: any) => setSignupPassword(e.target.value)} error={errors.signupPassword} disabled={isLoading} />
-                <Button type="submit" className="w-full h-12 font-bold rounded-2xl gap-2 text-sm btn-glow" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create Account <ArrowRight size={16} /></>}
+                <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-[11px] text-muted-foreground mt-5">
+        <p className="text-center text-[10px] text-muted-foreground mt-4">
           By continuing, you agree to our{' '}
-          <button onClick={() => navigate('/terms')} className="underline hover:text-foreground transition-colors">Terms</button>
+          <button onClick={() => navigate('/terms')} className="underline hover:text-foreground">Terms</button>
           {' & '}
-          <button onClick={() => navigate('/privacy')} className="underline hover:text-foreground transition-colors">Privacy Policy</button>
+          <button onClick={() => navigate('/privacy')} className="underline hover:text-foreground">Privacy Policy</button>
         </p>
       </motion.div>
     </div>
