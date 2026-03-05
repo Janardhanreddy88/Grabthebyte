@@ -21,16 +21,16 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, UtensilsCrossed, LayoutDashboard, MapPin, Clock } from "lucide-react";
+import { UtensilsCrossed, LayoutDashboard, MapPin, Clock } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { totalItems } = useCart();
   const { campus } = useCampus();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   const {
     filteredItems,
     popularItems,
@@ -48,49 +48,41 @@ export default function Menu() {
     navigate("/auth?logout=true");
   };
 
-  const itemsToShow = filteredItems;
-
-  // Filter items by search query
   const searchedItems = searchQuery
-    ? itemsToShow.filter(
+    ? filteredItems.filter(
         (item) =>
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           item.description.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : itemsToShow;
+    : filteredItems;
 
   return (
     <PageTransition>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border/50 flex-none">
+        <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
           <div className="flex items-center justify-between px-4 lg:px-6 h-14">
             <div className="flex items-center gap-3">
               <Logo size="sm" />
               {campus && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 rounded-full">
-                  <MapPin size={12} className="text-primary" />
-                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">
-                    {campus.code}
-                  </span>
+                <div className="badge-vibrant">
+                  <MapPin size={11} />
+                  <span className="tracking-wider">{campus.code}</span>
                 </div>
               )}
             </div>
-
             <div className="flex items-center gap-2">
-              {/* Admin Dashboard Button */}
               {user?.role === 'admin' && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-lg gap-1.5 h-8 text-xs font-medium"
+                  className="rounded-xl gap-1.5 h-8 text-xs font-semibold border-border/60"
                   onClick={() => navigate("/admin")}
                 >
                   <LayoutDashboard size={14} />
                   <span className="hidden sm:inline">Admin</span>
                 </Button>
               )}
-
               <ThemeToggle />
             </div>
           </div>
@@ -98,46 +90,45 @@ export default function Menu() {
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Category Sidebar */}
           <CategorySidebar
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
             onProfileClick={() => setIsProfileOpen(true)}
           />
 
-          {/* Menu Grid */}
           <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
             <div className="p-4 lg:p-5">
               <HeroBanner />
 
-              {/* Search Bar */}
-              <div className="mb-4">
-                <SearchBar
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  placeholder="Search for dishes..."
-                />
+              {/* Search */}
+              <div className="mb-5">
+                <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
 
-              {/* Canteen Closed State */}
+              {/* Canteen Closed */}
               {!isLoading && canteenClosed && (
-                <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                  <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mb-5">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex flex-col items-center justify-center py-20 px-6 text-center"
+                >
+                  <div className="w-24 h-24 rounded-3xl bg-muted flex items-center justify-center mb-5">
                     <Clock className="w-12 h-12 text-muted-foreground" />
                   </div>
-                  <h2 className="font-semibold text-xl text-foreground mb-2">Canteen is Closed</h2>
+                  <h2 className="font-display font-bold text-xl text-foreground mb-2">Canteen is Closed</h2>
                   <p className="text-sm text-muted-foreground max-w-xs">
-                    We're currently not serving. {nextOpenTime ? `Next opening: ${nextOpenTime}.` : 'Please check back later.'}
+                    We're currently not serving.{" "}
+                    {nextOpenTime ? `Next opening: ${nextOpenTime}.` : "Please check back later."}
                   </p>
-                </div>
+                </motion.div>
               )}
 
-              {/* Time Period Banner */}
+              {/* Time Period */}
               {currentPeriod && !searchQuery && selectedCategory === "all" && (
                 <TimePeriodBanner period={currentPeriod} />
               )}
 
-              {/* Popular Now Section */}
+              {/* Popular */}
               {!isLoading && !error && !canteenClosed && popularItems.length > 0 && selectedCategory === "all" && !searchQuery && (
                 <PopularNow items={popularItems} />
               )}
@@ -145,7 +136,7 @@ export default function Menu() {
               {/* Section Header */}
               {!canteenClosed && (
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-display text-lg lg:text-xl font-semibold text-foreground">
+                  <h2 className="font-display text-lg lg:text-xl font-bold text-foreground">
                     {searchQuery
                       ? `Results for "${searchQuery}"`
                       : selectedCategory === "all"
@@ -153,20 +144,18 @@ export default function Menu() {
                         : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
                   </h2>
                   {!isLoading && !error && (
-                    <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                    <span className="text-[11px] font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-lg tabular-nums">
                       {searchedItems.length} items
                     </span>
                   )}
                 </div>
               )}
 
-              {/* Loading State */}
+              {/* Loading */}
               {isLoading && <MenuItemSkeletonGrid count={6} />}
 
-              {/* Error State */}
-              {error && !isLoading && (
-                <ErrorState message={error} onRetry={refetch} />
-              )}
+              {/* Error */}
+              {error && !isLoading && <ErrorState message={error} onRetry={refetch} />}
 
               {/* Menu Grid */}
               {!isLoading && !error && !canteenClosed && searchedItems.length > 0 && (
@@ -184,7 +173,7 @@ export default function Menu() {
                 </motion.div>
               )}
 
-              {/* Empty State (only when canteen is open but no results) */}
+              {/* Empty State */}
               {!isLoading && !error && !canteenClosed && searchedItems.length === 0 && (
                 <EmptyState
                   icon={UtensilsCrossed}
@@ -206,7 +195,7 @@ export default function Menu() {
             </div>
           </main>
 
-          {/* Cart Panel - Desktop */}
+          {/* Desktop Cart */}
           {totalItems > 0 && (
             <aside className="hidden lg:block w-[340px] bg-card border-l border-border h-full overflow-y-auto">
               <CartPanel />
@@ -214,14 +203,7 @@ export default function Menu() {
           )}
         </div>
 
-        {/* Mobile Profile Panel */}
-        <MobileProfilePanel
-          isOpen={isProfileOpen}
-          onClose={() => setIsProfileOpen(false)}
-          onSignOut={handleSignOut}
-        />
-
-        {/* Mobile Cart */}
+        <MobileProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} onSignOut={handleSignOut} />
         <MobileCart />
       </div>
     </PageTransition>

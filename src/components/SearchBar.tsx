@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface SearchBarProps {
   value: string;
@@ -13,16 +14,17 @@ export function SearchBar({ value, onChange, placeholder = "Search menu..." }: S
   const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <motion.div 
+    <motion.div
       className="relative"
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.25 }}
     >
-      <Search 
-        className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200 ${
+      <Search
+        className={cn(
+          'absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
           isFocused ? 'text-primary' : 'text-muted-foreground'
-        }`} 
+        )}
       />
       <Input
         type="text"
@@ -31,7 +33,10 @@ export function SearchBar({ value, onChange, placeholder = "Search menu..." }: S
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         placeholder={placeholder}
-        className="pl-10 pr-10 h-11 rounded-xl bg-muted/50 border-transparent focus:border-primary focus:bg-card transition-all text-sm"
+        className={cn(
+          'pl-10 pr-10 h-12 rounded-2xl bg-muted/40 border-transparent text-sm transition-all duration-200',
+          isFocused && 'border-primary/30 bg-card shadow-sm ring-1 ring-primary/10'
+        )}
       />
       <AnimatePresence>
         {value && (
@@ -40,9 +45,9 @@ export function SearchBar({ value, onChange, placeholder = "Search menu..." }: S
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={() => onChange('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted-foreground/15 flex items-center justify-center hover:bg-muted-foreground/25 transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted-foreground/15 transition-colors"
           >
-            <X size={12} />
+            <X size={13} />
           </motion.button>
         )}
       </AnimatePresence>
