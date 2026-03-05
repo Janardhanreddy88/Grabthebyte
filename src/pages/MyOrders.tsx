@@ -1,16 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  ChevronRight,
-  ShoppingBag,
-  RefreshCw,
-  AlertCircle,
-  Timer,
-  Ban
+  ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight,
+  ShoppingBag, RefreshCw, AlertCircle, Timer, Ban
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,7 +32,7 @@ interface Order {
   items: OrderItem[];
   campus: { name: string };
   rejection_reason?: string;
-  collection_token: string; // <--- NEW SECRET TOKEN
+  collection_token: string;
 }
 
 export default function MyOrders() {
@@ -53,12 +45,13 @@ export default function MyOrders() {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const processingExpiryIds = useRef<Set<string>>(new Set());
 
-  const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
 
   const fetchOrders = async () => {
     try {
       if (!user) return;
       
+      // ✅ FIX: Use user_id instead of customer_email
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -66,7 +59,7 @@ export default function MyOrders() {
           campus:campuses(name),
           order_items(name, quantity, price)
         `)
-        .eq('customer_email', user.email)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -81,12 +74,11 @@ export default function MyOrders() {
         campus: order.campus,
         items: order.order_items || order.items || [],
         rejection_reason: order.rejection_reason,
-        collection_token: order.collection_token // <--- Capture the token
+        collection_token: order.collection_token,
       }));
 
       setOrders(formattedOrders);
     } catch (error) {
-      console.error('Error fetching orders:', error);
       toast.error('Failed to load orders');
     } finally {
       setIsLoading(false);
@@ -139,8 +131,7 @@ export default function MyOrders() {
         })
         .eq('id', orderId);
       toast.info('Order expired due to payment timeout');
-    } catch (error) {
-      console.error('Error expiring order:', error);
+    } catch {
       processingExpiryIds.current.delete(orderId);
     }
   }, []);
@@ -175,33 +166,32 @@ export default function MyOrders() {
   const getStatusConfig = (order: Order) => {
     const isExpired = checkIsExpired(order);
 
-    // Payment successful - check for both 'confirmed' and 'completed' payment status
     if (order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed')) {
-      return { label: 'Successful', className: 'bg-green-100 text-green-700 border-green-200' };
+      return { label: 'Successful', className: 'bg-green-500/10 text-green-600 border-green-500/20' };
     }
     
     if (order.status === 'pending' && order.payment_status === 'pending') {
-      return { label: 'Payment Pending', className: 'bg-orange-100 text-orange-700 border-orange-200' };
+      return { label: 'Payment Pending', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
     }
 
     if (!isExpired && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed')) {
-      return { label: 'Payment Failed', className: 'bg-red-100 text-red-700 border-red-200' };
+      return { label: 'Payment Failed', className: 'bg-destructive/10 text-destructive border-destructive/20' };
     }
     
     if (order.status === 'collected') {
-      return { label: 'Collected', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+      return { label: 'Collected', className: 'bg-muted text-muted-foreground border-border' };
     }
     
     if (isExpired) {
-      return { label: 'Order Expired', className: 'bg-gray-100 text-gray-500 border-gray-200' };
+      return { label: 'Order Expired', className: 'bg-muted text-muted-foreground border-border' };
     }
 
-    return { label: 'Processing', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    return { label: 'Processing', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
+    <div className="min-h-screen bg-background pb-20">
+      <header className="sticky top-0 z-10 bg-card border-b border-border px-4 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate('/menu')} className="shrink-0">
@@ -223,11 +213,11 @@ export default function MyOrders() {
           [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-2xl" />)
         ) : orders.length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <ShoppingBag className="h-8 w-8 text-gray-400" />
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShoppingBag className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="font-medium text-gray-900">No active orders</h3>
-            <p className="text-gray-500 text-sm mt-1">Hungry? Place an order now!</p>
+            <h3 className="font-medium text-foreground">No active orders</h3>
+            <p className="text-muted-foreground text-sm mt-1">Hungry? Place an order now!</p>
             <Button className="mt-4" onClick={() => navigate('/menu')}>Browse Menu</Button>
           </div>
         ) : (
@@ -238,13 +228,9 @@ export default function MyOrders() {
             const isPaymentTimedOut = (currentTime - createdTime) > PAYMENT_TIMEOUT_MS;
 
             const isSuccessful = order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed');
-            
             const isPending = order.status === 'pending' && order.payment_status === 'pending' && !isPaymentTimedOut;
-            
             const isCollected = order.status === 'collected';
-            
             const isExpired = checkIsExpired(order);
-
             const isFailed = !isExpired && (
                 order.status === 'failed' || 
                 order.status === 'cancelled' || 
@@ -252,9 +238,9 @@ export default function MyOrders() {
             );
 
             return (
-              <Card key={order.id} className="border-none shadow-sm overflow-hidden">
+              <Card key={order.id} className="border-border shadow-sm overflow-hidden">
                 <CardContent className="p-0">
-                  <div className="p-4 bg-white">
+                  <div className="p-4 bg-card">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -276,7 +262,7 @@ export default function MyOrders() {
                     <div className="space-y-1 mb-4">
                       {order.items.map((item, idx) => (
                         <div key={idx} className="flex justify-between text-sm">
-                          <span className="text-gray-600">{item.quantity}x {item.name}</span>
+                          <span className="text-muted-foreground">{item.quantity}x {item.name}</span>
                           <span className="font-medium">₹{item.price * item.quantity}</span>
                         </div>
                       ))}
@@ -284,39 +270,38 @@ export default function MyOrders() {
 
                     {isSuccessful && !isCollected && !isExpired ? (
                       <div 
-                        className="bg-green-50 p-3 rounded-xl border border-green-100 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
+                        className="bg-green-500/10 p-3 rounded-xl border border-green-500/20 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
                         onClick={() => navigate(`/order-success?orderId=${order.id}`)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="bg-white p-1.5 rounded-lg border border-green-100">
-                            {/* --- THIS IS THE SECURITY UPGRADE: Use Token, not ID --- */}
+                          <div className="bg-card p-1.5 rounded-lg border border-green-500/20">
                             <QRCodeSVG 
                                 value={order.collection_token || order.id} 
                                 size={32} 
                             />
                           </div>
                           <div>
-                            <p className="font-semibold text-sm text-green-700">Successful</p>
-                            <p className="text-xs text-green-600">Tap to view full QR Code</p>
+                            <p className="font-semibold text-sm text-green-600">Successful</p>
+                            <p className="text-xs text-green-600/80">Tap to view full QR Code</p>
                           </div>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-green-400" />
+                        <ChevronRight className="h-5 w-5 text-green-500/60" />
                       </div>
                     ) : null}
 
                     {isPending ? (
-                      <div className="bg-orange-50 p-3 rounded-xl border border-orange-100">
+                      <div className="bg-orange-500/10 p-3 rounded-xl border border-orange-500/20">
                         <div className="flex items-start gap-2">
                           <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
                           <div className="w-full">
                             <div className="flex items-center justify-between">
-                              <p className="font-semibold text-sm text-orange-700">Payment Pending</p>
-                              <div className="flex items-center gap-1 text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                              <p className="font-semibold text-sm text-orange-600">Payment Pending</p>
+                              <div className="flex items-center gap-1 text-orange-600 bg-orange-500/10 px-2 py-0.5 rounded-full">
                                 <Timer size={12} />
                                 <span className="text-xs font-bold font-mono">{formatTime(remainingSeconds)}</span>
                               </div>
                             </div>
-                            <p className="text-xs text-orange-600 mt-0.5">
+                            <p className="text-xs text-orange-600/80 mt-0.5">
                               Complete payment within 10 mins
                             </p>
                             <Button 
@@ -332,12 +317,12 @@ export default function MyOrders() {
                     ) : null}
 
                     {isFailed ? (
-                      <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+                      <div className="bg-destructive/10 p-3 rounded-xl border border-destructive/20">
                         <div className="flex items-start gap-2">
-                          <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                          <XCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
                           <div className="w-full">
-                            <p className="font-semibold text-sm text-red-700">Payment Failed</p>
-                            <p className="text-xs text-red-600 mt-1 mb-2">
+                            <p className="font-semibold text-sm text-destructive">Payment Failed</p>
+                            <p className="text-xs text-destructive/80 mt-1 mb-2">
                               {order.rejection_reason || "Transaction incomplete or timed out."}
                             </p>
                           </div>
@@ -346,23 +331,23 @@ export default function MyOrders() {
                     ) : null}
 
                     {isCollected ? (
-                      <div className="bg-gray-100 p-3 rounded-xl border border-gray-200 flex items-center justify-between">
+                      <div className="bg-muted p-3 rounded-xl border border-border flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-5 w-5 text-gray-500" />
+                          <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
                           <div>
-                             <p className="font-semibold text-sm text-gray-700">Order Collected</p>
-                             <p className="text-xs text-gray-500">Enjoy your meal!</p>
+                             <p className="font-semibold text-sm text-foreground">Order Collected</p>
+                             <p className="text-xs text-muted-foreground">Enjoy your meal!</p>
                           </div>
                         </div>
                       </div>
                     ) : null}
                     
                     {isExpired ? (
-                       <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-center">
-                         <p className="text-sm font-medium text-gray-600 flex items-center justify-center gap-1">
+                       <div className="bg-muted p-3 rounded-xl border border-border text-center">
+                         <p className="text-sm font-medium text-muted-foreground flex items-center justify-center gap-1">
                            <Ban size={16} /> Order Expired
                          </p>
-                         <p className="text-xs text-gray-500 mt-1">Not collected in time</p>
+                         <p className="text-xs text-muted-foreground mt-1">Not collected in time</p>
                        </div>
                     ) : null}
 

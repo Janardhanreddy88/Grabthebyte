@@ -180,7 +180,7 @@ export default function KioskScanner() {
 
     try {
       const cleanedToken = qrData.trim();
-      console.log('🔍 Scanning QR:', cleanedToken);
+      
 
       // Check if it looks like a UUID (collection_token)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

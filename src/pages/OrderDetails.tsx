@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Receipt, Clock, MapPin, Phone } from 'lucide-react';
+import { OrderStatus } from '@/types/canteen';
+import { ArrowLeft, Receipt, Clock, MapPin, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,31 +10,85 @@ import { Separator } from '@/components/ui/separator';
 import { OrderTimeline } from '@/components/OrderTimeline';
 import { PageTransition } from '@/components/PageTransition';
 import { QRCodeSVG } from 'qrcode.react';
+import { supabase } from '@/integrations/supabase/client';
 
-// Mock order data - will be replaced with real data (using simplified token system)
-const mockOrder = {
-  id: 'ORD-001',
-  status: 'confirmed' as const, // Token system: pending, confirmed, collected, cancelled
-  items: [
-    { name: 'Chicken Biryani', quantity: 2, price: 120 },
-    { name: 'Masala Chai', quantity: 3, price: 15 },
-    { name: 'Samosa', quantity: 4, price: 20 },
-  ],
-  subtotal: 365,
-  tax: 18,
-  total: 383,
-  createdAt: new Date(),
-  estimatedTime: '15-20 mins',
-  counter: 'Counter 3',
-};
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface OrderData {
+  id: string;
+  order_number: string;
+  status: string;
+  total: number;
+  created_at: string;
+  collection_token: string;
+  customer_name: string;
+  campus: { name: string } | null;
+  items: OrderItem[];
+}
 
 export default function OrderDetails() {
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const order = mockOrder; // TODO: Fetch real order by ID
+  useEffect(() => {
+    if (!orderId) {
+      navigate('/my-orders');
+      return;
+    }
 
-  // Simplified token system status colors
+    const fetchOrder = async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, status, total, created_at, collection_token, customer_name,
+          campus:campuses(name),
+          order_items(name, quantity, price)
+        `)
+        .eq('id', orderId)
+        .maybeSingle();
+
+      if (error || !data) {
+        navigate('/my-orders');
+        return;
+      }
+
+      setOrder({
+        id: data.id,
+        order_number: data.order_number,
+        status: data.status,
+        total: Number(data.total),
+        created_at: data.created_at,
+        collection_token: data.collection_token,
+        customer_name: data.customer_name || 'Customer',
+        campus: data.campus as { name: string } | null,
+        items: ((data.order_items || []) as any[]).map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: Number(item.price),
+        })),
+      });
+      setLoading(false);
+    };
+
+    fetchOrder();
+  }, [orderId, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!order) return null;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
@@ -41,28 +97,30 @@ export default function OrderDetails() {
         return 'bg-green-500/10 text-green-600';
       case 'collected':
         return 'bg-muted text-muted-foreground';
-      case 'cancelled':
+      case 'failed':
+      case 'expired':
         return 'bg-destructive/10 text-destructive';
       default:
         return 'bg-muted text-muted-foreground';
     }
   };
 
-  // Get display label for status
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
-      pending: 'Pending',
-      confirmed: 'Approved',
+      pending: 'Payment Pending',
+      confirmed: 'Successful',
       collected: 'Collected',
-      cancelled: 'Failed',
+      failed: 'Failed',
+      expired: 'Expired',
     };
     return labels[status] || status;
   };
 
+  const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
   return (
     <PageTransition>
       <div className="min-h-screen bg-background">
-        {/* Header */}
         <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border">
           <div className="flex items-center justify-between px-4 h-14">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
@@ -75,70 +133,42 @@ export default function OrderDetails() {
 
         <main className="p-4 max-w-lg mx-auto space-y-4">
           {/* Order Status Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="rounded-2xl overflow-hidden">
               <div className="bg-primary/5 p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Order ID</p>
-                  <p className="font-bold text-lg">{order.id}</p>
+                  <p className="text-sm text-muted-foreground">Order Number</p>
+                  <p className="font-bold text-lg">#{order.order_number}</p>
                 </div>
                 <Badge className={getStatusColor(order.status)}>
                   {getStatusLabel(order.status)}
                 </Badge>
               </div>
               <CardContent className="p-4">
-                <OrderTimeline status={order.status} />
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Estimated Time */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="rounded-2xl">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Estimated Time</p>
-                  <p className="font-bold">{order.estimatedTime}</p>
-                </div>
+                <OrderTimeline status={order.status as OrderStatus} />
               </CardContent>
             </Card>
           </motion.div>
 
           {/* Pickup Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-          >
-            <Card className="rounded-2xl">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-secondary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pick up from</p>
-                  <p className="font-bold">{order.counter}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          {order.campus && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <Card className="rounded-2xl">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <MapPin className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Campus</p>
+                    <p className="font-bold">{order.campus.name}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Order Items */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card className="rounded-2xl">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -162,45 +192,54 @@ export default function OrderDetails() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal</span>
-                    <span>₹{order.subtotal}</span>
-                  </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Tax</span>
-                    <span>₹{order.tax}</span>
+                    <span>₹{subtotal}</span>
                   </div>
                   <div className="flex justify-between font-bold text-base pt-2">
                     <span>Total</span>
-                    <span>₹{order.total}</span>
+                    <span className="text-primary">₹{order.total}</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* QR Code */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-          >
+          {/* QR Code - only show for confirmed orders */}
+          {order.status === 'confirmed' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Card className="rounded-2xl">
+                <CardContent className="p-6 flex flex-col items-center">
+                  <p className="text-sm text-muted-foreground mb-4">Show this QR code at counter</p>
+                  <div className="p-4 bg-white rounded-xl">
+                    <QRCodeSVG value={order.collection_token || order.id} size={150} level="H" />
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Time Info */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
             <Card className="rounded-2xl">
-              <CardContent className="p-6 flex flex-col items-center">
-                <p className="text-sm text-muted-foreground mb-4">Show this QR code at counter</p>
-                <div className="p-4 bg-white rounded-xl">
-                  <QRCodeSVG value={order.id} size={150} />
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Ordered at</p>
+                  <p className="font-bold">
+                    {new Date(order.created_at).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Help */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Button variant="outline" className="w-full rounded-xl gap-2">
-              <Phone size={16} />
+          {/* Support */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Button variant="outline" className="w-full rounded-xl gap-2" onClick={() => navigate('/support')}>
               Need Help? Contact Support
             </Button>
           </motion.div>

@@ -2,17 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { CheckCircle2, Home, Receipt } from 'lucide-react';
+import { CheckCircle2, Home, Receipt, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
 
 export default function OrderSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
-  // ✅ FIXED: Get ID from URL
   const orderId = searchParams.get('orderId');
 
   const [orderNumber, setOrderNumber] = useState<string>('');
@@ -26,7 +23,7 @@ export default function OrderSuccess() {
     }
 
     const fetchOrderDetails = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('orders')
         .select('order_number, collection_token')
         .eq('id', orderId)
@@ -42,16 +39,16 @@ export default function OrderSuccess() {
     fetchOrderDetails();
   }, [orderId, navigate]);
 
-  if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin"/></div>;
+  if (loading) return <div className="min-h-screen bg-background flex justify-center items-center p-10"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
 
   return (
-    <div className="min-h-screen bg-green-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-green-500/5 flex items-center justify-center p-4">
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="w-full max-w-sm"
       >
-        <Card className="border-none shadow-xl overflow-hidden">
+        <Card className="border-border shadow-xl overflow-hidden">
           <div className="bg-green-600 p-8 text-center text-white">
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
               <CheckCircle2 className="w-8 h-8 text-white" />
@@ -60,14 +57,14 @@ export default function OrderSuccess() {
             <p className="text-green-100 opacity-90">Please show this at the counter</p>
           </div>
 
-          <CardContent className="p-8 text-center space-y-6 bg-white">
-            <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200 inline-block">
+          <CardContent className="p-8 text-center space-y-6 bg-card">
+            <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-border inline-block">
               <QRCodeSVG value={collectionToken || orderId || ''} size={180} level="H" />
             </div>
 
             <div className="space-y-1">
-              <p className="text-sm text-gray-500 uppercase tracking-wide font-medium">Order Number</p>
-              <p className="text-4xl font-black text-gray-900 tracking-tight">#{orderNumber}</p>
+              <p className="text-sm text-muted-foreground uppercase tracking-wide font-medium">Order Number</p>
+              <p className="text-4xl font-black text-foreground tracking-tight">#{orderNumber}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-4">

@@ -125,7 +125,7 @@ export default function Checkout() {
   const isLoading = isCheckingStock || isCreating;
 
   return (
-    <div className="min-h-screen bg-gray-50/50 dark:bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40 supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto w-full">
           <div className="flex items-center gap-3">

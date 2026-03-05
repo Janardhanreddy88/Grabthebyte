@@ -84,7 +84,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
-        console.error('RPC error:', error);
         return { success: false, message: error.message };
       }
 
@@ -102,8 +101,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
 
       return result;
-    } catch (err) {
-      console.error('markOrderCollected error:', err);
+    } catch {
       return { success: false, message: 'Unexpected error marking order collected.' };
     }
   }, []);
@@ -119,13 +117,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
-        console.error('RPC error:', error);
         return { success: false, message: error.message };
       }
 
       return data as { success: boolean; message: string };
-    } catch (err) {
-      console.error('verifyByCollectionToken error:', err);
+    } catch {
       return { success: false, message: 'Unexpected error verifying order.' };
     }
   }, []);
@@ -139,7 +135,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const localOrder = orders.find(order => order.qrCode === qrCode || order.id === qrCode);
     if (localOrder) return localOrder;
 
-    console.log("🔍 Order not found locally, checking Supabase for:", qrCode);
+    
 
     // 2. Fetch from Supabase with order_items
     try {
@@ -158,7 +154,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error("Supabase Scan Error:", error);
         return undefined;
       }
 
@@ -189,8 +184,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         };
         return fetchedOrder;
       }
-    } catch (err) {
-      console.error("Unexpected scan error:", err);
+    } catch {
+      // Scan error - return undefined
     }
 
     return undefined;

@@ -29,7 +29,6 @@ export default function Payment() {
 
   const orderId = searchParams.get('order_id');
   const amount = searchParams.get('amount');
-  const mode = searchParams.get('mode'); // 'retry' for retry flow
   const cfOrderIdParam = searchParams.get('cf_order_id');
   const isRedirect = searchParams.get('redirect') === 'true';
 
@@ -40,13 +39,12 @@ export default function Payment() {
   
   const paymentInitiated = useRef(false);
   const verificationAttempts = useRef(0);
-  const maxVerificationAttempts = 5; // Reduced for faster feedback
+  const maxVerificationAttempts = 5;
 
   // Load Cashfree SDK
   useEffect(() => {
     const loadSdk = () => {
       if (document.getElementById('cashfree-sdk')) {
-        // SDK script already exists, check if loaded
         if (window.Cashfree) {
           setSdkReady(true);
         }
@@ -57,12 +55,8 @@ export default function Payment() {
       script.id = 'cashfree-sdk';
       script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
       script.async = true;
-      script.onload = () => {
-        console.log('Cashfree SDK loaded');
-        setSdkReady(true);
-      };
+      script.onload = () => setSdkReady(true);
       script.onerror = () => {
-        console.error('Failed to load Cashfree SDK');
         setPaymentState('error');
         setErrorMessage('Payment SDK failed to load. Please refresh the page.');
       };
@@ -84,18 +78,14 @@ export default function Payment() {
       });
 
       if (error) {
-        console.error('Verification error:', error);
         setPaymentState('error');
         setErrorMessage('Could not verify payment status');
         return;
       }
 
-      console.log('Verification result:', data);
-
       if (data.status === 'completed') {
         setPaymentState('success');
         setOrderNumber(data.orderNumber);
-        // Navigate to success page after short delay
         setTimeout(() => {
           navigate(`/order-success?orderId=${orderId}`);
         }, 2000);
@@ -103,18 +93,15 @@ export default function Payment() {
         setPaymentState('failed');
         setErrorMessage('Payment was not completed. Please try again.');
       } else {
-        // Still pending - retry verification
         verificationAttempts.current += 1;
         if (verificationAttempts.current < maxVerificationAttempts) {
-          setTimeout(() => verifyPayment(), 2000); // Faster polling
+          setTimeout(() => verifyPayment(), 2000);
         } else {
-          // After max attempts, treat as failed/incomplete
           setPaymentState('failed');
           setErrorMessage('Payment verification timed out. If you completed the payment, check My Orders shortly.');
         }
       }
-    } catch (err) {
-      console.error('Verification error:', err);
+    } catch {
       setPaymentState('error');
       setErrorMessage('Could not verify payment');
     }
@@ -135,20 +122,16 @@ export default function Payment() {
     setPaymentState('initiating');
 
     try {
-      // Get order details
       const { data: order } = await supabase
         .from('orders')
         .select('order_number, customer_name, customer_email')
         .eq('id', orderId)
         .single();
 
-      if (!order) {
-        throw new Error('Order not found');
-      }
+      if (!order) throw new Error('Order not found');
 
       setOrderNumber(order.order_number);
 
-      // Create Cashfree payment session
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
           orderId,
@@ -160,41 +143,30 @@ export default function Payment() {
       });
 
       if (error || !data?.sessionId) {
-        console.error('Create payment error:', error, data);
         throw new Error(data?.error || 'Failed to create payment session');
       }
 
-      console.log('Payment session created:', data);
-
-      // Wait for Cashfree SDK to load
       let attempts = 0;
       while (!window.Cashfree && attempts < 50) {
         await new Promise(resolve => setTimeout(resolve, 100));
         attempts++;
       }
 
-      if (!window.Cashfree) {
-        throw new Error('Payment SDK failed to load');
-      }
+      if (!window.Cashfree) throw new Error('Payment SDK failed to load');
 
       setPaymentState('processing');
 
-      // Initialize Cashfree SDK and open checkout
-      // Mode should be 'production' for live, 'sandbox' for testing
       const cashfree = window.Cashfree({ mode: 'production' });
       const result = await cashfree.checkout({
         paymentSessionId: data.sessionId,
         redirectTarget: '_self',
       });
 
-      console.log('Cashfree checkout result:', result);
-
       if (result.error) {
         setPaymentState('failed');
         setErrorMessage(result.error.message || 'Payment failed');
       }
     } catch (err) {
-      console.error('Payment initiation error:', err);
       setPaymentState('error');
       setErrorMessage(err instanceof Error ? err.message : 'Payment initiation failed');
       paymentInitiated.current = false;
@@ -234,7 +206,7 @@ export default function Payment() {
       case 'processing':
         return (
           <div className="text-center py-12">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <CreditCard className="w-10 h-10 text-blue-600" />
             </div>
             <h2 className="text-xl font-bold mb-2">Complete Your Payment</h2>
@@ -250,7 +222,7 @@ export default function Payment() {
       case 'verifying':
         return (
           <div className="text-center py-12">
-            <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <Loader2 className="w-10 h-10 text-yellow-600 animate-spin" />
             </div>
             <h2 className="text-xl font-bold mb-2">Verifying Payment</h2>
@@ -264,11 +236,11 @@ export default function Payment() {
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"
+              className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6"
             >
               <CheckCircle2 className="w-10 h-10 text-green-600" />
             </motion.div>
-            <h2 className="text-xl font-bold mb-2 text-green-700">Payment Successful!</h2>
+            <h2 className="text-xl font-bold mb-2 text-green-600">Payment Successful!</h2>
             <p className="text-muted-foreground mb-4">
               Order #{orderNumber} confirmed
             </p>
@@ -279,10 +251,10 @@ export default function Payment() {
       case 'failed':
         return (
           <div className="text-center py-12">
-            <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <AlertCircle className="w-10 h-10 text-orange-600" />
             </div>
-            <h2 className="text-xl font-bold mb-2 text-orange-700">Payment Incomplete</h2>
+            <h2 className="text-xl font-bold mb-2 text-orange-600">Payment Incomplete</h2>
             <p className="text-muted-foreground mb-6">{errorMessage}</p>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate('/my-orders')}>
@@ -298,10 +270,10 @@ export default function Payment() {
       case 'error':
         return (
           <div className="text-center py-12">
-            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="w-10 h-10 text-red-600" />
+            <div className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-10 h-10 text-destructive" />
             </div>
-            <h2 className="text-xl font-bold mb-2 text-red-700">Something Went Wrong</h2>
+            <h2 className="text-xl font-bold mb-2 text-destructive">Something Went Wrong</h2>
             <p className="text-muted-foreground mb-6">{errorMessage}</p>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate('/menu')}>
@@ -319,10 +291,10 @@ export default function Payment() {
   // No order ID
   if (!orderId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-sm w-full">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
             <h2 className="text-lg font-bold mb-2">Invalid Payment Link</h2>
             <p className="text-muted-foreground mb-4">No order information found</p>
             <Button onClick={() => navigate('/menu')}>Go to Menu</Button>
@@ -333,8 +305,8 @@ export default function Payment() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 bg-card border-b border-border px-4 py-3">
         <div className="flex items-center gap-3 max-w-lg mx-auto">
           <Button 
             variant="ghost" 
@@ -354,10 +326,10 @@ export default function Payment() {
       </header>
 
       <main className="p-4 max-w-lg mx-auto">
-        <Card className="border-none shadow-lg">
+        <Card className="border-border shadow-lg">
           <CardContent className="p-6">
             {amount && (
-              <div className="text-center mb-6 pb-6 border-b">
+              <div className="text-center mb-6 pb-6 border-b border-border">
                 <p className="text-sm text-muted-foreground mb-1">Amount to Pay</p>
                 <p className="text-4xl font-black text-primary">₹{amount}</p>
               </div>

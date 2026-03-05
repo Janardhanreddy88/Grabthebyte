@@ -82,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // If user doesn't exist anymore, force logout
       if (error || !data.user) {
-        console.log("User session invalid, logging out...");
         await supabase.auth.signOut();
         setSession(null);
         setUser(null);
@@ -124,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [setFromSession]);
 
-  // Periodically validate session (every 30 seconds)
+  // Periodically validate session (every 5 minutes)
   useEffect(() => {
     if (!session) return;
 
@@ -132,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     validateSession();
 
     // Then validate periodically
-    const interval = setInterval(validateSession, 30000);
+    const interval = setInterval(validateSession, 300000);
 
     return () => clearInterval(interval);
   }, [session, validateSession]);
