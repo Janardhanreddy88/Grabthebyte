@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
     // 6. LOG WEBHOOK (For debugging/history)
     const { error: logError } = await supabase.from("payment_webhooks").insert({
