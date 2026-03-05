@@ -51,7 +51,6 @@ export function useOrders(): UseOrdersReturn {
   const fetchOrders = useCallback(async () => {
     const { data: session } = await supabase.auth.getSession();
     if (!session.session?.user) {
-      console.log('useOrders: No session, clearing orders');
       setOrders([]);
       setIsLoading(false);
       return;
@@ -61,7 +60,6 @@ export function useOrders(): UseOrdersReturn {
     setError(null);
 
     try {
-      console.log('useOrders: Fetching orders for user:', session.session.user.id);
       
       // Fetch all user orders - don't filter by campus to ensure we get all orders
       const { data, error: fetchError } = await supabase
@@ -80,11 +78,8 @@ export function useOrders(): UseOrdersReturn {
         .limit(20);
 
       if (fetchError) {
-        console.error('useOrders: Fetch error:', fetchError);
         throw fetchError;
       }
-
-      console.log('useOrders: Raw orders from DB:', data);
 
       // Transform to match Order type
       const transformedOrders: Order[] = (data || []).map(order => ({
@@ -110,7 +105,6 @@ export function useOrders(): UseOrdersReturn {
         customerEmail: order.customer_email || undefined,
       }));
 
-      console.log('useOrders: Transformed orders:', transformedOrders);
       setOrders(transformedOrders);
     } catch (err) {
       console.error('Error fetching orders:', err);

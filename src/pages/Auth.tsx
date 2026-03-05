@@ -255,7 +255,7 @@ export default function Auth() {
         .rpc('check_phone_exists' as any, { phone_input: signupPhone.trim() });
 
       if (rpcError) {
-         console.error("RPC Error:", rpcError); 
+         // RPC check failed - continue with signup anyway
       }
       
       // If RPC returned true, phone is taken
@@ -300,8 +300,7 @@ export default function Auth() {
         }
         toast({ title: 'Account Created!', description: 'Welcome to Campus Canteen.' });
       }
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' });
     } finally {
       setIsLoading(false);

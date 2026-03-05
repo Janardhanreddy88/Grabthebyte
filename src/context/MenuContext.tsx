@@ -74,8 +74,8 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       });
 
       setMenuItems(items);
-    } catch (err) {
-      console.error('Error fetching menu items:', err);
+    } catch {
+      setError('Failed to load menu items');
       setError('Failed to load menu items');
       setMenuItems([]);
     } finally {
@@ -137,8 +137,8 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         );
         throw error;
       }
-    } catch (err) {
-      console.error('Error updating item availability:', err);
+    } catch {
+      // Silently fail - optimistic update already reverted
     }
   }, []);
 

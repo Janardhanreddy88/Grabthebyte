@@ -67,8 +67,8 @@ export default function Profile() {
             }
         }
 
-      } catch (error) {
-        console.error('Error loading profile:', error);
+      } catch {
+        // Profile loading error - fields will show defaults
       } finally {
         setLoading(false);
       }
@@ -113,7 +113,7 @@ export default function Profile() {
         updated_at: new Date().toISOString(),
       };
 
-      console.log("Saving updates:", updates); 
+       
 
       // Step A: Update the Public 'profiles' table
       const { error: dbError } = await supabase
@@ -139,7 +139,6 @@ export default function Profile() {
       });
 
     } catch (error: any) {
-      console.error("Save failed:", error);
       toast({
         title: "Update Failed",
         description: error.message,
