@@ -363,69 +363,49 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border">
-        <div className="flex items-center justify-between px-4 lg:px-6 h-16">
+      <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
+        <div className="flex items-center justify-between px-4 lg:px-6 h-12">
           <Logo size="sm" />
 
-          <div className="flex items-center gap-2">
-            <Button onClick={() => navigate("/menu")} variant="outline" className="gap-2 rounded-full">
-              <Users size={18} />
+          <div className="flex items-center gap-1.5">
+            <Button onClick={() => navigate("/menu")} variant="outline" size="sm" className="gap-1.5 rounded-full h-7 text-[11px]">
+              <Users size={13} />
               <span className="hidden sm:inline">Student View</span>
             </Button>
-            <Button onClick={() => navigate("/kiosk-scanner")} className="gap-2 rounded-full bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-              <QrCode size={18} />
-              <span className="hidden sm:inline">🚀 Launch Kiosk</span>
+            <Button onClick={() => navigate("/kiosk-scanner")} size="sm" className="gap-1.5 rounded-full h-7 text-[11px] bg-secondary hover:bg-secondary/90 text-secondary-foreground">
+              <QrCode size={13} />
+              <span className="hidden sm:inline">🚀 Kiosk</span>
             </Button>
             
             {/* Profile Popover */}
             <Popover>
               <PopoverTrigger asChild>
-                <button className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm hover:opacity-90 transition-opacity">
+                <button className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-[10px] hover:opacity-90 transition-opacity">
                   {getInitials(profileData?.full_name)}
                 </button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-72 p-0">
-                <div className="p-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
+              <PopoverContent align="end" className="w-64 p-0">
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">
                       {getInitials(profileData?.full_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold truncate">{profileData?.full_name || 'Admin'}</p>
-                      <p className="text-xs text-muted-foreground">Administrator</p>
+                      <p className="font-semibold text-sm truncate">{profileData?.full_name || 'Admin'}</p>
+                      <p className="text-[10px] text-muted-foreground">Administrator</p>
                     </div>
                   </div>
-                  
-                  <Separator className="mb-3" />
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-sm">
-                      <Mail size={16} className="text-muted-foreground shrink-0" />
-                      <span className="truncate">{profileData?.email || 'N/A'}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 text-sm">
-                      <Phone size={16} className="text-muted-foreground shrink-0" />
-                      <span>{profileData?.phone || 'Not set'}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 text-sm">
-                      <Building2 size={16} className="text-muted-foreground shrink-0" />
-                      <span className="truncate">{profileData?.campus_name || 'N/A'} ({profileData?.campus_code || 'N/A'})</span>
-                    </div>
+                  <Separator className="mb-2" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs"><Mail size={12} className="text-muted-foreground shrink-0" /><span className="truncate">{profileData?.email || 'N/A'}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Phone size={12} className="text-muted-foreground shrink-0" /><span>{profileData?.phone || 'Not set'}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Building2 size={12} className="text-muted-foreground shrink-0" /><span className="truncate">{profileData?.campus_name || 'N/A'} ({profileData?.campus_code || 'N/A'})</span></div>
                   </div>
                 </div>
-                
                 <Separator />
-                
-                <div className="p-2">
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={handleSignOut}
-                  >
-                    <LogOut size={16} />
-                    Sign Out
+                <div className="p-1.5">
+                  <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 h-8 text-xs" onClick={handleSignOut}>
+                    <LogOut size={13} /> Sign Out
                   </Button>
                 </div>
               </PopoverContent>
@@ -434,40 +414,28 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="p-4 lg:p-6 max-w-7xl mx-auto">
+      <main className="p-3 lg:p-5 max-w-7xl mx-auto">
         {/* Page Title */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <LayoutDashboard className="w-6 h-6 text-primary" />
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <LayoutDashboard className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Manage your canteen</p>
+            <h1 className="text-lg font-bold">Admin Dashboard</h1>
+            <p className="text-[11px] text-muted-foreground">Manage your canteen</p>
           </div>
         </div>
 
-        <Tabs defaultValue="analytics" className="space-y-6">
-          <TabsList className="bg-muted rounded-full p-1 h-auto flex-wrap justify-start">
-            <TabsTrigger
-              value="analytics"
-              className="gap-1.5 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-sm"
-            >
-              <TrendingUp size={14} className="hidden sm:block" />
-              Analytics
+        <Tabs defaultValue="analytics" className="space-y-4">
+          <TabsList className="bg-muted rounded-full p-0.5 h-auto flex-wrap justify-start">
+            <TabsTrigger value="analytics" className="gap-1 rounded-full px-3 py-1.5 text-[11px] data-[state=active]:bg-card data-[state=active]:shadow-sm">
+              <TrendingUp size={12} className="hidden sm:block" /> Analytics
             </TabsTrigger>
-            <TabsTrigger
-              value="orders"
-              className="gap-1.5 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-sm"
-            >
-              <Package size={14} className="hidden sm:block" />
-              Orders
+            <TabsTrigger value="orders" className="gap-1 rounded-full px-3 py-1.5 text-[11px] data-[state=active]:bg-card data-[state=active]:shadow-sm">
+              <Package size={12} className="hidden sm:block" /> Orders
             </TabsTrigger>
-            <TabsTrigger
-              value="menu"
-              className="gap-1.5 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-sm"
-            >
-              <UtensilsCrossed size={14} className="hidden sm:block" />
-              Menu
+            <TabsTrigger value="menu" className="gap-1 rounded-full px-3 py-1.5 text-[11px] data-[state=active]:bg-card data-[state=active]:shadow-sm">
+              <UtensilsCrossed size={12} className="hidden sm:block" /> Menu
             </TabsTrigger>
           </TabsList>
 
