@@ -14,6 +14,18 @@ import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/rateLimit';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
+const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled }: any) => (
+  <div className="space-y-1">
+    <Label htmlFor={id} className="text-[11px] font-semibold text-muted-foreground">{label}</Label>
+    <div className="relative">
+      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange}
+        className="h-9 pl-9 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
+    </div>
+    {fieldError && <p className="text-[10px] text-destructive flex items-center gap-1"><AlertTriangle size={10} /> {fieldError}</p>}
+  </div>
+);
+
 const emailSchema = z.string().trim().email('Please enter a valid email address').max(255, 'Email is too long');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters').max(72, 'Password is too long');
 const nameSchema = z.string().trim().min(2, 'Name must be at least 2 characters').max(100, 'Name is too long');
@@ -161,17 +173,7 @@ export default function Auth() {
     finally { setIsLoading(false); }
   };
 
-  const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled }: any) => (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-[11px] font-semibold text-muted-foreground">{label}</Label>
-      <div className="relative">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-        <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange}
-          className="h-9 pl-9 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
-      </div>
-      {fieldError && <p className="text-[10px] text-destructive flex items-center gap-1"><AlertTriangle size={10} /> {fieldError}</p>}
-    </div>
-  );
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
