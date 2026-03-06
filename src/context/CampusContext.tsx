@@ -50,14 +50,17 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   // Then fetches full data if user is authenticated
   const fetchCampusByCode = useCallback(async (code: string): Promise<Campus | null> => {
     // First, check if campus exists using the public view (no auth required)
+    console.log('[Campus] Looking up code:', code.toUpperCase());
     const { data: publicData, error: publicError } = await supabase
       .from('campus_public_info')
       .select('*')
       .eq('code', code.toUpperCase())
       .maybeSingle();
 
+    console.log('[Campus] Public lookup result:', { publicData, publicError });
+
     if (publicError || !publicData) {
-      console.log('Campus lookup failed:', publicError?.message || 'Not found');
+      console.error('[Campus] Lookup failed:', publicError?.message || 'Not found', publicError);
       return null;
     }
 
