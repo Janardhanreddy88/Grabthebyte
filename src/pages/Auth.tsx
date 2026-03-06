@@ -183,19 +183,15 @@ export default function Auth() {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-[340px]">
-        {campus && (
-          <div className="flex items-center justify-center gap-1.5 mb-4">
-            <div className="badge-vibrant text-[10px]"><Building2 size={10} />{campus.name}</div>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="h-6 px-2 text-[10px] text-muted-foreground gap-1 rounded-md">
-              <RefreshCw size={10} /> Switch
-            </Button>
-          </div>
-        )}
-
         <div className="text-center mb-4">
           <div className="flex justify-center mb-3"><Logo size="md" showText={false} /></div>
-          <h1 className="font-display text-lg font-bold text-foreground">{campus?.name || 'Campus'} Canteen</h1>
+          <h1 className="font-display text-lg font-bold text-foreground">Canteen</h1>
           <p className="text-xs text-muted-foreground mt-0.5">Sign in to order your favorite food</p>
+          {campus && (
+            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="mt-1.5 h-6 px-2 text-[10px] text-muted-foreground gap-1 rounded-md">
+              <RefreshCw size={10} /> Switch Campus
+            </Button>
+          )}
         </div>
 
         <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
