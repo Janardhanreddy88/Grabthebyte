@@ -42,12 +42,12 @@
     /* Sidebar */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 220 20% 25%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 0 85% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 80% 96%;
-    --sidebar-accent-foreground: 24 95% 40%;
+    --sidebar-accent: 0 80% 96%;
+    --sidebar-accent-foreground: 0 85% 40%;
     --sidebar-border: 220 13% 92%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 0 85% 50%;
 
     /* Brand tokens */
     --canteen-primary: 24 95% 53%;
