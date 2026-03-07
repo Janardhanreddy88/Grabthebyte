@@ -114,7 +114,7 @@
     --shadow-soft: 0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.2);
     --shadow-medium: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.25);
     --shadow-elevated: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.3);
-    --shadow-glow: 0 0 0 1px hsl(24 95% 58% / 0.15), 0 4px 16px -4px hsl(24 95% 58% / 0.25);
+    --shadow-glow: 0 0 0 1px hsl(0 85% 55% / 0.15), 0 4px 16px -4px hsl(0 85% 55% / 0.25);
   }
 }
 
