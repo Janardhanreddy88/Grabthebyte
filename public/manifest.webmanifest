@@ -2,7 +2,7 @@
   "name": "GrabTheByte",
   "short_name": "GrabTheByte",
   "description": "The Ultimate Campus Ecosystem. Skip the queues and manage your campus life.",
-  "theme_color": "#ea580c",
+  "theme_color": "#d91a1a",
   "background_color": "#faf8f5",
   "display": "standalone",
   "orientation": "portrait",
