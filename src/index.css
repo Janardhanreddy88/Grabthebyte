@@ -96,12 +96,12 @@
 
     --sidebar-background: 222 18% 8%;
     --sidebar-foreground: 36 20% 88%;
-    --sidebar-primary: 24 95% 58%;
+    --sidebar-primary: 0 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 222 20% 14%;
-    --sidebar-accent-foreground: 24 80% 72%;
+    --sidebar-accent-foreground: 0 80% 72%;
     --sidebar-border: 222 16% 16%;
-    --sidebar-ring: 24 95% 58%;
+    --sidebar-ring: 0 85% 55%;
 
     --canteen-primary: 24 95% 58%;
     --canteen-secondary: 152 60% 40%;
