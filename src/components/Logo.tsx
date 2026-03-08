@@ -14,7 +14,7 @@ export function Logo({ size = 'md', showText = true, className }: LogoProps) {
   const c = sizeConfig[size];
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <img src={logoImg} alt="GrabTheByte" className={cn('rounded-xl object-contain', c.img)} />
+      <img src={logoImg} alt="GrabTheByte" loading="eager" decoding="async" className={cn('rounded-lg object-contain', c.img)} />
       {showText && (
         <div className="flex items-baseline leading-none">
           <span className={cn('font-display font-semibold text-foreground tracking-tight', c.text)}>Grab</span>
