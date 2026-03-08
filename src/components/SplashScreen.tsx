@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Utensils } from "lucide-react";
+import logoImg from "@/assets/grabthebyte-logo.png";
 
 interface SplashScreenProps {
   onComplete: () => void;
