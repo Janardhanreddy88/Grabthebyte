@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Utensils } from "lucide-react";
+import logoImg from "@/assets/grabthebyte-logo.png";
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -26,9 +26,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           </div>
           <div className="relative flex flex-col items-center gap-4">
             <motion.div initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }} className="relative">
-              <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-primary-foreground" style={{ boxShadow: "0 8px 28px -6px hsl(24 95% 53% / 0.4)" }}>
-                <Utensils size={30} strokeWidth={1.8} />
-              </div>
+              <img src={logoImg} alt="GrabTheByte" className="w-16 h-16 rounded-2xl object-cover" style={{ boxShadow: "0 8px 28px -6px hsl(0 85% 50% / 0.4)" }} />
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4, type: "spring", stiffness: 300 }} className="absolute -bottom-1 -right-1 w-4.5 h-4.5 bg-secondary rounded-lg border-2 border-background" style={{ width: 18, height: 18 }} />
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 8 }} animate={phase === "brand" ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }} transition={{ duration: 0.35 }} className="flex flex-col items-center gap-0.5">
