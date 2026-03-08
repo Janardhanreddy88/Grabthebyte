@@ -4,10 +4,10 @@ import logoImg from '@/assets/grabthebyte-logo.png';
 interface LogoProps { size?: 'sm' | 'md' | 'lg' | 'xl'; showText?: boolean; className?: string; }
 
 const sizeConfig = {
-  sm:  { img: 'w-7 h-7',   text: 'text-[13px]' },
-  md:  { img: 'w-9 h-9',   text: 'text-base' },
-  lg:  { img: 'w-11 h-11', text: 'text-xl' },
-  xl:  { img: 'w-16 h-16', text: 'text-3xl' },
+  sm:  { img: 'w-8 h-8',   text: 'text-[13px]' },
+  md:  { img: 'w-10 h-10', text: 'text-base' },
+  lg:  { img: 'w-14 h-14', text: 'text-xl' },
+  xl:  { img: 'w-20 h-20', text: 'text-3xl' },
 };
 
 export function Logo({ size = 'md', showText = true, className }: LogoProps) {
