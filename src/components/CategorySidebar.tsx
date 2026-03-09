@@ -8,6 +8,7 @@ import categoryAll from '@/assets/category-all.png';
 import categoryBreakfast from '@/assets/category-breakfast.png';
 import categoryLunch from '@/assets/category-lunch.png';
 import categorySnacks from '@/assets/category-snacks.png';
+import categoryColddrinks from '@/assets/category-colddrinks.png';
 
 interface CategorySidebarProps {
   selectedCategory: string;
