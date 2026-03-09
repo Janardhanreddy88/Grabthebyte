@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">BiteOS</string>
-    <string name="title_activity_main">BiteOS</string>
-    <string name="package_name">com.biteos.app</string>
-    <string name="custom_url_scheme">com.biteos.app</string>
+    <string name="app_name">GrabTheByte</string>
+    <string name="title_activity_main">GrabTheByte</string>
+    <string name="package_name">com.grabthebyte.app</string>
+    <string name="custom_url_scheme">com.grabthebyte.app</string>
 </resources>

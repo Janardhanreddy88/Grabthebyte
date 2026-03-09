@@ -1,4 +1,4 @@
-package com.biteos.app;
+package com.grabthebyte.app;
 
 import com.getcapacitor.BridgeActivity;
 
