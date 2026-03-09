@@ -9,17 +9,17 @@ import { Logo } from '@/components/Logo';
 import { useCampus } from '@/context/CampusContext';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
-import { Mail, Lock, User, ArrowRight, Loader2, Building2, RefreshCw, AlertTriangle, Phone } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone } from 'lucide-react';
 import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/rateLimit';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
-const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled }: any) => (
+const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled, maxLength }: any) => (
   <div className="space-y-1">
     <Label htmlFor={id} className="text-[11px] font-semibold text-muted-foreground">{label}</Label>
     <div className="relative">
       <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-      <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange}
+      <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange} maxLength={maxLength}
         className="h-9 pl-9 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
     </div>
     {fieldError && <p className="text-[10px] text-destructive flex items-center gap-1"><AlertTriangle size={10} /> {fieldError}</p>}
@@ -36,18 +36,25 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { campus } = useCampus();
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
+  
+  // NEW STATE: OTP Verification
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpToken, setOtpToken] = useState('');
+  
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
 
-  // Handle logout parameter
   useEffect(() => {
     const shouldLogout = searchParams.get('logout') === 'true';
     if (!shouldLogout) return;
@@ -140,40 +147,74 @@ export default function Auth() {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: loginPassword });
       if (error) { recordLoginAttempt(sanitizedEmail, false); toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' }); return; }
-      if (data.user) {
-        const { data: userRole } = await supabase.from('user_roles').select('campus_id, role').eq('user_id', data.user.id).maybeSingle();
-        if (userRole?.role !== 'super_admin' && userRole?.campus_id && userRole.campus_id !== campus.id) {
-          await supabase.auth.signOut(); toast({ title: 'Wrong Campus', description: 'Your account is registered with a different campus.', variant: 'destructive' }); return;
-        }
-      }
       recordLoginAttempt(sanitizedEmail, true);
       if (data.user) toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
     } catch { toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' }); }
     finally { setIsLoading(false); }
   };
 
+  // --- NEW 2-STEP SIGNUP LOGIC ---
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault(); clearErrors();
     if (!validateSignupForm()) return;
     if (!campus?.id) { toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); navigate('/select-campus'); return; }
     setIsLoading(true);
+    
     try {
       const { data: phoneExists } = await supabase.rpc('check_phone_exists' as any, { phone_input: signupPhone.trim() });
       if (phoneExists) { toast({ title: 'Phone Already Registered', description: 'This number is already in use.', variant: 'destructive' }); setIsLoading(false); return; }
+      
       const { data, error } = await supabase.auth.signUp({
-        email: signupEmail.trim(), password: signupPassword,
-        options: { emailRedirectTo: `${window.location.origin}/`, data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() } },
+        email: signupEmail.trim(), 
+        password: signupPassword,
+        options: { 
+          data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() } 
+        },
       });
-      if (error) { let msg = error.message; if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered.'; toast({ title: 'Signup Failed', description: msg, variant: 'destructive' }); return; }
-      if (data.user) {
-        if (data.session) await supabase.from('profiles').update({ phone: signupPhone.trim() }).eq('id', data.user.id);
-        toast({ title: 'Account Created!', description: 'Welcome to GrabTheByte.' });
+      
+      if (error) { 
+        let msg = error.message; 
+        if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered.'; 
+        toast({ title: 'Signup Failed', description: msg, variant: 'destructive' }); 
+        return; 
       }
+      
+      // Successfully created unverified user, switch to OTP UI
+      setIsVerifyingOtp(true);
+      toast({ title: 'Check your email!', description: 'We sent a 6-digit verification code to your inbox.' });
+      
     } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
     finally { setIsLoading(false); }
   };
 
-  
+  // --- VERIFY OTP LOGIC ---
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: signupEmail.trim(),
+        token: otpToken.trim(),
+        type: 'signup'
+      });
+
+      if (error) {
+        toast({ title: 'Verification Failed', description: 'Invalid or expired code. Please try again.', variant: 'destructive' });
+        return;
+      }
+
+      if (data.session) {
+        // Save the phone number to the profile table
+        await supabase.from('profiles').update({ phone: signupPhone.trim() }).eq('id', data.user?.id);
+        toast({ title: 'Account Verified!', description: 'Welcome to GrabTheByte.' });
+        // The onAuthStateChange hook will naturally push them to the menu!
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Could not verify OTP.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
@@ -195,7 +236,7 @@ export default function Auth() {
         </div>
 
         <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
-          <Tabs defaultValue="login" className="w-full" onValueChange={clearErrors}>
+          <Tabs defaultValue="login" className="w-full" onValueChange={(v) => { clearErrors(); setIsVerifyingOtp(false); }}>
             <TabsList className="grid w-full grid-cols-2 mb-4 h-8 rounded-xl bg-muted p-0.5">
               <TabsTrigger value="login" className="rounded-lg text-xs font-bold">Login</TabsTrigger>
               <TabsTrigger value="signup" className="rounded-lg text-xs font-bold">Sign Up</TabsTrigger>
@@ -220,15 +261,52 @@ export default function Auth() {
             </TabsContent>
 
             <TabsContent value="signup" className="mt-0">
-              <form onSubmit={handleSignup} className="space-y-3">
-                <InputField id="signup-name" label="Full Name" icon={User} placeholder="John Doe" value={signupName} onChange={(e: any) => setSignupName(e.target.value)} error={errors.signupName} disabled={isLoading} />
-                <InputField id="signup-phone" label="Phone Number" icon={Phone} type="tel" placeholder="99999 99999" value={signupPhone} onChange={(e: any) => setSignupPhone(e.target.value)} error={errors.signupPhone} disabled={isLoading} />
-                <InputField id="signup-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={signupEmail} onChange={(e: any) => setSignupEmail(e.target.value)} error={errors.signupEmail} disabled={isLoading} />
-                <InputField id="signup-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={signupPassword} onChange={(e: any) => setSignupPassword(e.target.value)} error={errors.signupPassword} disabled={isLoading} />
-                <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
-                </Button>
-              </form>
+              {/* CONDITIONAL RENDER: Form vs OTP Screen */}
+              {!isVerifyingOtp ? (
+                <form onSubmit={handleSignup} className="space-y-3">
+                  <InputField id="signup-name" label="Full Name" icon={User} placeholder="John Doe" value={signupName} onChange={(e: any) => setSignupName(e.target.value)} error={errors.signupName} disabled={isLoading} />
+                  <InputField id="signup-phone" label="Phone Number" icon={Phone} type="tel" placeholder="99999 99999" value={signupPhone} onChange={(e: any) => setSignupPhone(e.target.value)} error={errors.signupPhone} disabled={isLoading} />
+                  <InputField id="signup-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={signupEmail} onChange={(e: any) => setSignupEmail(e.target.value)} error={errors.signupEmail} disabled={isLoading} />
+                  <InputField id="signup-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={signupPassword} onChange={(e: any) => setSignupPassword(e.target.value)} error={errors.signupPassword} disabled={isLoading} />
+                  <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-4 text-center mt-4 pb-2">
+                  <div className="flex justify-center mb-2">
+                    <div className="bg-primary/10 p-3 rounded-full">
+                      <Mail className="w-6 h-6 text-primary" />
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-sm text-foreground">Check your email</h3>
+                  <p className="text-[11px] text-muted-foreground px-2">
+                    We sent a 6-digit code to <br/><span className="font-bold text-foreground">{signupEmail}</span>
+                  </p>
+                  
+                  <div className="pt-2 px-4">
+                    <InputField 
+                      id="otp-input" 
+                      label="" 
+                      icon={Lock} 
+                      type="text" 
+                      maxLength={6}
+                      placeholder="Enter 6-digit code" 
+                      value={otpToken} 
+                      onChange={(e: any) => setOtpToken(e.target.value.replace(/\D/g, ''))} // only allows numbers
+                      disabled={isLoading} 
+                    />
+                  </div>
+                  
+                  <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
+                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Verify & Enter <ArrowRight size={14} /></>}
+                  </Button>
+                  
+                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-4 font-medium">
+                    ← Back to Sign Up
+                  </button>
+                </form>
+              )}
             </TabsContent>
           </Tabs>
         </div>
