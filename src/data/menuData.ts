@@ -12,6 +12,7 @@ export const timePeriods: TimePeriod[] = [
   { id: 'breakfast', name: 'Breakfast', startHour: 8, startMinute: 0, endHour: 11, endMinute: 0, icon: '🌅' },
   { id: 'lunch', name: 'Lunch', startHour: 11, startMinute: 15, endHour: 14, endMinute: 45, icon: '☀️' },
   { id: 'snacks', name: 'Snacks', startHour: 15, startMinute: 0, endHour: 19, endMinute: 0, icon: '🌤️' },
+  { id: 'colddrinks', name: 'Cold Drinks', startHour: 8, startMinute: 0, endHour: 19, endMinute: 0, icon: '🧊' },
 ];
 
 export const menuItems: MenuItem[] = [
