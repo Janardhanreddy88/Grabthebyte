@@ -1,8 +1,13 @@
 import { cn } from '@/lib/utils';
 import { categories } from '@/data/menuData';
-import { UtensilsCrossed, Utensils, Sunrise, Soup, Cookie, Coffee, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion } from 'framer-motion';
+
+import categoryAll from '@/assets/category-all.png';
+import categoryBreakfast from '@/assets/category-breakfast.png';
+import categoryLunch from '@/assets/category-lunch.png';
+import categorySnacks from '@/assets/category-snacks.png';
 
 interface CategorySidebarProps {
   selectedCategory: string;
@@ -10,13 +15,11 @@ interface CategorySidebarProps {
   onProfileClick?: () => void;
 }
 
-const categoryIcons: Record<string, React.ReactNode> = {
-  all: <UtensilsCrossed size={18} />,
-  'main-course': <Utensils size={18} />,
-  breakfast: <Sunrise size={18} />,
-  lunch: <Soup size={18} />,
-  snacks: <Cookie size={18} />,
-  beverages: <Coffee size={18} />,
+const categoryImages: Record<string, string> = {
+  all: categoryAll,
+  breakfast: categoryBreakfast,
+  lunch: categoryLunch,
+  snacks: categorySnacks,
 };
 
 export function CategorySidebar({ selectedCategory, onSelectCategory, onProfileClick }: CategorySidebarProps) {
