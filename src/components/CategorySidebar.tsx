@@ -21,6 +21,7 @@ const categoryImages: Record<string, string> = {
   breakfast: categoryBreakfast,
   lunch: categoryLunch,
   snacks: categorySnacks,
+  colddrinks: categoryColddrinks,
 };
 
 export function CategorySidebar({ selectedCategory, onSelectCategory, onProfileClick }: CategorySidebarProps) {
