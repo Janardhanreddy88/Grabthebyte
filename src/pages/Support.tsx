@@ -1,5 +1,5 @@
 import { Logo } from "@/components/Logo";
-import { ArrowLeft, Mail, MapPin, Phone, ChevronDown, ChevronUp, Send, HelpCircle, Ticket } from "lucide-react";
+import { ArrowLeft, Mail, MapPin, Phone, ChevronDown, ChevronUp, Send, HelpCircle, Ticket, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/PageTransition";
@@ -35,9 +35,13 @@ export default function Support() {
   };
 
   const faqs = [
-    { question: "Payment failed but money deducted?", answer: "Amount is auto-refunded within 5-7 working days by the banking gateway." },
-    { question: "Can I cancel a confirmed order?", answer: "No. Once accepted, ingredients are used and we cannot cancel or refund." },
-    { question: "Received wrong item?", answer: "Visit the counter with your Order ID for an immediate replacement." },
+    { question: "Payment failed but money deducted?", answer: "Don't worry! This is a banking delay. The amount is automatically refunded within 5-7 working days by the payment gateway." },
+    { question: "Can I cancel a confirmed order?", answer: "No. Once the restaurant accepts the order, ingredients are processed and we cannot offer cancellations or refunds." },
+    { question: "Received wrong or missing items?", answer: "Please visit the specific restaurant counter with your Order ID immediately for a replacement or resolution." },
+    { question: "How do I track my order status?", answer: "Go to 'My Orders' and click on your active order. Statuses update from 'Preparing' to 'Ready for Pickup' in real-time." },
+    { question: "Where do I pick up my food?", answer: "Head to the specific restaurant counter mentioned in your digital invoice. Show your Order ID to the staff." },
+    { question: "Is my payment information secure?", answer: "Yes. We use Cashfree's PCI-DSS compliant gateway. We never store your card or UPI pin details on our servers." },
+    { question: "Forgot to pick up my order?", answer: "Orders not picked up within 30 minutes of being marked 'Ready' are disposed of for hygiene reasons and are non-refundable." },
   ];
 
   return (
@@ -53,11 +57,17 @@ export default function Support() {
 
         <main className="max-w-7xl mx-auto px-4 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left: Contact + FAQ */}
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
                 <h2 className="text-sm font-bold mb-4">Contact Support</h2>
                 <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0 text-purple-600"><User size={14} /></div>
+                    <div>
+                      <h3 className="font-semibold text-xs">Proprietor</h3>
+                      <p className="text-sm font-bold text-foreground">BAREDDY JANARDHAN REDDY</p>
+                    </div>
+                  </div>
                   <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center shrink-0 text-green-600"><Phone size={14} /></div>
                     <div>
@@ -77,8 +87,8 @@ export default function Support() {
                   <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0 text-orange-600"><MapPin size={14} /></div>
                     <div>
-                      <h3 className="font-semibold text-xs">Office</h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed">GrabTheByte, 29-178-32/D6, SBI Colony, Nandyal, AP - 518501</p>
+                      <h3 className="font-semibold text-xs">Registered Office</h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">GrabTheByte, 29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</p>
                     </div>
                   </div>
                 </div>
@@ -100,7 +110,6 @@ export default function Support() {
               </div>
             </div>
 
-            {/* Right: Report Form */}
             <div className="lg:col-span-7">
               <div className="bg-card border border-border rounded-xl p-4 lg:p-6 shadow-sm h-full flex flex-col">
                 <div className="mb-4">

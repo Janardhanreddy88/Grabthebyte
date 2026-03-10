@@ -9,7 +9,7 @@ import { Logo } from '@/components/Logo';
 import { useCampus } from '@/context/CampusContext';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
-import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer } from 'lucide-react';
 import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/rateLimit';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
@@ -48,12 +48,23 @@ export default function Auth() {
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
   
-  // NEW STATE: OTP Verification
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpToken, setOtpToken] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0); // For the 60s timer
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
+
+  // Timer Effect for Resend Logic
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (resendCountdown > 0) {
+      timer = setInterval(() => {
+        setResendCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCountdown]);
 
   useEffect(() => {
     const shouldLogout = searchParams.get('logout') === 'true';
@@ -153,7 +164,6 @@ export default function Auth() {
     finally { setIsLoading(false); }
   };
 
-  // --- NEW 2-STEP SIGNUP LOGIC ---
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault(); clearErrors();
     if (!validateSignupForm()) return;
@@ -179,15 +189,32 @@ export default function Auth() {
         return; 
       }
       
-      // Successfully created unverified user, switch to OTP UI
       setIsVerifyingOtp(true);
+      setResendCountdown(60); // Initial 60s cooldown
       toast({ title: 'Check your email!', description: 'We sent a 6-digit verification code to your inbox.' });
       
     } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
     finally { setIsLoading(false); }
   };
 
-  // --- VERIFY OTP LOGIC ---
+  const handleResendOtp = async () => {
+    if (resendCountdown > 0) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: signupEmail.trim(),
+      });
+      if (error) throw error;
+      setResendCountdown(60);
+      toast({ title: 'Code Resent!', description: 'Check your inbox for a new code.', className: "bg-green-600 text-white border-none" });
+    } catch (error: any) {
+      toast({ title: 'Resend Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -204,10 +231,8 @@ export default function Auth() {
       }
 
       if (data.session) {
-        // Save the phone number to the profile table
         await supabase.from('profiles').update({ phone: signupPhone.trim() }).eq('id', data.user?.id);
         toast({ title: 'Account Verified!', description: 'Welcome to GrabTheByte.' });
-        // The onAuthStateChange hook will naturally push them to the menu!
       }
     } catch {
       toast({ title: 'Error', description: 'Could not verify OTP.', variant: 'destructive' });
@@ -261,7 +286,6 @@ export default function Auth() {
             </TabsContent>
 
             <TabsContent value="signup" className="mt-0">
-              {/* CONDITIONAL RENDER: Form vs OTP Screen */}
               {!isVerifyingOtp ? (
                 <form onSubmit={handleSignup} className="space-y-3">
                   <InputField id="signup-name" label="Full Name" icon={User} placeholder="John Doe" value={signupName} onChange={(e: any) => setSignupName(e.target.value)} error={errors.signupName} disabled={isLoading} />
@@ -293,16 +317,35 @@ export default function Auth() {
                       maxLength={6}
                       placeholder="Enter 6-digit code" 
                       value={otpToken} 
-                      onChange={(e: any) => setOtpToken(e.target.value.replace(/\D/g, ''))} // only allows numbers
+                      onChange={(e: any) => setOtpToken(e.target.value.replace(/\D/g, ''))}
                       disabled={isLoading} 
                     />
                   </div>
                   
-                  <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
-                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Verify & Enter <ArrowRight size={14} /></>}
-                  </Button>
+                  <div className="space-y-3 px-4">
+                    <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
+                      {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Verify & Enter <ArrowRight size={14} /></>}
+                    </Button>
+
+                    <button 
+                      type="button" 
+                      onClick={handleResendOtp} 
+                      disabled={isLoading || resendCountdown > 0} 
+                      className={`text-[11px] w-full flex items-center justify-center gap-1.5 font-bold transition-colors ${resendCountdown > 0 ? 'text-muted-foreground' : 'text-primary hover:text-primary/80'}`}
+                    >
+                      {resendCountdown > 0 ? (
+                        <><Timer size={12} /> Resend in {resendCountdown}s</>
+                      ) : (
+                        <><RefreshCw size={12} /> Resend Code</>
+                      )}
+                    </button>
+                  </div>
                   
-                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-4 font-medium">
+                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-4 font-medium underline block w-full">
+                    Change Email
+                  </button>
+                  
+                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-2 font-medium">
                     ← Back to Sign Up
                   </button>
                 </form>
