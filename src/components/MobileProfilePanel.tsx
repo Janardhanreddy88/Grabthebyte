@@ -402,10 +402,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
                 </div>
                 <ChevronRight size={18} className="text-muted-foreground" />
               </button>
-
-              <button onClick={handleForgotPassword} className="text-sm text-primary hover:underline mt-2">
-                Forgot Password?
-              </button>
             </div>
 
             <Separator />
