@@ -139,6 +139,12 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
 
   // Dialog states
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   // Form states
   const [passwordForm, setPasswordForm] = useState({ old: "", new: "", confirm: "" });
@@ -196,21 +202,73 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleSendOtp = async () => {
+    setIsSendingOtp(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail.trim());
       if (error) {
         toast({ title: "Error", description: error.message, variant: "destructive" });
         return;
       }
-
-      toast({ title: "Reset Link Sent!", description: `Password reset link sent to ${userEmail}` });
+      setOtpSent(true);
+      toast({ title: "Code Sent!", description: `6-digit code sent to ${userEmail}` });
     } catch {
-      toast({ title: "Error", description: "Failed to send reset link.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to send code.", variant: "destructive" });
+    } finally {
+      setIsSendingOtp(false);
     }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length !== 6) return;
+    setIsVerifyingOtp(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email: userEmail.trim(), token: otp, type: 'recovery' });
+      if (error) {
+        toast({ title: "Invalid Code", description: "The code is incorrect or expired.", variant: "destructive" });
+        return;
+      }
+      setOtpVerified(true);
+      toast({ title: "Verified!", description: "Now set your new password." });
+    } catch {
+      toast({ title: "Error", description: "Verification failed.", variant: "destructive" });
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleForgotPasswordUpdate = async () => {
+    if (passwordForm.new !== passwordForm.confirm) {
+      toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
+      return;
+    }
+    if (passwordForm.new.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      resetChangePasswordDialog();
+      toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
+    } catch {
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const resetChangePasswordDialog = () => {
+    setChangePasswordOpen(false);
+    setForgotMode(false);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp('');
+    setPasswordForm({ old: "", new: "", confirm: "" });
   };
 
   return (
@@ -344,10 +402,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
                 </div>
                 <ChevronRight size={18} className="text-muted-foreground" />
               </button>
-
-              <button onClick={handleForgotPassword} className="text-sm text-primary hover:underline mt-2">
-                Forgot Password?
-              </button>
             </div>
 
             <Separator />
@@ -436,57 +490,103 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
       </Sheet>
 
       {/* Change Password Dialog */}
-      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+      <Dialog open={changePasswordOpen} onOpenChange={(open) => { if (!open) resetChangePasswordDialog(); else setChangePasswordOpen(true); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
+            <DialogTitle>{forgotMode ? (otpVerified ? 'Set New Password' : 'Forgot Password') : 'Change Password'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="old-password">Current Password</Label>
-              <Input
-                id="old-password"
-                type="password"
-                value={passwordForm.old}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, old: e.target.value }))}
-                placeholder="Enter current password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New Password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={passwordForm.new}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
-                placeholder="Enter new password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm New Password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={passwordForm.confirm}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
-                placeholder="Confirm new password"
-              />
-            </div>
+            {!forgotMode ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="old-password">Current Password</Label>
+                  <Input
+                    id="old-password"
+                    type="password"
+                    value={passwordForm.old}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, old: e.target.value }))}
+                    placeholder="Enter current password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode(true)}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input id="new-password" type="password" value={passwordForm.new}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
+                    placeholder="Enter new password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Input id="confirm-password" type="password" value={passwordForm.confirm}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
+                    placeholder="Confirm new password" />
+                </div>
+              </>
+            ) : !otpVerified ? (
+              <>
+                {!otpSent ? (
+                  <div className="space-y-3 text-center">
+                    <p className="text-sm text-muted-foreground">We'll send a 6-digit verification code to <strong>{userEmail}</strong></p>
+                    <Button onClick={handleSendOtp} disabled={isSendingOtp} className="w-full">
+                      {isSendingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending...</> : 'Send Verification Code'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground text-center">Enter the 6-digit code sent to <strong>{userEmail}</strong></p>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      className="text-center text-lg tracking-[0.5em] font-mono"
+                    />
+                    <Button onClick={handleVerifyOtp} disabled={isVerifyingOtp || otp.length !== 6} className="w-full">
+                      {isVerifyingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying...</> : 'Verify Code'}
+                    </Button>
+                    <button type="button" onClick={handleSendOtp} disabled={isSendingOtp}
+                      className="text-xs text-muted-foreground hover:text-primary font-medium w-full text-center">
+                      Didn't receive? Resend code
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password-forgot">New Password</Label>
+                  <Input id="new-password-forgot" type="password" value={passwordForm.new}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
+                    placeholder="Enter new password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password-forgot">Confirm New Password</Label>
+                  <Input id="confirm-password-forgot" type="password" value={passwordForm.confirm}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
+                    placeholder="Confirm new password" />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleChangePassword} disabled={isChangingPassword}>
-              {isChangingPassword ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Updating...
-                </>
-              ) : (
-                "Update Password"
-              )}
-            </Button>
+            <Button variant="outline" onClick={resetChangePasswordDialog}>Cancel</Button>
+            {!forgotMode ? (
+              <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
+              </Button>
+            ) : otpVerified ? (
+              <Button onClick={handleForgotPasswordUpdate} disabled={isChangingPassword}>
+                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
