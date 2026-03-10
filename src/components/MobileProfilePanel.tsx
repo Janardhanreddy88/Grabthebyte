@@ -202,21 +202,73 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleSendOtp = async () => {
+    setIsSendingOtp(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail.trim());
       if (error) {
         toast({ title: "Error", description: error.message, variant: "destructive" });
         return;
       }
-
-      toast({ title: "Reset Link Sent!", description: `Password reset link sent to ${userEmail}` });
+      setOtpSent(true);
+      toast({ title: "Code Sent!", description: `6-digit code sent to ${userEmail}` });
     } catch {
-      toast({ title: "Error", description: "Failed to send reset link.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to send code.", variant: "destructive" });
+    } finally {
+      setIsSendingOtp(false);
     }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length !== 6) return;
+    setIsVerifyingOtp(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email: userEmail.trim(), token: otp, type: 'recovery' });
+      if (error) {
+        toast({ title: "Invalid Code", description: "The code is incorrect or expired.", variant: "destructive" });
+        return;
+      }
+      setOtpVerified(true);
+      toast({ title: "Verified!", description: "Now set your new password." });
+    } catch {
+      toast({ title: "Error", description: "Verification failed.", variant: "destructive" });
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleForgotPasswordUpdate = async () => {
+    if (passwordForm.new !== passwordForm.confirm) {
+      toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
+      return;
+    }
+    if (passwordForm.new.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      resetChangePasswordDialog();
+      toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
+    } catch {
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const resetChangePasswordDialog = () => {
+    setChangePasswordOpen(false);
+    setForgotMode(false);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp('');
+    setPasswordForm({ old: "", new: "", confirm: "" });
   };
 
   return (
