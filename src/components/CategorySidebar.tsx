@@ -1,14 +1,8 @@
 import { cn } from '@/lib/utils';
 import { categories } from '@/data/menuData';
-import { User } from 'lucide-react';
+import { User, LayoutGrid, Coffee, UtensilsCrossed, Cookie, GlassWater, type LucideIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion } from 'framer-motion';
-
-import categoryAll from '@/assets/category-all.png';
-import categoryBreakfast from '@/assets/category-breakfast.png';
-import categoryLunch from '@/assets/category-lunch.png';
-import categorySnacks from '@/assets/category-snacks.png';
-import categoryColddrinks from '@/assets/category-colddrinks.png';
 
 interface CategorySidebarProps {
   selectedCategory: string;
@@ -16,12 +10,12 @@ interface CategorySidebarProps {
   onProfileClick?: () => void;
 }
 
-const categoryImages: Record<string, string> = {
-  all: categoryAll,
-  breakfast: categoryBreakfast,
-  lunch: categoryLunch,
-  snacks: categorySnacks,
-  colddrinks: categoryColddrinks,
+const categoryIcons: Record<string, LucideIcon> = {
+  all: LayoutGrid,
+  breakfast: Coffee,
+  lunch: UtensilsCrossed,
+  snacks: Cookie,
+  colddrinks: GlassWater,
 };
 
 export function CategorySidebar({ selectedCategory, onSelectCategory, onProfileClick }: CategorySidebarProps) {
@@ -35,11 +29,12 @@ export function CategorySidebar({ selectedCategory, onSelectCategory, onProfileC
               <motion.button key={category.id} whileTap={{ scale: 0.92 }} onClick={() => onSelectCategory(category.id)}
                 className={cn('relative flex flex-col items-center gap-1 py-2 px-1 rounded-xl transition-all duration-200',
                   isActive ? 'bg-primary/8' : 'hover:bg-muted/60')}>
-                <div className={cn('w-9 h-9 lg:w-10 lg:h-10 rounded-xl flex items-center justify-center transition-all duration-200 overflow-hidden',
-                  isActive ? 'ring-2 ring-primary shadow-sm' : 'bg-muted/50')}
-                  style={isActive ? { boxShadow: '0 3px 10px -2px hsl(24 95% 53% / 0.3)' } : {}}>
-                  <img src={categoryImages[category.id] || categoryAll} alt={category.name} className="w-full h-full object-cover" />
-                </div>
+                {(() => { const Icon = categoryIcons[category.id] || LayoutGrid; return (
+                <div className={cn('w-9 h-9 lg:w-10 lg:h-10 rounded-xl flex items-center justify-center transition-all duration-200',
+                  isActive ? 'bg-primary/10 ring-2 ring-primary shadow-sm' : 'bg-muted/50')}
+                  style={isActive ? { boxShadow: '0 3px 10px -2px hsl(var(--primary) / 0.3)' } : {}}>
+                  <Icon size={20} className={cn(isActive ? 'text-primary' : 'text-muted-foreground')} />
+                </div>); })()}
                 <span className={cn('text-[9px] font-semibold text-center leading-tight max-w-full px-0.5',
                   isActive ? 'text-primary' : 'text-muted-foreground')}>{category.name}</span>
                 {isActive && <motion.div layoutId="category-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-6 bg-primary rounded-r-full" transition={{ type: "spring", stiffness: 500, damping: 30 }} />}

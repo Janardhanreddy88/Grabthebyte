@@ -57,7 +57,7 @@ export default function Auth() {
 
   // Timer Effect for Resend Logic
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (resendCountdown > 0) {
       timer = setInterval(() => {
         setResendCountdown((prev) => prev - 1);
