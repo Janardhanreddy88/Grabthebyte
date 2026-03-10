@@ -139,6 +139,12 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
 
   // Dialog states
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   // Form states
   const [passwordForm, setPasswordForm] = useState({ old: "", new: "", confirm: "" });
