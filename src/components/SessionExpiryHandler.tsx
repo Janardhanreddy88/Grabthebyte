@@ -48,9 +48,9 @@ export function SessionExpiryHandler({
   };
 
   useEffect(() => {
-    let warningTimer: NodeJS.Timeout;
-    let expiryTimer: NodeJS.Timeout;
-    let countdownTimer: NodeJS.Timeout;
+    let warningTimer: ReturnType<typeof setTimeout>;
+    let expiryTimer: ReturnType<typeof setTimeout>;
+    let countdownTimer: ReturnType<typeof setInterval>;
 
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
