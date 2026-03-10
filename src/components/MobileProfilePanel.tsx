@@ -490,57 +490,103 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
       </Sheet>
 
       {/* Change Password Dialog */}
-      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+      <Dialog open={changePasswordOpen} onOpenChange={(open) => { if (!open) resetChangePasswordDialog(); else setChangePasswordOpen(true); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
+            <DialogTitle>{forgotMode ? (otpVerified ? 'Set New Password' : 'Forgot Password') : 'Change Password'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="old-password">Current Password</Label>
-              <Input
-                id="old-password"
-                type="password"
-                value={passwordForm.old}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, old: e.target.value }))}
-                placeholder="Enter current password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New Password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={passwordForm.new}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
-                placeholder="Enter new password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm New Password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={passwordForm.confirm}
-                onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
-                placeholder="Confirm new password"
-              />
-            </div>
+            {!forgotMode ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="old-password">Current Password</Label>
+                  <Input
+                    id="old-password"
+                    type="password"
+                    value={passwordForm.old}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, old: e.target.value }))}
+                    placeholder="Enter current password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode(true)}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input id="new-password" type="password" value={passwordForm.new}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
+                    placeholder="Enter new password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Input id="confirm-password" type="password" value={passwordForm.confirm}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
+                    placeholder="Confirm new password" />
+                </div>
+              </>
+            ) : !otpVerified ? (
+              <>
+                {!otpSent ? (
+                  <div className="space-y-3 text-center">
+                    <p className="text-sm text-muted-foreground">We'll send a 6-digit verification code to <strong>{userEmail}</strong></p>
+                    <Button onClick={handleSendOtp} disabled={isSendingOtp} className="w-full">
+                      {isSendingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending...</> : 'Send Verification Code'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground text-center">Enter the 6-digit code sent to <strong>{userEmail}</strong></p>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      className="text-center text-lg tracking-[0.5em] font-mono"
+                    />
+                    <Button onClick={handleVerifyOtp} disabled={isVerifyingOtp || otp.length !== 6} className="w-full">
+                      {isVerifyingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying...</> : 'Verify Code'}
+                    </Button>
+                    <button type="button" onClick={handleSendOtp} disabled={isSendingOtp}
+                      className="text-xs text-muted-foreground hover:text-primary font-medium w-full text-center">
+                      Didn't receive? Resend code
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password-forgot">New Password</Label>
+                  <Input id="new-password-forgot" type="password" value={passwordForm.new}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
+                    placeholder="Enter new password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password-forgot">Confirm New Password</Label>
+                  <Input id="confirm-password-forgot" type="password" value={passwordForm.confirm}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
+                    placeholder="Confirm new password" />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleChangePassword} disabled={isChangingPassword}>
-              {isChangingPassword ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Updating...
-                </>
-              ) : (
-                "Update Password"
-              )}
-            </Button>
+            <Button variant="outline" onClick={resetChangePasswordDialog}>Cancel</Button>
+            {!forgotMode ? (
+              <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
+              </Button>
+            ) : otpVerified ? (
+              <Button onClick={handleForgotPasswordUpdate} disabled={isChangingPassword}>
+                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
