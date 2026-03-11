@@ -6,6 +6,7 @@ export const categories: Category[] = [
   { id: 'lunch', name: 'Lunch', icon: '🍱' },
   { id: 'snacks', name: 'Snacks', icon: '🍪' },
   { id: 'colddrinks', name: 'Cold Drinks', icon: '🥤' },
+  { id: 'icecream', name: 'Ice Cream', icon: '🍦' },
 ];
 
 export const timePeriods: TimePeriod[] = [
@@ -13,6 +14,7 @@ export const timePeriods: TimePeriod[] = [
   { id: 'lunch', name: 'Lunch', startHour: 11, startMinute: 15, endHour: 14, endMinute: 45, icon: '☀️' },
   { id: 'snacks', name: 'Snacks', startHour: 15, startMinute: 0, endHour: 19, endMinute: 0, icon: '🌤️' },
   { id: 'colddrinks', name: 'Cold Drinks', startHour: 8, startMinute: 0, endHour: 19, endMinute: 0, icon: '🧊' },
+  { id: 'icecream', name: 'Ice Cream', startHour: 8, startMinute: 0, endHour: 19, endMinute: 0, icon: '🍦' },
 ];
 
 export const menuItems: MenuItem[] = [
@@ -386,6 +388,77 @@ export const menuItems: MenuItem[] = [
     isPopular: true,
     isAvailable: true,
     availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'colddrinks'],
+  },
+
+  // ========== ICE CREAM (available all day) ==========
+  {
+    id: 'ic1',
+    name: 'Vanilla Cup',
+    description: 'Classic creamy vanilla ice cream in a cup',
+    price: 30,
+    image: 'https://images.unsplash.com/photo-1570197788417-0e82375c9371?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isPopular: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
+  },
+  {
+    id: 'ic2',
+    name: 'Chocolate Cone',
+    description: 'Rich chocolate ice cream served in a crispy wafer cone',
+    price: 35,
+    image: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isPopular: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
+  },
+  {
+    id: 'ic3',
+    name: 'Mango Dolly',
+    description: 'Refreshing mango-flavored ice cream bar',
+    price: 20,
+    image: 'https://images.unsplash.com/photo-1629385701021-fcd568a743e8?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
+  },
+  {
+    id: 'ic4',
+    name: 'Butterscotch Sundae',
+    description: 'Butterscotch ice cream topped with caramel sauce & crunchy nuts',
+    price: 50,
+    image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isPopular: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
+  },
+  {
+    id: 'ic5',
+    name: 'Strawberry Cup',
+    description: 'Sweet strawberry ice cream with real fruit bits',
+    price: 35,
+    image: 'https://images.unsplash.com/photo-1633933358116-a27b902fad35?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
+  },
+  {
+    id: 'ic6',
+    name: 'Kulfi Stick',
+    description: 'Traditional Indian frozen dessert with pistachios & cardamom',
+    price: 25,
+    image: 'https://images.unsplash.com/photo-1567206563064-6f60f40a2b57?w=400',
+    category: 'icecream',
+    isVeg: true,
+    isAvailable: true,
+    availableTimePeriods: ['breakfast', 'lunch', 'snacks', 'icecream'],
   },
 ];
 
