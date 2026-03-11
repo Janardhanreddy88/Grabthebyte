@@ -6,6 +6,7 @@ export const categories: Category[] = [
   { id: 'lunch', name: 'Lunch', icon: '🍱' },
   { id: 'snacks', name: 'Snacks', icon: '🍪' },
   { id: 'colddrinks', name: 'Cold Drinks', icon: '🥤' },
+  { id: 'icecream', name: 'Ice Cream', icon: '🍦' },
 ];
 
 export const timePeriods: TimePeriod[] = [
