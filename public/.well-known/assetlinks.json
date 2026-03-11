@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.grabthebyte.app",
+      "sha256_cert_fingerprints": [
+        "7A:8F:BB:78:C5:33:02:5C:A1:4A:9E:5B:23:F7:DF:07:99:94:51:12:A6:54:EB:A0:61:F5:7E:26:B8:E5:52:8B"
+      ]
+    }
+  }
+]
