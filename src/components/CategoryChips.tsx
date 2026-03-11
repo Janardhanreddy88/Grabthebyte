@@ -1,0 +1,37 @@
+import { cn } from '@/lib/utils';
+import { categories } from '@/data/menuData';
+import { motion } from 'framer-motion';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+
+interface CategoryChipsProps {
+  selectedCategory: string;
+  onSelectCategory: (category: string) => void;
+}
+
+export function CategoryChips({ selectedCategory, onSelectCategory }: CategoryChipsProps) {
+  return (
+    <div className="mb-4 -mx-4 px-4">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {categories.map((category) => {
+          const isActive = selectedCategory === category.id;
+          return (
+            <motion.button
+              key={category.id}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onSelectCategory(category.id)}
+              className={cn(
+                'flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 border',
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                  : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
+              )}
+            >
+              <span className="text-sm">{category.icon}</span>
+              <span>{category.name}</span>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

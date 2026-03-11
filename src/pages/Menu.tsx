@@ -2,13 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/Logo";
-import { CategorySidebar } from "@/components/CategorySidebar";
+import { CategoryChips } from "@/components/CategoryChips";
 import { MenuItemCard } from "@/components/MenuItemCard";
 import { CartPanel } from "@/components/CartPanel";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MobileCart } from "@/components/MobileCart";
 import { MobileProfilePanel } from "@/components/MobileProfilePanel";
-import { PopularNow } from "@/components/PopularNow";
 import { TimePeriodBanner } from "@/components/TimePeriodBanner";
 import { MenuItemSkeletonGrid } from "@/components/skeletons/MenuItemSkeleton";
 import { ErrorState } from "@/components/ErrorState";
@@ -21,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, LayoutDashboard, MapPin, Clock } from "lucide-react";
+import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, User } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -33,7 +32,6 @@ export default function Menu() {
 
   const {
     filteredItems,
-    popularItems,
     currentPeriod,
     canteenClosed,
     nextOpenTime,
@@ -84,26 +82,35 @@ export default function Menu() {
                 </Button>
               )}
               <ThemeToggle />
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setIsProfileOpen(true)}
+                className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
+              >
+                <User size={16} />
+              </motion.button>
             </div>
           </div>
         </header>
 
-        {/* Main Content */}
+        {/* Main Content — Full Width */}
         <div className="flex-1 flex overflow-hidden">
-          <CategorySidebar
-            selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-            onProfileClick={() => setIsProfileOpen(true)}
-          />
-
           <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
-            <div className="p-4 lg:p-5">
+            <div className="p-4 lg:p-5 max-w-4xl mx-auto">
               <HeroBanner />
 
               {/* Search */}
-              <div className="mb-5">
+              <div className="mb-4">
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
+
+              {/* Category Chips */}
+              {!canteenClosed && (
+                <CategoryChips
+                  selectedCategory={selectedCategory}
+                  onSelectCategory={setSelectedCategory}
+                />
+              )}
 
               {/* Canteen Closed */}
               {!isLoading && canteenClosed && (
@@ -128,15 +135,10 @@ export default function Menu() {
                 <TimePeriodBanner period={currentPeriod} />
               )}
 
-              {/* Popular */}
-              {!isLoading && !error && !canteenClosed && popularItems.length > 0 && selectedCategory === "all" && !searchQuery && (
-                <PopularNow items={popularItems} />
-              )}
-
               {/* Section Header */}
               {!canteenClosed && (
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-display text-lg lg:text-xl font-bold text-foreground">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-display text-base lg:text-lg font-bold text-foreground">
                     {searchQuery
                       ? `Results for "${searchQuery}"`
                       : selectedCategory === "all"
@@ -163,7 +165,7 @@ export default function Menu() {
                   variants={staggerContainer}
                   initial="initial"
                   animate="animate"
-                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
                 >
                   {searchedItems.map((item) => (
                     <motion.div key={item.id} variants={staggerItem}>
