@@ -17,11 +17,13 @@ import { ImageWithFallback } from "@/components/ImageWithFallback";
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { cart, totalPrice, totalItems, updateQuantity, removeFromCart, clearCart } = useCart();
+  // REMOVED clearCart from here, it will be handled in Payment.tsx
+  const { cart, totalPrice, totalItems, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
   const { createOrder, isCreating } = useOrders();
   const { toast } = useToast();
   const { checkStock } = useStockCheck();
+  
   const [isCheckingStock, setIsCheckingStock] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
   const lastSubmitRef = useRef<number>(0);
@@ -53,7 +55,10 @@ export default function Checkout() {
     const now = Date.now();
     if (now - lastSubmitRef.current < SUBMIT_COOLDOWN_MS) return;
     lastSubmitRef.current = now;
-    setIsCheckingStock(true); setStockError(null);
+    
+    setIsCheckingStock(true); 
+    setStockError(null);
+    
     try {
       const result = await checkStock(cart);
       if (!result.success) {
@@ -63,11 +68,22 @@ export default function Checkout() {
         result.unavailableItems.forEach((item) => removeFromCart(item.id));
         return;
       }
+
+      // 1. Create the order in Supabase
       const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "cashfree", customerName: user.fullName, customerEmail: user.email });
-      if (order) { clearCart(); navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); }
-      else toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" });
-    } catch { toast({ title: "Error", description: "Something went wrong.", variant: "destructive" }); }
-    finally { setIsCheckingStock(false); }
+      
+      if (order) { 
+        // 2. Simply navigate to the Payment page. 
+        // Payment.tsx will handle the popup and clearing the cart!
+        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 
+      } else { 
+        toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
+      }
+    } catch { 
+      toast({ title: "Error", description: "Something went wrong.", variant: "destructive" }); 
+    } finally { 
+      setIsCheckingStock(false); 
+    }
   };
 
   const isLoading = isCheckingStock || isCreating;
@@ -184,7 +200,7 @@ export default function Checkout() {
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
             <Button className="w-full h-11 rounded-xl text-sm font-bold shadow-lg shadow-primary/20" onClick={handlePlaceOrder} disabled={isLoading}>
               {isLoading ? (
-                <span className="flex items-center gap-1.5"><Loader2 className="animate-spin" size={14} />{isCreating ? "Creating..." : "Checking..."}</span>
+                <span className="flex items-center gap-1.5"><Loader2 className="animate-spin" size={14} />{isCreating ? "Creating Order..." : "Checking..."}</span>
               ) : (
                 <span className="flex items-center gap-1.5">Proceed to Pay <ArrowRight size={14} /></span>
               )}
