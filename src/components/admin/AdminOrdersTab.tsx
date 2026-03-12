@@ -19,9 +19,9 @@ interface Order {
   order_number: string;
   total: number;
   status: string;
-  payment_status: string | null;
+  payment_status?: string | null;
   created_at: string;
-  user_name: string | null;
+  user_name?: string | null;
   items?: OrderItem[];
   is_used: boolean;
 }
