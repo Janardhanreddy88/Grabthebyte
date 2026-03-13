@@ -58,8 +58,8 @@ export default function Menu() {
     <PageTransition>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
-          <div className="flex items-center justify-between px-4 lg:px-6 h-14">
+         <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
+          <div className="flex items-center justify-between px-4 lg:px-6 h-16">
             <div className="flex items-center gap-3">
               <Logo size="sm" />
               {campus && (
@@ -95,12 +95,12 @@ export default function Menu() {
 
         {/* Main Content — Full Width */}
         <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
-            <div className="p-4 lg:p-6">
+          <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
+            <div className="p-4 lg:p-8">
               <HeroBanner />
 
               {/* Search */}
-              <div className="mb-4">
+              <div className="mb-5">
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
 
@@ -137,8 +137,8 @@ export default function Menu() {
 
               {/* Section Header */}
               {!canteenClosed && (
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-display text-base lg:text-lg font-bold text-foreground">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-display text-lg lg:text-xl font-bold text-foreground">
                     {searchQuery
                       ? `Results for "${searchQuery}"`
                       : selectedCategory === "all"
@@ -146,7 +146,7 @@ export default function Menu() {
                         : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
                   </h2>
                   {!isLoading && !error && (
-                    <span className="text-[11px] font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-lg tabular-nums">
+                    <span className="text-xs font-bold text-muted-foreground bg-muted px-3 py-1.5 rounded-lg tabular-nums">
                       {searchedItems.length} items
                     </span>
                   )}
@@ -165,7 +165,7 @@ export default function Menu() {
                   variants={staggerContainer}
                   initial="initial"
                   animate="animate"
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-5"
                 >
                   {searchedItems.map((item) => (
                     <motion.div key={item.id} variants={staggerItem}>
