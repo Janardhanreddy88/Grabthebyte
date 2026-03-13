@@ -96,7 +96,7 @@ export default function Menu() {
         {/* Main Content — Full Width */}
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
-            <div className="p-4 lg:p-5 max-w-4xl mx-auto">
+            <div className="p-4 lg:p-6">
               <HeroBanner />
 
               {/* Search */}
