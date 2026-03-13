@@ -823,6 +823,7 @@ export type Database = {
       user_roles_readable: {
         Row: {
           campus_code: string | null
+          campus_id: string | null
           campus_name: string | null
           created_at: string | null
           email: string | null
@@ -831,7 +832,22 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"] | null
           user_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
