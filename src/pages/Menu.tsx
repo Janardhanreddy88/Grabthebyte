@@ -137,8 +137,8 @@ export default function Menu() {
 
               {/* Section Header */}
               {!canteenClosed && (
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-display text-base lg:text-lg font-bold text-foreground">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-display text-lg lg:text-xl font-bold text-foreground">
                     {searchQuery
                       ? `Results for "${searchQuery}"`
                       : selectedCategory === "all"
@@ -146,7 +146,7 @@ export default function Menu() {
                         : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
                   </h2>
                   {!isLoading && !error && (
-                    <span className="text-[11px] font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-lg tabular-nums">
+                    <span className="text-xs font-bold text-muted-foreground bg-muted px-3 py-1.5 rounded-lg tabular-nums">
                       {searchedItems.length} items
                     </span>
                   )}
