@@ -100,7 +100,7 @@ export default function Menu() {
               <HeroBanner />
 
               {/* Search */}
-              <div className="mb-4">
+              <div className="mb-5">
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
 
