@@ -28,55 +28,55 @@ export default function SelectCampus() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-5 bg-background relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-24 -right-24 w-[300px] h-[300px] rounded-full bg-primary/[0.03] blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-[250px] h-[250px] rounded-full bg-secondary/[0.03] blur-3xl" />
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-[340px]">
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-3"><Logo size="md" showText={false} /></div>
-          <h1 className="font-display text-lg font-bold text-foreground">GrabTheByte</h1>
-          <p className="text-xs text-muted-foreground mt-1">Find your campus to get started</p>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4"><Logo size="lg" showText={false} /></div>
+          <h1 className="font-display text-2xl font-bold text-foreground">GrabTheByte</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">Find your campus to get started</p>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-primary" />
+        <div className="bg-card rounded-2xl shadow-soft border border-border p-5">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-sm">Enter Campus Code</h2>
-              <p className="text-[10px] text-muted-foreground">Ask your canteen admin</p>
+              <h2 className="font-display font-bold text-base">Enter Campus Code</h2>
+              <p className="text-xs text-muted-foreground">Ask your canteen admin</p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="campus-code" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="campus-code" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Campus Code
               </Label>
               <Input
                 id="campus-code" type="text" placeholder="e.g. CMRTC"
                 value={campusCode}
                 onChange={(e) => { setCampusCode(e.target.value.toUpperCase()); setError(null); }}
-                className={`h-11 text-lg font-mono uppercase tracking-[0.2em] text-center rounded-xl border ${error ? "border-destructive" : "border-border focus:border-primary"}`}
+                className={`text-lg font-mono uppercase tracking-[0.2em] text-center rounded-xl border ${error ? "border-destructive" : "border-border focus:border-primary"}`}
                 maxLength={10} disabled={isLoading} autoFocus autoComplete="off"
               />
               {error && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 text-destructive text-[10px] mt-1">
-                  <AlertCircle className="w-3 h-3" /><span>{error}</span>
+                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1.5 text-destructive text-xs mt-1">
+                  <AlertCircle className="w-3.5 h-3.5" /><span>{error}</span>
                 </motion.div>
               )}
             </div>
-            <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading || !campusCode.trim()}>
-              {isLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Finding...</> : <>Continue <ArrowRight size={14} /></>}
+            <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow" disabled={isLoading || !campusCode.trim()}>
+              {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" />Finding...</> : <>Continue <ArrowRight size={16} /></>}
             </Button>
           </form>
         </div>
 
-        <p className="text-center text-[10px] text-muted-foreground mt-4">
+        <p className="text-center text-xs text-muted-foreground mt-5">
           Don't know your campus code? Contact your canteen administrator.
         </p>
       </motion.div>

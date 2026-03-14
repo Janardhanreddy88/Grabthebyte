@@ -15,14 +15,14 @@ import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
 const InputField = ({ id, label, icon: Icon, type = "text", placeholder, value, onChange, error: fieldError, disabled, maxLength }: any) => (
-  <div className="space-y-1">
-    <Label htmlFor={id} className="text-[11px] font-semibold text-muted-foreground">{label}</Label>
+  <div className="space-y-1.5">
+    <Label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{label}</Label>
     <div className="relative">
-      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
       <Input id={id} type={type} placeholder={placeholder} value={value} onChange={onChange} maxLength={maxLength}
-        className="h-9 pl-9 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
+        className="pl-10 text-sm rounded-xl border border-border focus:border-primary transition-colors" required disabled={disabled} />
     </div>
-    {fieldError && <p className="text-[10px] text-destructive flex items-center gap-1"><AlertTriangle size={10} /> {fieldError}</p>}
+    {fieldError && <p className="text-xs text-destructive flex items-center gap-1"><AlertTriangle size={12} /> {fieldError}</p>}
   </div>
 );
 
@@ -50,12 +50,11 @@ export default function Auth() {
   
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpToken, setOtpToken] = useState('');
-  const [resendCountdown, setResendCountdown] = useState(0); // For the 60s timer
+  const [resendCountdown, setResendCountdown] = useState(0);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
 
-  // Timer Effect for Resend Logic
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
     if (resendCountdown > 0) {
@@ -190,7 +189,7 @@ export default function Auth() {
       }
       
       setIsVerifyingOtp(true);
-      setResendCountdown(60); // Initial 60s cooldown
+      setResendCountdown(60);
       toast({ title: 'Check your email!', description: 'We sent a 6-digit verification code to your inbox.' });
       
     } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
@@ -242,69 +241,69 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-5 bg-background relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -right-32 w-[300px] h-[300px] rounded-full bg-primary/[0.03] blur-3xl" />
         <div className="absolute -bottom-32 -left-32 w-[250px] h-[250px] rounded-full bg-secondary/[0.03] blur-3xl" />
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-[340px]">
-        <div className="text-center mb-4">
-          <div className="flex justify-center mb-3"><Logo size="md" showText={false} /></div>
-          <h1 className="font-display text-lg font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Sign in to order your favorite food</p>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="flex justify-center mb-4"><Logo size="lg" showText={false} /></div>
+          <h1 className="font-display text-2xl font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to order your favorite food</p>
           {campus && (
-            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="mt-1.5 h-6 px-2 text-[10px] text-muted-foreground gap-1 rounded-md">
-              <RefreshCw size={10} /> Switch Campus
+            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="mt-2 px-3 text-xs text-muted-foreground gap-1.5 rounded-lg">
+              <RefreshCw size={12} /> Switch Campus
             </Button>
           )}
         </div>
 
-        <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
+        <div className="bg-card rounded-2xl shadow-soft border border-border p-5">
           <Tabs defaultValue="login" className="w-full" onValueChange={(v) => { clearErrors(); setIsVerifyingOtp(false); }}>
-            <TabsList className="grid w-full grid-cols-2 mb-4 h-8 rounded-xl bg-muted p-0.5">
-              <TabsTrigger value="login" className="rounded-lg text-xs font-bold">Login</TabsTrigger>
-              <TabsTrigger value="signup" className="rounded-lg text-xs font-bold">Sign Up</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-5 h-11 rounded-xl bg-muted p-1">
+              <TabsTrigger value="login" className="rounded-lg text-sm font-bold">Login</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-lg text-sm font-bold">Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="mt-0">
-              <form onSubmit={handleLogin} className="space-y-3">
+              <form onSubmit={handleLogin} className="space-y-4">
                 <InputField id="login-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} error={errors.loginEmail} disabled={isLoading} />
                 <InputField id="login-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={loginPassword} onChange={(e: any) => setLoginPassword(e.target.value)} error={errors.loginPassword} disabled={isLoading} />
-                <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Sign In <ArrowRight size={14} /></>}
+                <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
                 </Button>
                 {rateLimitMessage && (
-                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-canteen-warning/10 text-canteen-warning">
-                    <AlertTriangle size={12} /><span className="text-[10px] font-medium">{rateLimitMessage}</span>
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-canteen-warning/10 text-canteen-warning">
+                    <AlertTriangle size={14} /><span className="text-xs font-medium">{rateLimitMessage}</span>
                   </div>
                 )}
                 <div className="text-center">
-                  <button type="button" onClick={() => navigate('/forgot-password')} className="text-[10px] text-muted-foreground hover:text-primary transition-colors font-medium">Forgot your password?</button>
+                  <button type="button" onClick={() => navigate('/forgot-password')} className="text-xs text-muted-foreground hover:text-primary transition-colors font-medium">Forgot your password?</button>
                 </div>
               </form>
             </TabsContent>
 
             <TabsContent value="signup" className="mt-0">
               {!isVerifyingOtp ? (
-                <form onSubmit={handleSignup} className="space-y-3">
+                <form onSubmit={handleSignup} className="space-y-4">
                   <InputField id="signup-name" label="Full Name" icon={User} placeholder="John Doe" value={signupName} onChange={(e: any) => setSignupName(e.target.value)} error={errors.signupName} disabled={isLoading} />
                   <InputField id="signup-phone" label="Phone Number" icon={Phone} type="tel" placeholder="99999 99999" value={signupPhone} onChange={(e: any) => setSignupPhone(e.target.value)} error={errors.signupPhone} disabled={isLoading} />
                   <InputField id="signup-email" label="Email" icon={Mail} type="email" placeholder="you@college.edu" value={signupEmail} onChange={(e: any) => setSignupEmail(e.target.value)} error={errors.signupEmail} disabled={isLoading} />
                   <InputField id="signup-password" label="Password" icon={Lock} type="password" placeholder="••••••••" value={signupPassword} onChange={(e: any) => setSignupPassword(e.target.value)} error={errors.signupPassword} disabled={isLoading} />
-                  <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
+                  <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create Account <ArrowRight size={16} /></>}
                   </Button>
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4 text-center mt-4 pb-2">
                   <div className="flex justify-center mb-2">
-                    <div className="bg-primary/10 p-3 rounded-full">
-                      <Mail className="w-6 h-6 text-primary" />
+                    <div className="bg-primary/10 p-4 rounded-full">
+                      <Mail className="w-7 h-7 text-primary" />
                     </div>
                   </div>
-                  <h3 className="font-bold text-sm text-foreground">Check your email</h3>
-                  <p className="text-[11px] text-muted-foreground px-2">
+                  <h3 className="font-bold text-base text-foreground">Check your email</h3>
+                  <p className="text-sm text-muted-foreground px-2">
                     We sent a 6-digit code to <br/><span className="font-bold text-foreground">{signupEmail}</span>
                   </p>
                   
@@ -323,29 +322,29 @@ export default function Auth() {
                   </div>
                   
                   <div className="space-y-3 px-4">
-                    <Button type="submit" className="w-full h-9 font-bold rounded-xl gap-1.5 text-xs btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
-                      {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <>Verify & Enter <ArrowRight size={14} /></>}
+                    <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Verify & Enter <ArrowRight size={16} /></>}
                     </Button>
 
                     <button 
                       type="button" 
                       onClick={handleResendOtp} 
                       disabled={isLoading || resendCountdown > 0} 
-                      className={`text-[11px] w-full flex items-center justify-center gap-1.5 font-bold transition-colors ${resendCountdown > 0 ? 'text-muted-foreground' : 'text-primary hover:text-primary/80'}`}
+                      className={`text-xs w-full flex items-center justify-center gap-1.5 font-bold transition-colors ${resendCountdown > 0 ? 'text-muted-foreground' : 'text-primary hover:text-primary/80'}`}
                     >
                       {resendCountdown > 0 ? (
-                        <><Timer size={12} /> Resend in {resendCountdown}s</>
+                        <><Timer size={14} /> Resend in {resendCountdown}s</>
                       ) : (
-                        <><RefreshCw size={12} /> Resend Code</>
+                        <><RefreshCw size={14} /> Resend Code</>
                       )}
                     </button>
                   </div>
                   
-                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-4 font-medium underline block w-full">
+                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-xs text-muted-foreground hover:text-primary mt-4 font-medium underline block w-full">
                     Change Email
                   </button>
                   
-                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-[10px] text-muted-foreground hover:text-primary mt-2 font-medium">
+                  <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-xs text-muted-foreground hover:text-primary mt-2 font-medium">
                     ← Back to Sign Up
                   </button>
                 </form>
@@ -354,7 +353,7 @@ export default function Auth() {
           </Tabs>
         </div>
 
-        <p className="text-center text-[10px] text-muted-foreground mt-4">
+        <p className="text-center text-xs text-muted-foreground mt-5">
           By continuing, you agree to our{' '}
           <button onClick={() => navigate('/terms')} className="underline hover:text-foreground">Terms</button>
           {' & '}

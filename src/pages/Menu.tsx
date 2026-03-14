@@ -58,26 +58,26 @@ export default function Menu() {
     <PageTransition>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
-         <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
+        <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
           <div className="flex items-center justify-between px-4 lg:px-6 h-16">
             <div className="flex items-center gap-3">
               <Logo size="sm" />
               {campus && (
                 <div className="badge-vibrant">
-                  <MapPin size={11} />
-                  <span className="tracking-wider">{campus.code}</span>
+                  <MapPin size={12} />
+                  <span className="tracking-wider text-xs">{campus.code}</span>
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {user?.role === 'admin' && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-xl gap-1.5 h-8 text-xs font-semibold border-border/60"
+                  className="rounded-xl gap-1.5 text-xs font-semibold border-border/60"
                   onClick={() => navigate("/admin")}
                 >
-                  <LayoutDashboard size={14} />
+                  <LayoutDashboard size={15} />
                   <span className="hidden sm:inline">Admin</span>
                 </Button>
               )}
@@ -85,18 +85,18 @@ export default function Menu() {
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setIsProfileOpen(true)}
-                className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
+                className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
-                <User size={16} />
+                <User size={18} />
               </motion.button>
             </div>
           </div>
         </header>
 
-        {/* Main Content — Full Width */}
+        {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
-            <div className="p-4 lg:p-8">
+            <div className="p-4 lg:p-6">
               <HeroBanner />
 
               {/* Search */}
@@ -199,7 +199,7 @@ export default function Menu() {
 
           {/* Desktop Cart */}
           {totalItems > 0 && (
-            <aside className="hidden lg:block w-[340px] bg-card border-l border-border h-full overflow-y-auto">
+            <aside className="hidden lg:block w-[360px] bg-card border-l border-border h-full overflow-y-auto">
               <CartPanel />
             </aside>
           )}
