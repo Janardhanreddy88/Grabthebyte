@@ -19,7 +19,7 @@ export function CategoryChips({ selectedCategory, onSelectCategory }: CategoryCh
               whileTap={{ scale: 0.95 }}
               onClick={() => onSelectCategory(category.id)}
               className={cn(
-                'flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 border',
+                'flex-shrink-0 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-semibold transition-all duration-200 border',
                 isActive
                   ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                   : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
