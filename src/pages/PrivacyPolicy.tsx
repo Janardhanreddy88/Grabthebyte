@@ -55,7 +55,7 @@ export default function PrivacyPolicy() {
                 <strong>Important:</strong> GrabTheByte does <strong>NOT</strong> store your Credit/Debit card numbers, UPI PINs, or Net Banking passwords.
               </p>
               <p>
-                All payments are processed securely through our authorized payment gateway partner, <strong>Cashfree Payments India Pvt Ltd</strong>. When you make a payment, you are redirected to Cashfree's secure server. Your payment data is governed by Cashfree's privacy policy and security standards (PCI-DSS compliant).
+                All payments are processed securely through our authorized payment gateway partner, <strong>Razorpay Software Private Limited</strong>. When you make a payment, you are redirected to Razorpay's secure server. Your payment data is governed by Razorpay's privacy policy and security standards (PCI-DSS compliant).
               </p>
             </section>
 
@@ -79,7 +79,7 @@ export default function PrivacyPolicy() {
               </p>
               <ul className="list-disc pl-5 space-y-1">
                 <li><strong>Canteen Vendors:</strong> To prepare your specific order (e.g., sharing your Order ID and Item List).</li>
-                <li><strong>Cashfree Payments:</strong> To process your transaction and handle refunds.</li>
+                <li><strong>Razorpay:</strong> To process your transaction and handle refunds.</li>
                 <li><strong>Law Enforcement:</strong> If required by Indian law or court order.</li>
               </ul>
             </section>

@@ -39,7 +39,7 @@ export default function TermsAndConditions() {
             </p>
 
             <p>
-              3. The Platform is owned by <strong>GrabTheByte</strong>, a proprietorship/company operating with its registered office at <strong>29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
+              3. The Platform is owned and operated by <strong>Bareddy Janardhan Reddy</strong>, an individual operating under the brand name <strong>GrabTheByte</strong>, with its registered office at <strong>29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
             </p>
 
             <p>
@@ -60,6 +60,8 @@ export default function TermsAndConditions() {
 
             <ul className="list-disc pl-6 space-y-2">
               <li>To access and use the Services, you agree to provide true, accurate and complete information to us during and after registration, and you shall be responsible for all acts done through the use of your registered account on the Platform.</li>
+              <li><strong>GrabTheByte acts strictly as a technology infrastructure provider (SaaS)</strong> facilitating digital queue management and ordering. We are not a restaurant, food manufacturer, or food handler.</li>
+              <li>Payments are processed securely through authorized third-party payment gateways (such as Razorpay). We do not store your payment credentials.</li>
               <li>Neither we nor any third parties provide any warranty or guarantee as to the accuracy, timeliness, performance, completeness or suitability of the information and materials offered on this website or through the Services, for any specific purpose. You acknowledge that such information and materials may contain inaccuracies or errors and we expressly exclude liability for any such inaccuracies or errors to the fullest extent permitted by law.</li>
               <li>Your use of our Services and the Platform is solely and entirely at your own risk and discretion for which we shall not be liable to you in any manner. You are required to independently assess and ensure that the Services meet your requirements.</li>
               <li>The contents of the Platform and the Services are proprietary to us and are licensed to us. You will not have any authority to claim any intellectual property rights, title, or interest in its contents. The contents includes and is not limited to the design, layout, look and graphics.</li>
