@@ -19,6 +19,7 @@ import { CampusGate } from "@/components/CampusGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
 import { SessionExpiryHandler } from "@/components/SessionExpiryHandler";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { Loader2 } from "lucide-react";
 
 // Lazy loaded pages
@@ -87,6 +88,7 @@ const App = () => (
                             <Toaster />
                             <Sonner />
                             <OfflineDetector />
+                            <PWAInstallPrompt />
                             <BrowserRouter>
                               <SessionExpiryHandler warningThresholdMinutes={5} />
                               <Suspense fallback={<PageLoader />}>
