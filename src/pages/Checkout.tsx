@@ -254,7 +254,7 @@ export default function Checkout() {
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
-            <p className="text-2xl font-black text-foreground">₹{totalPrice}</p>
+            <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
           </div>
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
             <Button
