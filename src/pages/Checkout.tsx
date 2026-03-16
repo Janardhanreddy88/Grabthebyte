@@ -158,13 +158,13 @@ export default function Checkout() {
                   animate={{ opacity: 1 }}
                   className="p-4 flex gap-3.5"
                 >
-                  <div className="relative h-18 w-18 flex-shrink-0">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
                     <ImageWithFallback
                       src={item.image || "/placeholder.svg"}
                       alt={item.name}
                       className="h-full w-full rounded-lg object-cover border border-border/50"
                       fallbackIcon
-                      containerClassName="h-full w-full"
+                      containerClassName="h-16 w-16 sm:h-20 sm:w-20"
                     />
                     <div className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 rounded-full bg-foreground text-background text-[10px] font-bold flex items-center justify-center">
                       x{item.quantity}
