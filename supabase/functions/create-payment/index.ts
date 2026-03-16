@@ -20,13 +20,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const CASHFREE_APP_ID = Deno.env.get("CASHFREE_APP_ID");
-    const CASHFREE_SECRET_KEY = Deno.env.get("CASHFREE_SECRET_KEY");
+    const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID");
+    const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!CASHFREE_APP_ID || !CASHFREE_SECRET_KEY) {
-      throw new Error("Cashfree credentials not configured");
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+      throw new Error("Razorpay credentials not configured in Supabase Vault");
     }
 
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
@@ -67,51 +67,42 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Generate unique Cashfree order ID
-    const cfOrderId = `CF_${order.order_number}_${Date.now()}`;
+    // Encode keys for Razorpay Basic Auth
+    const basicAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
 
-    // Create Cashfree order - Production API
-    const cashfreeResponse = await fetch("https://api.cashfree.com/pg/orders", {
+    // Create Razorpay order - Production API
+    const razorpayResponse = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-version": "2023-08-01",
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
+        "Authorization": `Basic ${basicAuth}`,
       },
       body: JSON.stringify({
-        order_id: cfOrderId,
-        order_amount: amount,
-        order_currency: "INR",
-        customer_details: {
-          customer_id: orderId,
-          customer_name: customerName || "Customer",
+        amount: Math.round(amount * 100), // Razorpay requires amount in Paisa (₹1 = 100 paisa)
+        currency: "INR",
+        receipt: orderId, // Store your internal Supabase order ID here
+        notes: {
+          order_number: order.order_number,
           customer_email: customerEmail,
-          customer_phone: customerPhone || "9999999999",
-        },
-        order_meta: {
-          return_url: `${SUPABASE_URL}/functions/v1/payment-redirect?order_id=${orderId}&cf_order_id=${cfOrderId}`,
-          notify_url: `${SUPABASE_URL}/functions/v1/handle-webhook`,
-        },
-        order_note: `Order #${order.order_number}`,
+        }
       }),
     });
 
-    const cashfreeData = await cashfreeResponse.json();
+    const razorpayData = await razorpayResponse.json();
 
-    if (!cashfreeResponse.ok) {
-      console.error("Cashfree API error:", cashfreeData);
-      return new Response(JSON.stringify({ error: "Failed to create payment session", details: cashfreeData }), {
+    if (!razorpayResponse.ok) {
+      console.error("Razorpay API error:", razorpayData);
+      return new Response(JSON.stringify({ error: "Failed to create payment session", details: razorpayData }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Update order with Cashfree order ID
+    // Update order with the brand new Razorpay order ID
     const { error: updateError } = await supabase
       .from("orders")
       .update({
-        cf_order_id: cfOrderId,
+        razorpay_order_id: razorpayData.id,
         payment_status: "pending",
         updated_at: new Date().toISOString(),
       })
@@ -121,13 +112,13 @@ Deno.serve(async (req) => {
       console.error("Order update error:", updateError);
     }
 
-    console.log("Payment session created:", { orderId, cfOrderId, sessionId: cashfreeData.payment_session_id });
+    console.log("Razorpay session created:", { orderId, razorpayOrderId: razorpayData.id });
 
+    // Send the Razorpay Order ID back to the React frontend
     return new Response(
       JSON.stringify({
         success: true,
-        sessionId: cashfreeData.payment_session_id,
-        cfOrderId: cfOrderId,
+        razorpayOrderId: razorpayData.id,
         orderId: orderId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

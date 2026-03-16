@@ -3,150 +3,109 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-webhook-signature, x-webhook-timestamp",
+    "authorization, x-client-info, apikey, content-type, x-razorpay-signature",
 };
 
-// 🛡️ Helper: Verify the Cashfree Signature to block hackers
-async function verifySignature(ts: string, rawBody: string, signature: string, secretKey: string) {
-  const data = ts + rawBody;
+// 🛡️ Helper: Verify the Razorpay Signature
+async function verifySignature(rawBody: string, signature: string, secretKey: string) {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secretKey);
-  const dataToSign = encoder.encode(data);
+  const dataToSign = encoder.encode(rawBody);
 
-  // IMPORT KEY WITH "sign" PERMISSION (This fixes the InvalidAccessError!)
   const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-
-  // Generate the HMAC-SHA256 signature
   const signatureBytes = await crypto.subtle.sign("HMAC", key, dataToSign);
 
-  // Convert binary signature to Base64 safely and efficiently
-  const computedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+  // Convert binary to HEX (Razorpay standard)
+  const hashArray = Array.from(new Uint8Array(signatureBytes));
+  const computedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-  // Compare the calculated signature with the header sent by Cashfree
   return computedSignature === signature;
 }
 
 Deno.serve(async (req) => {
-  // 1. Handle CORS Preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const CASHFREE_SECRET_KEY = Deno.env.get("CASHFREE_SECRET_KEY");
+    const RAZORPAY_WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
 
-    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !CASHFREE_SECRET_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !RAZORPAY_WEBHOOK_SECRET) {
       throw new Error("Credentials not configured");
     }
 
-    // 2. GET HEADERS
-    const signature = req.headers.get("x-webhook-signature");
-    const timestamp = req.headers.get("x-webhook-timestamp");
+    const signature = req.headers.get("x-razorpay-signature");
+    if (!signature) return new Response(JSON.stringify({ message: "Missing signature" }), { status: 200, headers: corsHeaders });
 
-    if (!signature || !timestamp) {
-      console.error("Missing signature/timestamp headers");
-      return new Response(JSON.stringify({ message: "Missing headers" }), { status: 200, headers: corsHeaders });
-    }
-
-    // 3. READ RAW BODY (Required for exact signature math)
     const rawBody = await req.text();
-
-    // 4. VERIFY SIGNATURE (Security Check)
-    const isValid = await verifySignature(timestamp, rawBody, signature, CASHFREE_SECRET_KEY);
+    const isValid = await verifySignature(rawBody, signature, RAZORPAY_WEBHOOK_SECRET);
 
     if (!isValid) {
-      console.error("Invalid Signature! Potential hacking attempt.");
+      console.error("Invalid Signature!");
       return new Response(JSON.stringify({ message: "Invalid Signature" }), { status: 200, headers: corsHeaders });
     }
 
-    // 5. PARSE DATA
     const payload = JSON.parse(rawBody);
-    console.log("Webhook Verified & Received:", JSON.stringify(payload, null, 2));
+    const eventType = payload.event;
+    
+    // Safely extract IDs
+    const razorpayOrderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id;
+    const razorpayPaymentId = payload.payload?.payment?.entity?.id;
 
-    const eventType = payload.type;
-    const cfOrderId = payload.data?.order?.order_id;
-    const cfPaymentId = payload.data?.payment?.cf_payment_id;
-
-    if (!cfOrderId) {
-      return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
-    }
+    if (!razorpayOrderId) return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // 6. LOG WEBHOOK (For debugging/history)
-    const { error: logError } = await supabase.from("payment_webhooks").insert({
-      cf_order_id: cfOrderId,
-      cf_payment_id: cfPaymentId?.toString(),
+    // 6. LOG WEBHOOK (Using your logging table)
+    await supabase.from("payment_webhooks").insert({
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
       event_type: eventType,
       payload: payload,
     });
 
-    if (logError) console.error("Webhook Log Error:", logError);
-
-    // 7. GET CURRENT ORDER STATUS (From your Food App 'orders' table)
-    const { data: order, error: orderError } = await supabase
+    // 7. GET ORDER
+    const { data: order } = await supabase
       .from("orders")
       .select("id, status, payment_status")
-      .eq("cf_order_id", cfOrderId)
+      .eq("razorpay_order_id", razorpayOrderId)
       .maybeSingle();
 
-    if (orderError || !order) {
-      console.error("Order not found in DB:", cfOrderId);
-      return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
-    }
+    if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
 
-    // 8. DETERMINE NEW STATUS
+    // 8. STATUS LOGIC
     let newPaymentStatus = order.payment_status;
     let newOrderStatus = order.status;
-    const paymentStatus = payload.data?.payment?.payment_status;
 
-    if (eventType === "PAYMENT_SUCCESS_WEBHOOK" || paymentStatus === "SUCCESS") {
+    if (eventType === "payment.captured" || eventType === "order.paid") {
       newPaymentStatus = "completed";
       newOrderStatus = "confirmed";
-    } else if (
-      ["FAILED", "CANCELLED", "USER_DROPPED"].includes(paymentStatus) ||
-      eventType === "PAYMENT_FAILED_WEBHOOK"
-    ) {
+    } else if (eventType === "payment.failed") {
       newPaymentStatus = "failed";
     }
 
-    // 9. UPDATE DATABASE (With Race Condition Safety Lock)
+    // 9. UPDATE DATABASE
     if (newPaymentStatus !== order.payment_status) {
-      const { data: updatedRows, error: updateError } = await supabase
+      const { data: updatedRows } = await supabase
         .from("orders")
         .update({
           status: newOrderStatus,
           payment_status: newPaymentStatus,
-          cf_payment_id: cfPaymentId?.toString(),
+          razorpay_payment_id: razorpayPaymentId,
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id)
-        .eq("payment_status", "pending") // <--- CRITICAL: Prevents double-updates
+        .eq("payment_status", "pending") 
         .select();
 
-      if (updateError) console.error("Update Error:", updateError);
-
       // 10. ATOMIC STOCK DECREMENT
-      // Only runs if WE successfully updated the row to 'completed'
       if (updatedRows && updatedRows.length > 0 && newPaymentStatus === "completed") {
         await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
-        console.log("Stock decremented via Webhook for:", order.id);
-      } else {
-        console.log("Skipped stock update (already done or race condition handled)");
       }
     }
 
-    return new Response(JSON.stringify({ success: true, message: "Webhook processed perfectly" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
-    console.error("Webhook processing error:", error.message || error);
-    // Return 200 to prevent Cashfree from retrying constantly on code failures
-    return new Response(JSON.stringify({ success: false, message: "Internal Error" }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ success: false }), { status: 200, headers: corsHeaders });
   }
 });

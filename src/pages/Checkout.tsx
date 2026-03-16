@@ -68,8 +68,7 @@ export default function Checkout() {
         return;
       }
 
-      const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "cashfree", customerName: user.fullName, customerEmail: user.email });
-      
+const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "razorpay", customerName: user.fullName, customerEmail: user.email });      
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 
       } else { 

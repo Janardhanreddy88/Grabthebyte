@@ -6,111 +6,147 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { useCart } from '@/context/CartContext'; // Added to clear cart on success
-
-// 1. ADDED OFFICIAL NPM SDK
-import { load } from '@cashfreepayments/cashfree-js';
+import { useCart } from '@/context/CartContext';
 
 type PaymentState = 'loading' | 'initiating' | 'processing' | 'verifying' | 'success' | 'failed' | 'error';
+
+// Helper to inject Razorpay script dynamically
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 export default function Payment() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { clearCart } = useCart(); // Get clearCart function
+  const { clearCart } = useCart();
 
   const orderId = searchParams.get('order_id');
   const amount = searchParams.get('amount');
-  const cfOrderIdParam = searchParams.get('cf_order_id');
-  const isRedirect = searchParams.get('redirect') === 'true';
 
   const [paymentState, setPaymentState] = useState<PaymentState>('loading');
   const [orderNumber, setOrderNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const paymentInitiated = useRef(false);
-  const verificationAttempts = useRef(0);
-  const maxVerificationAttempts = 5;
 
-  // VERIFY PAYMENT
-  const verifyPayment = useCallback(async () => {
-    if (!orderId) return;
+  // 4. VERIFY THE PAYMENT (Calls Edge Function we will build in Phase 4)
+  const handlePaymentSuccess = async (response: any) => {
+    setPaymentState('verifying');
     try {
-      setPaymentState('verifying');
-      const { data, error } = await supabase.functions.invoke('verify-payment', { body: { orderId, cfOrderId: cfOrderIdParam } });
-      if (error) { setPaymentState('error'); setErrorMessage('Could not verify payment status'); return; }
-      
-      if (data.status === 'completed') {
-        setPaymentState('success'); 
-        setOrderNumber(data.orderNumber);
-        clearCart(); // Ensure cart is cleared if they paid from retry
-        setTimeout(() => navigate(`/order-success?order_id=${orderId}`), 2000);
-      } else if (data.status === 'failed') {
-        setPaymentState('failed'); setErrorMessage('Payment was not completed.');
-      } else {
-        verificationAttempts.current += 1;
-        if (verificationAttempts.current < maxVerificationAttempts) setTimeout(() => verifyPayment(), 2000);
-        else { setPaymentState('failed'); setErrorMessage('Verification timed out. Check My Orders.'); }
-      }
-    } catch { setPaymentState('error'); setErrorMessage('Could not verify payment'); }
-  }, [orderId, cfOrderIdParam, navigate, clearCart]);
+      const { data, error } = await supabase.functions.invoke('verify-payment', {
+        body: {
+          orderId: orderId,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_signature: response.razorpay_signature,
+        }
+      });
 
-  useEffect(() => { if (isRedirect && orderId) verifyPayment(); }, [isRedirect, orderId, verifyPayment]);
+      if (error || !data?.success) {
+        throw new Error('Payment verification failed on server');
+      }
+
+      setPaymentState('success');
+      clearCart();
+      toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
+      setTimeout(() => navigate(`/order-success?order_id=${orderId}`), 2000);
+
+    } catch (err) {
+      console.error(err);
+      setPaymentState('error');
+      setErrorMessage('Payment was charged, but verification failed. Contact support.');
+    }
+  };
 
   // INITIATE POPUP PAYMENT
   const initiatePayment = useCallback(async () => {
     if (!orderId || !amount || !user || paymentInitiated.current) return;
-    paymentInitiated.current = true; 
+    paymentInitiated.current = true;
     setPaymentState('initiating');
-    
+
     try {
-      // 1. Get order details
+      // 1. Load Razorpay Script
+      const res = await loadRazorpayScript();
+      if (!res) throw new Error("Razorpay SDK failed to load. Are you online?");
+
+      // 2. Get order details from DB
       const { data: order } = await supabase.from('orders').select('order_number, customer_name, customer_email').eq('id', orderId).single();
       if (!order) throw new Error('Order not found');
       setOrderNumber(order.order_number);
-      
-      // 2. Call your backend to get the Cashfree Session ID
+
+      // 3. Ask Backend to generate Razorpay Order ID
       const { data, error } = await supabase.functions.invoke('create-payment', {
-        body: { orderId, amount: parseFloat(amount), customerName: order.customer_name || user.fullName, customerEmail: order.customer_email || user.email, customerPhone: user.phone || '9999999999' }
+        body: {
+          orderId,
+          amount: parseFloat(amount),
+          customerName: order.customer_name || user.fullName,
+          customerEmail: order.customer_email || user.email,
+          customerPhone: user.phone || '9999999999'
+        }
       });
-      
-      if (error || !data?.sessionId) throw new Error(data?.error || 'Failed to create payment session');
-      
-      // 3. TRIGGER THE POPUP MODAL
+
+      if (error || !data?.razorpayOrderId) throw new Error(data?.error || 'Failed to create Razorpay session');
+
+      // 4. TRIGGER THE RAZORPAY POPUP MODAL
       setPaymentState('processing');
-      const cashfree = await load({ mode: 'sandbox' }); // WARNING: Change to production when live
-      
-      cashfree.checkout({ 
-        paymentSessionId: data.sessionId, 
-        redirectTarget: '_modal' // THE MAGIC FIX
-      }).then((result: any) => {
-        if (result.error) {
-           setPaymentState('failed');
-           setErrorMessage(result.error.message || 'Payment window closed.');
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
+        amount: Math.round(parseFloat(amount) * 100), 
+        currency: "INR",
+        name: "GrabTheByte",
+        description: `Order #${order.order_number}`,
+        image: "/pwa-192x192.png", // Your red PWA icon!
+        order_id: data.razorpayOrderId, 
+        handler: function (response: any) {
+          handlePaymentSuccess(response);
+        },
+        prefill: {
+          name: order.customer_name || user.fullName,
+          email: order.customer_email || user.email,
+          contact: user.phone || "9999999999"
+        },
+        theme: {
+          color: "#E50914" // GrabTheByte Red
+        },
+        modal: {
+          ondismiss: function() {
+            setPaymentState('failed');
+            setErrorMessage('Payment window was closed.');
+            paymentInitiated.current = false;
+          }
         }
-        if (result.redirect) {
-           // Success!
-           setPaymentState('success');
-           clearCart(); // Clear the cart instantly
-           toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
-           navigate(`/order-success?order_id=${orderId}`);
-        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        setPaymentState('failed');
+        setErrorMessage(response.error.description || 'Payment failed.');
+        paymentInitiated.current = false;
       });
+      rzp.open();
 
-    } catch (err) { 
-        setPaymentState('error'); 
-        setErrorMessage(err instanceof Error ? err.message : 'Payment initiation failed'); 
-        paymentInitiated.current = false; 
+    } catch (err) {
+      setPaymentState('error');
+      setErrorMessage(err instanceof Error ? err.message : 'Payment initiation failed');
+      paymentInitiated.current = false;
     }
-  }, [orderId, amount, user, clearCart, navigate, toast]);
+  }, [orderId, amount, user, navigate, toast]);
 
-  useEffect(() => { 
-      if (!isRedirect && orderId && amount && user && paymentState === 'loading') {
-          initiatePayment(); 
-      }
-  }, [isRedirect, orderId, amount, user, paymentState, initiatePayment]);
+  useEffect(() => {
+    if (orderId && amount && user && paymentState === 'loading') {
+      initiatePayment();
+    }
+  }, [orderId, amount, user, paymentState, initiatePayment]);
 
-  const handleRetry = () => { paymentInitiated.current = false; verificationAttempts.current = 0; setPaymentState('loading'); };
+  const handleRetry = () => { paymentInitiated.current = false; setPaymentState('loading'); };
 
   const StateIcon = ({ bg, children }: { bg: string; children: React.ReactNode }) => (
     <div className={`w-14 h-14 ${bg} rounded-full flex items-center justify-center mx-auto mb-4`}>{children}</div>
