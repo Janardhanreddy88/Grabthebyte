@@ -52,6 +52,20 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "be94972c-ff0b-4faa-ad5f-402ceedbf8ca",
+          safari_web_id: "web.onesignal.auto.05255d72-c150-4ea5-804e-422907370478",
+          notifyButton: {
+            enable: true,
+          },
+        });
+      });
+    </script>
   </head>
 
   <body class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary">

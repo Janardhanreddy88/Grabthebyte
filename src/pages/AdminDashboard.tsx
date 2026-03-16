@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query"; // Added to trigger re-fetches
+import { useToast } from "@/hooks/use-toast"; // Added for notifications
 import {
   useAdminMenuItems,
   useCreateMenuItem,
@@ -22,7 +24,7 @@ import { useWeeklyAnalytics } from "@/hooks/useWeeklyAnalytics";
 import { useTodayAnalytics } from "@/hooks/useTodayAnalytics";
 import {
   LogOut, QrCode, LayoutDashboard, UtensilsCrossed, TrendingUp,
-  Package, Users, User, Mail, Phone, Building2,
+  Package, Users, User, Mail, Phone, Building2, BellRing
 } from "lucide-react";
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
@@ -38,14 +40,47 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout: pinLogout } = useAdminAuth();
   const { logout: authLogout } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const [profileData, setProfileData] = useState<{
     full_name: string | null;
     email: string | null;
     phone: string | null;
     campus_name: string | null;
     campus_code: string | null;
+    campus_id: string | null; // Added to filter orders for this specific campus
   } | null>(null);
 
+  // --- AUDIO HELPER FOR NOTIFICATIONS ---
+  const playNotificationSound = useCallback(() => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      const playTone = (frequency: number, startTime: number, duration: number) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime + startTime);
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
+        gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + startTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + duration);
+        oscillator.start(audioCtx.currentTime + startTime);
+        oscillator.stop(audioCtx.currentTime + startTime + duration);
+      };
+
+      // Play a pleasant "Ding-Ding" sound
+      playTone(880, 0, 0.2); // A5
+      playTone(1108.73, 0.15, 0.4); // C#6
+      
+    } catch (e) {
+      console.log("Audio play failed, browser might be blocking auto-play", e);
+    }
+  }, []);
+
+  // --- FETCH PROFILE ---
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -60,11 +95,56 @@ export default function AdminDashboard() {
         setProfileData({
           full_name: data.full_name, email: data.email, phone: data.phone,
           campus_name: campusData?.name || null, campus_code: campusData?.code || null,
+          campus_id: data.campus_id // Store campus_id to listen for the right orders
         });
       }
     };
     fetchProfile();
   }, []);
+
+  // --- SUPABASE REALTIME LISTENER ---
+  useEffect(() => {
+    if (!profileData?.campus_id) return;
+
+    console.log("🔔 Listening for new orders for campus:", profileData.campus_id);
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE', // We listen for UPDATE because it goes from pending -> confirmed
+          schema: 'public',
+          table: 'orders',
+          filter: `campus_id=eq.${profileData.campus_id}`,
+        },
+        (payload) => {
+          // If the order just became 'confirmed' (payment successful)
+          if (payload.new.status === 'confirmed' && payload.old.status === 'pending') {
+            
+            // 1. Play the sound!
+            playNotificationSound();
+            
+            // 2. Show the toast popup!
+            toast({
+              title: "🔔 New Order Received!",
+              description: `Order #${payload.new.order_number} has been paid for.`,
+              className: "bg-green-600 text-white border-none",
+              duration: 5000,
+            });
+
+            // 3. Silently refresh all the data on the screen!
+            queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+            queryClient.invalidateQueries({ queryKey: ["today-analytics"] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profileData?.campus_id, queryClient, toast, playNotificationSound]);
 
   // Hooks
   const { data: menuItems = [], isLoading: menuLoading } = useAdminMenuItems();

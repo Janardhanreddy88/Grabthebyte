@@ -15,6 +15,10 @@ Deno.serve(async (req) => {
     const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    // NEW: Grab OneSignal credentials from Supabase Vault
+    const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID");
+    const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY");
 
     if (!RAZORPAY_KEY_SECRET) {
       throw new Error("Razorpay secret not configured in Supabase Vault");
@@ -36,10 +40,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. GET ORDER FROM DB
+    // 1. GET ORDER FROM DB (Notice we added campus_id here!)
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, status, payment_status, order_number")
+      .select("id, status, payment_status, order_number, campus_id")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -59,7 +63,6 @@ Deno.serve(async (req) => {
     }
 
     // 2. CRYPTOGRAPHIC SIGNATURE VERIFICATION
-    // We recreate the signature using your vault secret to ensure the payment wasn't spoofed
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",
@@ -83,7 +86,6 @@ Deno.serve(async (req) => {
     }
 
     // 3. DATABASE UPDATE & STOCK DECREMENT
-    // If the code reaches here, the payment is 100% legitimate and in your bank account.
     const { data: updatedRows, error: updateError } = await supabase
       .from("orders")
       .update({
@@ -105,6 +107,40 @@ Deno.serve(async (req) => {
     // Decrement stock ONLY if we successfully updated the row
     if (updatedRows && updatedRows.length > 0) {
       await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
+    }
+
+    // 4. BLAST MULTI-CAMPUS PUSH NOTIFICATION
+    if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY && order.campus_id) {
+      try {
+        console.log(`📣 Sending push to Admin at campus: ${order.campus_id}`);
+        const pushResponse = await fetch("https://onesignal.com/api/v1/notifications", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}` // Secure Server Key
+          },
+          body: JSON.stringify({
+            app_id: ONESIGNAL_APP_ID,
+            target_channel: "push",
+            // THIS IS THE MAGIC FILTER! 
+            // Only send if User is an Admin AND belongs to THIS specific campus
+            filters: [
+              { field: "tag", key: "role", relation: "=", value: "admin" },
+              { operator: "AND" },
+              { field: "tag", key: "campus_id", relation: "=", value: order.campus_id }
+            ],
+            headings: { en: "🔔 New Order Received!" },
+            contents: { en: `Order #${order.order_number} has been paid and is ready.` },
+            url: "https://grabthebyte.com/admin" // Sends them straight to dashboard when clicked
+          })
+        });
+        
+        const pushResult = await pushResponse.json();
+        console.log("🔔 OneSignal Response:", pushResult);
+      } catch (err) {
+        console.error("⚠️ Failed to send push notification:", err);
+        // We DON'T throw an error here because we don't want to break the user's checkout experience just because a notification failed!
+      }
     }
 
     return new Response(

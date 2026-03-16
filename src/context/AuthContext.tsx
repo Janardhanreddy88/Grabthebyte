@@ -3,6 +3,13 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { User, UserRole } from "@/types/canteen";
 
+// Tell TypeScript about the OneSignal window object we added in index.html
+declare global {
+  interface Window {
+    OneSignalDeferred: any[];
+  }
+}
+
 type UserAccess = { role: UserRole; campusId?: string };
 
 interface AuthContextType {
@@ -69,6 +76,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: access.role,
         campusId: access.campusId,
       });
+
+      // --- ONESIGNAL TAGGING LOGIC ---
+      // This securely links the device to the user's role and campus
+      if (typeof window !== "undefined" && window.OneSignalDeferred) {
+        window.OneSignalDeferred.push(async function(OneSignal: any) {
+          try {
+            await OneSignal.login(nextSession.user.id);
+            await OneSignal.User.addTags({
+              role: access.role,
+              campus_id: access.campusId || 'none'
+            });
+            console.log("🔔 OneSignal User Tagged:", access.role, access.campusId);
+          } catch (err) {
+            console.error("🔔 OneSignal Tagging Failed:", err);
+          }
+        });
+      }
     },
     [fetchUserAccess]
   );
@@ -186,6 +210,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
+      // --- ONESIGNAL LOGOUT LOGIC ---
+      if (typeof window !== "undefined" && window.OneSignalDeferred) {
+        window.OneSignalDeferred.push(async function(OneSignal: any) {
+          try {
+            await OneSignal.logout();
+          } catch (err) {
+            console.error("🔔 OneSignal Logout Failed:", err);
+          }
+        });
+      }
+
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);
