@@ -64,13 +64,13 @@ export default function MyOrders() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-4 py-3">
+      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between max-w-lg mx-auto">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => navigate('/menu')}><ArrowLeft size={20} /></Button>
-            <div><h1 className="text-base font-bold">My Orders</h1><p className="text-xs text-muted-foreground">Track your food</p></div>
+          <div className="flex items-center gap-2.5">
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
+            <div><h1 className="text-sm font-bold">My Orders</h1><p className="text-[11px] text-muted-foreground">Track your food</p></div>
           </div>
-          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
             <RefreshCw size={18} className={cn(isRefetching && "animate-spin")} />
           </Button>
         </div>
