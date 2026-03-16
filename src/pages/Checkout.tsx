@@ -89,25 +89,11 @@ export default function Checkout() {
         return;
       }
 
-<<<<<<< HEAD
-const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "razorpay", customerName: user.fullName, customerEmail: user.email });      
+      const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "razorpay", customerName: user.fullName, customerEmail: user.email });      
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 
       } else { 
         toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
-=======
-      const order = await createOrder({
-        items: cart,
-        total: totalPrice,
-        paymentMethod: "razorpay",
-        customerName: user.fullName,
-        customerEmail: user.email,
-      });
-      if (order) {
-        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`);
-      } else {
-        toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" });
->>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
       }
     } catch {
       toast({ title: "Error", description: "Something went wrong.", variant: "destructive" });
