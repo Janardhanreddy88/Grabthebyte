@@ -2,8 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+<<<<<<< HEAD
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-razorpay-signature",
+=======
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-razorpay-signature",
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 };
 
 // 🛡️ Helper: Verify the Razorpay Signature
@@ -17,7 +21,11 @@ async function verifySignature(rawBody: string, signature: string, secretKey: st
 
   // Convert binary to HEX (Razorpay standard)
   const hashArray = Array.from(new Uint8Array(signatureBytes));
+<<<<<<< HEAD
   const computedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+=======
+  const computedSignature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 
   return computedSignature === signature;
 }
@@ -35,7 +43,12 @@ Deno.serve(async (req) => {
     }
 
     const signature = req.headers.get("x-razorpay-signature");
+<<<<<<< HEAD
     if (!signature) return new Response(JSON.stringify({ message: "Missing signature" }), { status: 200, headers: corsHeaders });
+=======
+    if (!signature)
+      return new Response(JSON.stringify({ message: "Missing signature" }), { status: 200, headers: corsHeaders });
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 
     const rawBody = await req.text();
     const isValid = await verifySignature(rawBody, signature, RAZORPAY_WEBHOOK_SECRET);
@@ -47,12 +60,22 @@ Deno.serve(async (req) => {
 
     const payload = JSON.parse(rawBody);
     const eventType = payload.event;
+<<<<<<< HEAD
     
     // Safely extract IDs
     const razorpayOrderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id;
     const razorpayPaymentId = payload.payload?.payment?.entity?.id;
 
     if (!razorpayOrderId) return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
+=======
+
+    // Safely extract IDs
+    const razorpayOrderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id;
+    const razorpayPaymentId = payload.payload?.payment?.entity?.id;
+
+    if (!razorpayOrderId)
+      return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
@@ -71,7 +94,12 @@ Deno.serve(async (req) => {
       .eq("razorpay_order_id", razorpayOrderId)
       .maybeSingle();
 
+<<<<<<< HEAD
     if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
+=======
+    if (!order)
+      return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 
     // 8. STATUS LOGIC
     let newPaymentStatus = order.payment_status;
@@ -95,7 +123,11 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id)
+<<<<<<< HEAD
         .eq("payment_status", "pending") 
+=======
+        .eq("payment_status", "pending")
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
         .select();
 
       // 10. ATOMIC STOCK DECREMENT
@@ -104,8 +136,19 @@ Deno.serve(async (req) => {
       }
     }
 
+<<<<<<< HEAD
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false }), { status: 200, headers: corsHeaders });
   }
 });
+=======
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ success: false }), { status: 200, headers: corsHeaders });
+  }
+});
+7;
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7

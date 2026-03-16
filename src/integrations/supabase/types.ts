@@ -364,8 +364,6 @@ export type Database = {
         Row: {
           amount: number | null
           campus_id: string
-          cf_order_id: string | null
-          cf_payment_id: string | null
           collection_token: string | null
           commission_amount: number | null
           created_at: string
@@ -379,6 +377,9 @@ export type Database = {
           payment_status: string | null
           platform_fee: number | null
           qr_code: string | null
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+          razorpay_signature: string | null
           rejection_reason: string | null
           status: Database["public"]["Enums"]["order_status"]
           ticket_code: string | null
@@ -389,8 +390,6 @@ export type Database = {
         Insert: {
           amount?: number | null
           campus_id: string
-          cf_order_id?: string | null
-          cf_payment_id?: string | null
           collection_token?: string | null
           commission_amount?: number | null
           created_at?: string
@@ -404,6 +403,9 @@ export type Database = {
           payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
@@ -414,8 +416,6 @@ export type Database = {
         Update: {
           amount?: number | null
           campus_id?: string
-          cf_order_id?: string | null
-          cf_payment_id?: string | null
           collection_token?: string | null
           commission_amount?: number | null
           created_at?: string
@@ -429,6 +429,9 @@ export type Database = {
           payment_status?: string | null
           platform_fee?: number | null
           qr_code?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           ticket_code?: string | null
@@ -455,31 +458,31 @@ export type Database = {
       }
       payment_webhooks: {
         Row: {
-          cf_order_id: string
-          cf_payment_id: string | null
           created_at: string
           event_type: string
           id: string
           payload: Json | null
           processed_at: string | null
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
         }
         Insert: {
-          cf_order_id: string
-          cf_payment_id?: string | null
           created_at?: string
           event_type: string
           id?: string
           payload?: Json | null
           processed_at?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
         }
         Update: {
-          cf_order_id?: string
-          cf_payment_id?: string | null
           created_at?: string
           event_type?: string
           id?: string
           payload?: Json | null
           processed_at?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
         }
         Relationships: []
       }

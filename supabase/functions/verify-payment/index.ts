@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
       encoder.encode(RAZORPAY_KEY_SECRET),
       { name: "HMAC", hash: "SHA-256" },
       false,
+<<<<<<< HEAD
       ["sign"]
     );
     
@@ -73,6 +74,15 @@ Deno.serve(async (req) => {
     const hashBuffer = await crypto.subtle.sign("HMAC", key, data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const generatedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+=======
+      ["sign"],
+    );
+
+    const data = encoder.encode(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const hashBuffer = await crypto.subtle.sign("HMAC", key, data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const generatedSignature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+>>>>>>> e7bbb90e174aa7cb93c52c4c053ae01ae77445e7
 
     if (generatedSignature !== razorpay_signature) {
       console.error("URGENT: Invalid signature detected! Potential fraud attempt.");
