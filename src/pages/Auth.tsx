@@ -248,9 +248,9 @@ export default function Auth() {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-4"><Logo size="lg" showText={false} /></div>
-          <h1 className="font-display text-2xl font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
+        <div className="text-center mb-5">
+          <div className="flex justify-center mb-3"><Logo size="lg" showText={false} /></div>
+          <h1 className="font-display text-xl font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to order your favorite food</p>
           {campus && (
             <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="mt-2 px-3 text-xs text-muted-foreground gap-1.5 rounded-lg">
