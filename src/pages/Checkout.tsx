@@ -127,7 +127,7 @@ export default function Checkout() {
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto w-full px-4 py-5 pb-36 space-y-5">
+        <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
           <AnimatePresence>
             {stockError && (
               <motion.div
