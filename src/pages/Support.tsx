@@ -48,14 +48,14 @@ export default function Support() {
     <PageTransition>
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50">
-          <div className="flex items-center gap-3 px-4 h-14 max-w-7xl mx-auto">
+          <div className="flex items-center gap-3 px-3 h-12 max-w-7xl mx-auto">
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={18} /></Button>
             <Logo size="sm" />
             <div className="ml-auto flex items-center gap-1.5 text-muted-foreground"><HelpCircle size={16} /><span className="font-semibold text-sm hidden sm:inline">Help Center</span></div>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="max-w-7xl mx-auto px-3 py-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">

@@ -108,7 +108,7 @@ export default function Checkout() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40">
-        <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto w-full">
+        <div className="flex items-center justify-between px-3 h-12 max-w-2xl mx-auto w-full">
           <div className="flex items-center gap-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
@@ -127,7 +127,7 @@ export default function Checkout() {
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto w-full px-4 py-5 pb-36 space-y-5">
+        <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
           <AnimatePresence>
             {stockError && (
               <motion.div
@@ -254,11 +254,11 @@ export default function Checkout() {
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
-            <p className="text-2xl font-black text-foreground">₹{totalPrice}</p>
+            <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
           </div>
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
             <Button
-              className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
+              className="w-full h-10 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
               onClick={handlePlaceOrder}
               disabled={isLoading}
             >

@@ -50,14 +50,14 @@ export default function OrderDetails() {
     <PageTransition>
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border">
-          <div className="flex items-center justify-between px-4 h-14">
+          <div className="flex items-center justify-between px-3 h-12">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
             <h1 className="font-semibold text-base">Order Details</h1>
             <div className="w-11" />
           </div>
         </header>
 
-        <main className="p-4 max-w-lg mx-auto space-y-4">
+        <main className="p-3 max-w-lg mx-auto space-y-3">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="rounded-2xl overflow-hidden">
               <div className="bg-primary/5 p-4 flex items-center justify-between">

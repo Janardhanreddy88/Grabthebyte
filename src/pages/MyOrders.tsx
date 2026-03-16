@@ -64,19 +64,19 @@ export default function MyOrders() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-4 py-3">
+      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between max-w-lg mx-auto">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => navigate('/menu')}><ArrowLeft size={20} /></Button>
-            <div><h1 className="text-base font-bold">My Orders</h1><p className="text-xs text-muted-foreground">Track your food</p></div>
+          <div className="flex items-center gap-2.5">
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
+            <div><h1 className="text-sm font-bold">My Orders</h1><p className="text-[11px] text-muted-foreground">Track your food</p></div>
           </div>
-          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
             <RefreshCw size={18} className={cn(isRefetching && "animate-spin")} />
           </Button>
         </div>
       </header>
 
-      <main className="p-4 space-y-4 max-w-lg mx-auto">
+      <main className="p-3 space-y-3 max-w-lg mx-auto">
         {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-2xl" />) : orders.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><ShoppingBag className="h-7 w-7 text-muted-foreground" /></div>
@@ -96,16 +96,16 @@ export default function MyOrders() {
 
           return (
             <div key={order.id} className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-3">
+              <div className="p-3">
+                <div className="flex justify-between items-start mb-2.5">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-base">#{order.order_number}</span>
+                      <span className="font-bold text-sm">#{order.order_number}</span>
                       <Badge variant="outline" className={cn("capitalize border text-xs px-2 py-0.5", sc.className)}>{sc.label}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
                   </div>
-                  <span className="font-bold text-base text-primary">₹{order.total}</span>
+                  <span className="font-bold text-sm text-primary">₹{order.total}</span>
                 </div>
                 <Separator className="my-3" />
                 <div className="space-y-1 mb-3">

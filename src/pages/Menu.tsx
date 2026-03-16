@@ -59,7 +59,7 @@ export default function Menu() {
       <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
         <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none">
-          <div className="flex items-center justify-between px-4 lg:px-6 h-16">
+          <div className="flex items-center justify-between px-3 lg:px-5 h-13">
             <div className="flex items-center gap-3">
               <Logo size="sm" />
               {campus && (
@@ -85,7 +85,7 @@ export default function Menu() {
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setIsProfileOpen(true)}
-                className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
+                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
                 <User size={18} />
               </motion.button>
@@ -96,7 +96,7 @@ export default function Menu() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
-            <div className="p-4 lg:p-6">
+            <div className="p-3 lg:p-5">
               <HeroBanner />
 
               {/* Search */}
@@ -165,7 +165,7 @@ export default function Menu() {
                   variants={staggerContainer}
                   initial="initial"
                   animate="animate"
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-5"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4"
                 >
                   {searchedItems.map((item) => (
                     <motion.div key={item.id} variants={staggerItem}>
