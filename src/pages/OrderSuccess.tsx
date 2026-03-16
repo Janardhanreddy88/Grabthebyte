@@ -30,12 +30,12 @@ export default function OrderSuccess() {
     <div className="min-h-screen bg-green-500/5 flex items-center justify-center p-4">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm">
         <div className="bg-card rounded-2xl shadow-xl border border-border overflow-hidden">
-          <div className="bg-gradient-to-br from-green-600 to-green-500 p-8 text-center text-white">
+          <div className="bg-gradient-to-br from-green-600 to-green-500 p-6 text-center text-white">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}
-              className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-              <CheckCircle2 className="w-8 h-8 text-white" />
+              className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-sm">
+              <CheckCircle2 className="w-7 h-7 text-white" />
             </motion.div>
-            <h1 className="text-xl font-bold mb-1">Order Confirmed!</h1>
+            <h1 className="text-lg font-bold mb-1">Order Confirmed!</h1>
             <p className="text-green-100 text-sm opacity-90">Show this QR at the counter</p>
           </div>
 
