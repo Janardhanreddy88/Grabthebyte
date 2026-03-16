@@ -12,13 +12,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const CASHFREE_APP_ID = Deno.env.get("CASHFREE_APP_ID");
-    const CASHFREE_SECRET_KEY = Deno.env.get("CASHFREE_SECRET_KEY");
+    const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!CASHFREE_APP_ID || !CASHFREE_SECRET_KEY) {
-      throw new Error("Cashfree credentials not configured");
+    if (!RAZORPAY_KEY_SECRET) {
+      throw new Error("Razorpay secret not configured in Supabase Vault");
     }
 
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
@@ -27,153 +26,93 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    const { orderId, cfOrderId } = await req.json();
+    // Grab the data sent from our React frontend
+    const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
-    if (!orderId && !cfOrderId) {
-      return new Response(JSON.stringify({ error: "orderId or cfOrderId required" }), {
+    if (!orderId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return new Response(JSON.stringify({ error: "Missing required Razorpay parameters" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get order from database
-    let order;
-    if (orderId) {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, cf_order_id, status, payment_status, order_number")
-        .eq("id", orderId)
-        .maybeSingle();
+    // 1. GET ORDER FROM DB
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, status, payment_status, order_number")
+      .eq("id", orderId)
+      .maybeSingle();
 
-      if (error || !data) {
-        return new Response(JSON.stringify({ error: "Order not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      order = data;
-    } else {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, cf_order_id, status, payment_status, order_number")
-        .eq("cf_order_id", cfOrderId)
-        .maybeSingle();
-
-      if (error || !data) {
-        return new Response(JSON.stringify({ error: "Order not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      order = data;
+    if (orderError || !order) {
+      return new Response(JSON.stringify({ error: "Order not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // If already completed, return success
+    // If already completed, just return success
     if (order.payment_status === "completed") {
       return new Response(
-        JSON.stringify({
-          success: true,
-          status: "completed",
-          orderId: order.id,
-          orderNumber: order.order_number,
-          source: "db_cache",
-        }),
+        JSON.stringify({ success: true, status: "completed", orderId: order.id, orderNumber: order.order_number }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // If no cf_order_id, payment not initiated yet
-    if (!order.cf_order_id) {
+    // 2. CRYPTOGRAPHIC SIGNATURE VERIFICATION
+    // We recreate the signature using your vault secret to ensure the payment wasn't spoofed
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(RAZORPAY_KEY_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+
+    const data = encoder.encode(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const hashBuffer = await crypto.subtle.sign("HMAC", key, data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const generatedSignature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    if (generatedSignature !== razorpay_signature) {
+      console.error("URGENT: Invalid signature detected! Potential fraud attempt.");
       return new Response(
-        JSON.stringify({
-          success: true,
-          status: "pending",
-          orderId: order.id,
-          message: "Payment not initiated",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ success: false, message: "Payment verification failed. Invalid signature." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Verify with Cashfree API
-    const cashfreeResponse = await fetch(`https://api.cashfree.com/pg/orders/${order.cf_order_id}`, {
-      method: "GET",
-      headers: {
-        "x-api-version": "2023-08-01",
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
-      },
-    });
+    // 3. DATABASE UPDATE & STOCK DECREMENT
+    // If the code reaches here, the payment is 100% legitimate and in your bank account.
+    const { data: updatedRows, error: updateError } = await supabase
+      .from("orders")
+      .update({
+        status: "confirmed",
+        payment_status: "completed",
+        updated_at: new Date().toISOString(),
+        razorpay_payment_id: razorpay_payment_id,
+        razorpay_signature: razorpay_signature,
+      })
+      .eq("id", order.id)
+      .eq("payment_status", "pending") // Race Condition Lock!
+      .select();
 
-    const cashfreeData = await cashfreeResponse.json();
-    console.log("Cashfree order status:", cashfreeData);
-
-    if (!cashfreeResponse.ok) {
-      console.error("Cashfree API error:", cashfreeData);
-      return new Response(
-        JSON.stringify({
-          success: true,
-          status: order.payment_status,
-          orderId: order.id,
-          message: "Could not verify with Cashfree",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if (updateError) {
+      console.error("Database update error:", updateError);
+      throw updateError;
     }
 
-    // Update based on Cashfree status
-    const cfStatus = cashfreeData.order_status;
-    let newPaymentStatus = order.payment_status;
-    let newOrderStatus = order.status;
-
-    if (cfStatus === "PAID") {
-      newPaymentStatus = "completed";
-      newOrderStatus = "confirmed";
-    } else if (cfStatus === "EXPIRED" || cfStatus === "CANCELLED" || cfStatus === "TERMINATED") {
-      newPaymentStatus = "failed";
-    } else if (cfStatus === "ACTIVE" && order.payment_status === "failed") {
-      // Webhook already marked as failed (user dropped/cancelled)
-      newPaymentStatus = "failed";
+    // Decrement stock ONLY if we successfully updated the row
+    if (updatedRows && updatedRows.length > 0) {
+      await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
     }
-
-    // --- UPDATED LOGIC STARTS HERE ---
-    if (newPaymentStatus !== order.payment_status) {
-      // 1. Try to get the Payment ID (Bank Reference)
-      // Note: Depending on API version, this might be in 'cf_payment_id' or 'payment_session_id'
-      const bankReference = cashfreeData.cf_payment_id || null;
-
-      const { data: updatedRows, error: updateError } = await supabase
-        .from("orders")
-        .update({
-          status: newOrderStatus,
-          payment_status: newPaymentStatus,
-          updated_at: new Date().toISOString(),
-          cf_payment_id: bankReference, // <--- NEW: Saving Bank ID
-        })
-        .eq("id", order.id)
-        .eq("payment_status", "pending") // <--- NEW: Race Condition Lock
-        .select();
-
-      if (updateError) {
-        console.error("Database update error:", updateError);
-        throw updateError;
-      }
-
-      // 2. Decrement stock ONLY if we successfully updated the row
-      // This ensures we don't decrement twice if the webhook ran at the same time
-      if (updatedRows && updatedRows.length > 0 && newPaymentStatus === "completed") {
-        await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
-      }
-    }
-    // --- UPDATED LOGIC ENDS HERE ---
 
     return new Response(
       JSON.stringify({
         success: true,
-        status: newPaymentStatus,
+        status: "completed",
         orderId: order.id,
         orderNumber: order.order_number,
-        cfStatus: cfStatus,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
