@@ -96,11 +96,11 @@ export default function MyOrders() {
 
           return (
             <div key={order.id} className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-3">
+              <div className="p-3">
+                <div className="flex justify-between items-start mb-2.5">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-base">#{order.order_number}</span>
+                      <span className="font-bold text-sm">#{order.order_number}</span>
                       <Badge variant="outline" className={cn("capitalize border text-xs px-2 py-0.5", sc.className)}>{sc.label}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
