@@ -81,9 +81,9 @@ export default function Profile() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto p-4 space-y-6">
-        <div className="flex flex-col items-center py-6">
-          <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold mb-3">{getInitials(fullName)}</div>
+      <main className="max-w-lg mx-auto p-3 space-y-5">
+        <div className="flex flex-col items-center py-4">
+          <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold mb-2.5">{getInitials(fullName)}</div>
           <p className="text-xs text-muted-foreground">Your profile</p>
         </div>
 

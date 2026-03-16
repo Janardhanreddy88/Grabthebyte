@@ -55,10 +55,10 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
             quantity > 0 ? (
               <div className="flex items-center gap-1.5">
                 <motion.button whileTap={{ scale: 0.85 }} onClick={() => updateQuantity(item.id, quantity - 1)}
-                  className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center"><Minus size={16} strokeWidth={2.5} /></motion.button>
-                <span className="font-bold text-sm min-w-[1.75rem] text-center tabular-nums text-primary">{quantity}</span>
+                  className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center"><Minus size={14} strokeWidth={2.5} /></motion.button>
+                <span className="font-bold text-xs min-w-[1.5rem] text-center tabular-nums text-primary">{quantity}</span>
                 <motion.button whileTap={{ scale: 0.85 }} onClick={() => addToCart(item)}
-                  className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center"><Plus size={16} strokeWidth={2.5} /></motion.button>
+                  className="w-7 h-7 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><Plus size={14} strokeWidth={2.5} /></motion.button>
               </div>
             ) : (
               <Button size="sm" className="rounded-lg text-xs font-bold shadow-none gap-1.5 btn-glow" onClick={() => addToCart(item)}>

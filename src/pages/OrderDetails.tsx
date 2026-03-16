@@ -57,7 +57,7 @@ export default function OrderDetails() {
           </div>
         </header>
 
-        <main className="p-4 max-w-lg mx-auto space-y-4">
+        <main className="p-3 max-w-lg mx-auto space-y-3">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="rounded-2xl overflow-hidden">
               <div className="bg-primary/5 p-4 flex items-center justify-between">

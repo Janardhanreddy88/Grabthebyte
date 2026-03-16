@@ -258,7 +258,7 @@ export default function Checkout() {
           </div>
           <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
             <Button
-              className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
+              className="w-full h-10 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
               onClick={handlePlaceOrder}
               disabled={isLoading}
             >

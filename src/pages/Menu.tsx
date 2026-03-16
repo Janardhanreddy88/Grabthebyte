@@ -165,7 +165,7 @@ export default function Menu() {
                   variants={staggerContainer}
                   initial="initial"
                   animate="animate"
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-5"
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4"
                 >
                   {searchedItems.map((item) => (
                     <motion.div key={item.id} variants={staggerItem}>

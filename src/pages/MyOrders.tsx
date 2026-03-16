@@ -105,7 +105,7 @@ export default function MyOrders() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
                   </div>
-                  <span className="font-bold text-base text-primary">₹{order.total}</span>
+                  <span className="font-bold text-sm text-primary">₹{order.total}</span>
                 </div>
                 <Separator className="my-3" />
                 <div className="space-y-1 mb-3">

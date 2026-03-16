@@ -259,9 +259,9 @@ export default function Auth() {
           )}
         </div>
 
-        <div className="bg-card rounded-2xl shadow-soft border border-border p-5">
+        <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
           <Tabs defaultValue="login" className="w-full" onValueChange={(v) => { clearErrors(); setIsVerifyingOtp(false); }}>
-            <TabsList className="grid w-full grid-cols-2 mb-5 h-11 rounded-xl bg-muted p-1">
+            <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-xl bg-muted p-1">
               <TabsTrigger value="login" className="rounded-lg text-sm font-bold">Login</TabsTrigger>
               <TabsTrigger value="signup" className="rounded-lg text-sm font-bold">Sign Up</TabsTrigger>
             </TabsList>

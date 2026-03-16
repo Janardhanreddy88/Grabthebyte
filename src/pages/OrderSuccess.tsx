@@ -39,14 +39,14 @@ export default function OrderSuccess() {
             <p className="text-green-100 text-sm opacity-90">Show this QR at the counter</p>
           </div>
 
-          <div className="p-6 text-center space-y-5">
-            <div className="bg-white p-4 rounded-xl border-2 border-dashed border-border inline-block">
-              <QRCodeSVG value={collectionToken || orderId || ''} size={160} level="H" />
+          <div className="p-5 text-center space-y-4">
+            <div className="bg-white p-3 rounded-xl border-2 border-dashed border-border inline-block">
+              <QRCodeSVG value={collectionToken || orderId || ''} size={140} level="H" />
             </div>
 
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Order Number</p>
-              <p className="text-3xl font-black text-foreground tracking-tight">#{orderNumber}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Order Number</p>
+              <p className="text-2xl font-black text-foreground tracking-tight">#{orderNumber}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">

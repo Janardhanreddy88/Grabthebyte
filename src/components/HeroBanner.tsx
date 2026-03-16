@@ -5,7 +5,7 @@ import heroBannerImg from '@/assets/hero-banner.jpg';
 export function HeroBanner() {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-      className="relative overflow-hidden rounded-2xl mb-5">
+      className="relative overflow-hidden rounded-2xl mb-4">
       <div className="absolute inset-0">
         <img src={heroBannerImg} alt="Fresh campus food" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-foreground/90 via-foreground/60 to-foreground/20" />

@@ -55,7 +55,7 @@ export default function Support() {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="max-w-7xl mx-auto px-3 py-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
