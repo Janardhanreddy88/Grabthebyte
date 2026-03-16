@@ -108,7 +108,7 @@ export default function Checkout() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40">
-        <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto w-full">
+        <div className="flex items-center justify-between px-3 h-12 max-w-2xl mx-auto w-full">
           <div className="flex items-center gap-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
