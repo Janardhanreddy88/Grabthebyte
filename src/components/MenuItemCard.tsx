@@ -46,11 +46,11 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
         )}
       </div>
 
-      <div className="p-3.5 lg:p-4">
-        <h3 className="font-display font-semibold text-sm lg:text-base text-foreground line-clamp-1 leading-snug">{item.name}</h3>
-        <p className="text-xs lg:text-sm text-muted-foreground line-clamp-1 mt-1">{item.description}</p>
-        <div className="flex items-center justify-between mt-3 gap-2">
-          <span className="text-base lg:text-lg font-bold text-foreground tabular-nums">₹{item.price}</span>
+      <div className="p-2.5 lg:p-3">
+        <h3 className="font-display font-semibold text-xs lg:text-sm text-foreground line-clamp-1 leading-snug">{item.name}</h3>
+        <p className="text-[11px] lg:text-xs text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>
+        <div className="flex items-center justify-between mt-2 gap-2">
+          <span className="text-sm lg:text-base font-bold text-foreground tabular-nums">₹{item.price}</span>
           {!isSoldOut ? (
             quantity > 0 ? (
               <div className="flex items-center gap-1.5">
