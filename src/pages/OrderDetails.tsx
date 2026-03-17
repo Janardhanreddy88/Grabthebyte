@@ -49,7 +49,7 @@ export default function OrderDetails() {
   return (
     <PageTransition>
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border">
+        <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border safe-top">
           <div className="flex items-center justify-between px-3 h-12">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
             <h1 className="font-semibold text-base">Order Details</h1>

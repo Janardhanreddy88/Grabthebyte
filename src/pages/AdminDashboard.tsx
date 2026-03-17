@@ -186,7 +186,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border">
+      <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border safe-top">
         <div className="flex items-center justify-between px-4 lg:px-6 h-12">
           <Logo size="sm" />
           <div className="flex items-center gap-1.5">

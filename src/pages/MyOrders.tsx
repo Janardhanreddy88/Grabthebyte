@@ -64,7 +64,7 @@ export default function MyOrders() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-2.5">
+      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-2.5 safe-top">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2.5">
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
