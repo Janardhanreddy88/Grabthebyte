@@ -28,7 +28,7 @@ export default function SelectCampus() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-5 bg-background relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-5 bg-background relative overflow-hidden safe-top safe-bottom">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-24 -right-24 w-[300px] h-[300px] rounded-full bg-primary/[0.03] blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-[250px] h-[250px] rounded-full bg-secondary/[0.03] blur-3xl" />

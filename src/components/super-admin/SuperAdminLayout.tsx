@@ -179,7 +179,7 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
+        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30 safe-top">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"

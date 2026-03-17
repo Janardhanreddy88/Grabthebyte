@@ -299,3 +299,11 @@
 .fab-shadow {
   box-shadow: 0 8px 32px -4px rgb(0 0 0 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.04);
 }
+
+/* ─── Safe Area Insets (Capacitor / edge-to-edge displays) ─── */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+}
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+}
