@@ -6,7 +6,6 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -16,12 +15,12 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
-    // NEW: Grab OneSignal credentials from Supabase Vault
+    // Grab OneSignal credentials from Supabase Vault
     const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID");
     const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY");
 
     if (!RAZORPAY_KEY_SECRET) {
-      throw new Error("Razorpay secret not configured in Supabase Vault");
+      throw new Error("Razorpay secret not configured");
     }
 
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
@@ -29,8 +28,6 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
-
-    // Grab the data sent from our React frontend
     const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
     if (!orderId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -40,7 +37,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. GET ORDER FROM DB (Notice we added campus_id here!)
+    // 1. GET ORDER FROM DB
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select("id, status, payment_status, order_number, campus_id")
@@ -54,7 +51,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If already completed, just return success
     if (order.payment_status === "completed") {
       return new Response(
         JSON.stringify({ success: true, status: "completed", orderId: order.id, orderNumber: order.order_number }),
@@ -62,7 +58,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. CRYPTOGRAPHIC SIGNATURE VERIFICATION
+    // 2. SIGNATURE VERIFICATION
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",
@@ -78,14 +74,13 @@ Deno.serve(async (req) => {
     const generatedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
     if (generatedSignature !== razorpay_signature) {
-      console.error("URGENT: Invalid signature detected! Potential fraud attempt.");
       return new Response(
-        JSON.stringify({ success: false, message: "Payment verification failed. Invalid signature." }),
+        JSON.stringify({ success: false, message: "Payment verification failed." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // 3. DATABASE UPDATE & STOCK DECREMENT
+    // 3. DATABASE UPDATE & STOCK
     const { data: updatedRows, error: updateError } = await supabase
       .from("orders")
       .update({
@@ -96,20 +91,16 @@ Deno.serve(async (req) => {
         razorpay_signature: razorpay_signature,
       })
       .eq("id", order.id)
-      .eq("payment_status", "pending") // Race Condition Lock!
+      .eq("payment_status", "pending")
       .select();
 
-    if (updateError) {
-      console.error("Database update error:", updateError);
-      throw updateError;
-    }
+    if (updateError) throw updateError;
 
-    // Decrement stock ONLY if we successfully updated the row
     if (updatedRows && updatedRows.length > 0) {
       await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
     }
 
-    // 4. BLAST MULTI-CAMPUS PUSH NOTIFICATION
+    // 4. MULTI-CAMPUS PUSH NOTIFICATION
     if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY && order.campus_id) {
       try {
         console.log(`📣 Sending push to Admin at campus: ${order.campus_id}`);
@@ -117,21 +108,17 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}` // Secure Server Key
+            "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}` 
           },
           body: JSON.stringify({
             app_id: ONESIGNAL_APP_ID,
-            target_channel: "push",
-            // THIS IS THE MAGIC FILTER! 
-            // Only send if User is an Admin AND belongs to THIS specific campus
+            // OneSignal assumes AND when objects are just listed sequentially!
             filters: [
               { field: "tag", key: "role", relation: "=", value: "admin" },
-              { operator: "AND" },
               { field: "tag", key: "campus_id", relation: "=", value: order.campus_id }
             ],
             headings: { en: "🔔 New Order Received!" },
             contents: { en: `Order #${order.order_number} has been paid and is ready.` },
-            url: "https://grabthebyte.com/admin" // Sends them straight to dashboard when clicked
           })
         });
         
@@ -139,8 +126,9 @@ Deno.serve(async (req) => {
         console.log("🔔 OneSignal Response:", pushResult);
       } catch (err) {
         console.error("⚠️ Failed to send push notification:", err);
-        // We DON'T throw an error here because we don't want to break the user's checkout experience just because a notification failed!
       }
+    } else {
+      console.log("⚠️ Skipped Push: Missing API Keys or Campus ID");
     }
 
     return new Response(
@@ -153,7 +141,6 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
-    console.error("Verify payment error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,

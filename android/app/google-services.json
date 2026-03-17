@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "142868464114",
+    "project_id": "grabthebyte",
+    "storage_bucket": "grabthebyte.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142868464114:android:036c4ed7418f14d179ab6b",
+        "android_client_info": {
+          "package_name": "com.grabthebyte.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTuhLy2x8dC-w9myjGPqaAXZURhJkTjV0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

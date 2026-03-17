@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, ReactNode, use
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { User, UserRole } from "@/types/canteen";
+import OneSignalNative from 'onesignal-cordova-plugin'; // <-- ADDED NATIVE PLUGIN
+import { Capacitor } from '@capacitor/core'; // <-- ADDED CAPACITOR DETECTOR
 
 // Tell TypeScript about the OneSignal window object we added in index.html
 declare global {
@@ -77,9 +79,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         campusId: access.campusId,
       });
 
-      // --- ONESIGNAL TAGGING LOGIC ---
-      // This securely links the device to the user's role and campus
-      if (typeof window !== "undefined" && window.OneSignalDeferred) {
+      // --- ONESIGNAL DUAL-POWER TAGGING LOGIC ---
+      const isNative = Capacitor.isNativePlatform();
+      console.log("📱 DEVICE CHECK: Is this native?", isNative);
+
+      if (isNative) {
+        // 📱 ANDROID NATIVE APP LOGIC
+        try {
+          OneSignalNative.initialize("be94972c-ff0b-4faa-ad5f-402ceedbf8ca");
+          OneSignalNative.login(nextSession.user.id);
+          OneSignalNative.User.addTags({
+            role: access.role,
+            campus_id: access.campusId || 'none'
+          });
+          console.log("📱 Native OneSignal User Tagged:", access.role, access.campusId);
+        } catch (err) {
+          console.error("📱 Native OneSignal Tagging Failed:", err);
+        }
+      } else if (typeof window !== "undefined" && window.OneSignalDeferred) {
+        // 💻 WEB BROWSER PWA LOGIC
         window.OneSignalDeferred.push(async function(OneSignal: any) {
           try {
             await OneSignal.login(nextSession.user.id);
@@ -87,9 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: access.role,
               campus_id: access.campusId || 'none'
             });
-            console.log("🔔 OneSignal User Tagged:", access.role, access.campusId);
+            console.log("💻 Web OneSignal User Tagged:", access.role, access.campusId);
           } catch (err) {
-            console.error("🔔 OneSignal Tagging Failed:", err);
+            console.error("💻 Web OneSignal Tagging Failed:", err);
           }
         });
       }
@@ -103,15 +121,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       const { data, error } = await supabase.auth.getUser();
-      
-      // If user doesn't exist anymore, force logout
       if (error || !data.user) {
         await supabase.auth.signOut();
         setSession(null);
         setUser(null);
       }
     } catch {
-      // On error, force logout for security
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);
@@ -122,20 +137,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
-
-      // Only sync state here; defer any Supabase reads to avoid deadlocks
       setSession(nextSession);
-
       setTimeout(() => {
         if (!mounted) return;
         setFromSession(nextSession).finally(() => setIsLoading(false));
       }, 0);
     });
 
-    // THEN get current session
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setFromSession(data.session).finally(() => setIsLoading(false));
@@ -147,16 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [setFromSession]);
 
-  // Periodically validate session (every 5 minutes)
   useEffect(() => {
     if (!session) return;
-
-    // Validate immediately on mount/session change
     validateSession();
-
-    // Then validate periodically
     const interval = setInterval(validateSession, 300000);
-
     return () => clearInterval(interval);
   }, [session, validateSession]);
 
@@ -172,7 +176,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) return { success: false, error: error.message };
 
         const role = data.user ? (await fetchUserAccess(data.user.id)).role : undefined;
-        // navigation is handled elsewhere via onAuthStateChange
         return { success: true, role };
       } catch {
         return { success: false, error: "An unexpected error occurred" };
@@ -210,13 +213,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
-      // --- ONESIGNAL LOGOUT LOGIC ---
-      if (typeof window !== "undefined" && window.OneSignalDeferred) {
+      // --- ONESIGNAL DUAL-POWER LOGOUT LOGIC ---
+      const isNative = Capacitor.isNativePlatform();
+
+      if (isNative) {
+        try {
+          OneSignalNative.logout();
+          console.log("📱 Native OneSignal Logged out");
+        } catch (err) {
+          console.error("📱 Native OneSignal Logout Failed:", err);
+        }
+      } else if (typeof window !== "undefined" && window.OneSignalDeferred) {
         window.OneSignalDeferred.push(async function(OneSignal: any) {
           try {
             await OneSignal.logout();
+            console.log("💻 Web OneSignal Logged out");
           } catch (err) {
-            console.error("🔔 OneSignal Logout Failed:", err);
+            console.error("💻 Web OneSignal Logout Failed:", err);
           }
         });
       }
@@ -230,7 +243,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
-    // Local UI-only updates (Profile page). Do NOT persist roles client-side.
     setUser((prev) => {
       if (!prev) return prev;
       const next: User = { ...prev, ...updates, role: prev.role };
@@ -263,6 +275,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
   const isKiosk = user?.role === "kiosk";
   const isSuperAdmin = user?.role === "super_admin";
+
+  // FORCE NOTIFICATION POPUP ON APP START
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        console.log("🚀 Initializing OneSignal Native...");
+        OneSignalNative.initialize("be94972c-ff0b-4faa-ad5f-402ceedbf8ca");
+        
+        OneSignalNative.Notifications.requestPermission(true).then((accepted: boolean) => {
+          console.log("📱 User accepted notifications:", accepted);
+        });
+      } catch (err) {
+        console.error("❌ ONESIGNAL CRASH:", err);
+      }
+    }
+  }, []);
 
   const value = useMemo<AuthContextType>(
     () => ({
