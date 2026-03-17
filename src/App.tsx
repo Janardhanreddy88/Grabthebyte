@@ -19,7 +19,7 @@ import { CampusGate } from "@/components/CampusGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
 import { SessionExpiryHandler } from "@/components/SessionExpiryHandler";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+
 import { Loader2 } from "lucide-react";
 
 // Lazy loaded pages
