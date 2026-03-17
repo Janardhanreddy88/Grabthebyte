@@ -257,7 +257,7 @@ export default function Payment() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-4 py-2.5">
+      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-4 py-2.5 safe-top">
         <div className="flex items-center gap-2 max-w-lg mx-auto">
           <Button
             variant="ghost"

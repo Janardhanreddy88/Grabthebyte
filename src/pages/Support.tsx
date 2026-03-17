@@ -47,7 +47,7 @@ export default function Support() {
   return (
     <PageTransition>
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 safe-top">
           <div className="flex items-center gap-3 px-3 h-12 max-w-7xl mx-auto">
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={18} /></Button>
             <Logo size="sm" />

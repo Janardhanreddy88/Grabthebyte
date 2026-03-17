@@ -11,7 +11,7 @@ export default function RefundPolicy() {
     <PageTransition>
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border/50">
+        <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border/50 safe-top">
           <div className="flex items-center gap-3 px-4 lg:px-6 h-14">
             <Button
               variant="ghost"
