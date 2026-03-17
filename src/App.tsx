@@ -88,7 +88,7 @@ const App = () => (
                             <Toaster />
                             <Sonner />
                             <OfflineDetector />
-                            <PWAInstallPrompt />
+                            
                             <BrowserRouter>
                               <SessionExpiryHandler warningThresholdMinutes={5} />
                               <Suspense fallback={<PageLoader />}>
