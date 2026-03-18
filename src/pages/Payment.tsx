@@ -62,7 +62,7 @@ export default function Payment() {
     try {
       const { data: order } = await supabase
         .from('orders')
-        .select('order_number, customer_name, customer_email, customer_phone')
+        .select('order_number, customer_name, customer_email')
         .eq('id', orderId)
         .single();
         
