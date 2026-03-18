@@ -11,6 +11,12 @@ import { Plus, Trash2, Loader2, Upload, X, ChevronDown, Coffee, UtensilsCrossed,
 import { toast } from 'sonner';
 import { useImageUpload } from '@/hooks/useImageUpload';
 
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  breakfast: <Coffee size={16} />,
+  lunch: <UtensilsCrossed size={16} />,
+  snacks: <Cookie size={16} />,
+};
+
 const ADMIN_CATEGORIES = [
   { id: 'breakfast', name: 'Breakfast' },
   { id: 'lunch', name: 'Lunch' },
