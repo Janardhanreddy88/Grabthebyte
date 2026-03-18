@@ -49,40 +49,45 @@ export default function MyOrders() {
 
   useEffect(() => {
     if (isLoading || !orders.length) return;
-    orders.forEach(o => { if (o.status === 'pending' && o.payment_status === 'pending' && (currentTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS) expirePendingOrder(o.id); });
+    orders.forEach(o => { 
+      // Auto-cancel if it's pending OR failed but hasn't fully timed out yet.
+      if ((o.status === 'pending' || o.status === 'failed') && o.payment_status !== 'completed' && (currentTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS) {
+        expirePendingOrder(o.id); 
+      }
+    });
   }, [orders, currentTime, expirePendingOrder]);
 
   const getStatusConfig = (o: Order) => {
     const isExpired = checkIsExpired(o);
-    if (o.status === 'confirmed' && (o.payment_status === 'confirmed' || o.payment_status === 'completed')) return { label: 'Successful', className: 'bg-green-500/10 text-green-600 border-green-500/20' };
-    if (o.status === 'pending' && o.payment_status === 'pending') return { label: 'Payment Pending', className: 'bg-orange-500/10 text-orange-600 border-orange-500/20' };
-    if (!isExpired && (o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed')) return { label: 'Payment Failed', className: 'bg-destructive/10 text-destructive border-destructive/20' };
-    if (o.status === 'collected') return { label: 'Collected', className: 'bg-muted text-muted-foreground border-border' };
-    if (isExpired) return { label: 'Order Expired', className: 'bg-muted text-muted-foreground border-border' };
-    return { label: 'Processing', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
+    if (o.status === 'confirmed' && (o.payment_status === 'confirmed' || o.payment_status === 'completed')) return { label: 'Ready for Pickup', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
+    if (o.status === 'pending' && o.payment_status === 'pending') return { label: 'Payment Pending', className: 'bg-orange-50 text-orange-600 border-orange-200' };
+    if (!isExpired && (o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed')) return { label: 'Payment Failed', className: 'bg-red-50 text-red-600 border-red-200' };
+    if (o.status === 'collected') return { label: 'Collected', className: 'bg-blue-50 text-blue-600 border-blue-200' };
+    if (isExpired) return { label: 'Expired', className: 'bg-gray-100 text-gray-600 border-gray-200' };
+    return { label: 'Processing', className: 'bg-yellow-50 text-yellow-600 border-yellow-200' };
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-2.5 safe-top">
+    <div className="min-h-screen bg-gray-50/80 pb-20">
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-gray-200 px-3 py-2.5 safe-top shadow-sm">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2.5">
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
-            <div><h1 className="text-sm font-bold">My Orders</h1><p className="text-[11px] text-muted-foreground">Track your food</p></div>
+            <div><h1 className="text-sm font-black text-gray-900">My Orders</h1><p className="text-[11px] font-medium text-gray-500">Track your food</p></div>
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-600" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
             <RefreshCw size={18} className={cn(isRefetching && "animate-spin")} />
           </Button>
         </div>
       </header>
 
-      <main className="p-3 space-y-3 max-w-lg mx-auto">
-        {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-2xl" />) : orders.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><ShoppingBag className="h-7 w-7 text-muted-foreground" /></div>
-            <h3 className="font-semibold text-base">No orders yet</h3>
-            <p className="text-muted-foreground text-sm mt-1">Place an order now!</p>
-            <Button className="mt-4" onClick={() => navigate('/menu')}>Browse Menu</Button>
+      <main className="p-4 space-y-4 max-w-lg mx-auto">
+        {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-3xl" />) : orders.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-20 h-20 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center mx-auto mb-5"><ShoppingBag className="h-8 w-8 text-gray-400" /></div>
+            <h3 className="font-bold text-lg text-gray-900">No orders yet</h3>
+            <p className="text-gray-500 text-sm mt-1 mb-6">Hungry? Place an order now!</p>
+            <Button className="font-bold rounded-xl h-11 px-6 shadow-md" onClick={() => navigate('/menu')}>Browse Menu</Button>
           </div>
         ) : orders.map((order) => {
           const sc = getStatusConfig(order);
@@ -92,74 +97,125 @@ export default function MyOrders() {
           const isPending = order.status === 'pending' && order.payment_status === 'pending' && !timedOut;
           const isCollected = order.status === 'collected';
           const isExp = checkIsExpired(order);
-          const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed');
+          const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed');
+
+          const goToReceipt = () => navigate(`/order/${order.id}`);
+          const handleRetry = (e: React.MouseEvent) => { 
+            e.stopPropagation(); 
+            navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`); 
+          };
 
           return (
-            <div key={order.id} className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
-              <div className="p-3">
-                <div className="flex justify-between items-start mb-2.5">
+            <div key={order.id} className="bg-white rounded-[1.5rem] border border-black/[0.04] shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden">
+              <div className="p-4">
+                <div className="flex justify-between items-start mb-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm">#{order.order_number}</span>
-                      <Badge variant="outline" className={cn("capitalize border text-xs px-2 py-0.5", sc.className)}>{sc.label}</Badge>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="font-black text-base text-gray-900">#{order.order_number}</span>
+                      <Badge variant="outline" className={cn("font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 shadow-sm", sc.className)}>{sc.label}</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
+                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
                   </div>
-                  <span className="font-bold text-sm text-primary">₹{order.total}</span>
+                  <span className="font-black text-lg text-gray-900">₹{order.total}</span>
                 </div>
-                <Separator className="my-3" />
-                <div className="space-y-1 mb-3">
+                
+                <Separator className="my-3 border-gray-100" />
+                
+                <div className="space-y-1.5 mb-4">
                   {order.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-sm"><span className="text-muted-foreground">{item.quantity}x {item.name}</span><span className="font-medium">₹{item.price * item.quantity}</span></div>
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span className="text-gray-600 font-medium">{item.quantity} × {item.name}</span>
+                      <span className="font-bold text-gray-900">₹{item.price * item.quantity}</span>
+                    </div>
                   ))}
                 </div>
 
+                {/* ACTION BOXES */}
                 {isOk && !isCollected && !isExp && (
-                  <div className="bg-green-500/10 p-3 rounded-xl border border-green-500/20 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform" onClick={() => navigate(`/order-success?orderId=${order.id}`)}>
+                  <div onClick={goToReceipt} className="bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform shadow-sm hover:shadow">
                     <div className="flex items-center gap-3">
-                      <div className="bg-card p-1.5 rounded-lg border border-green-500/20"><QRCodeSVG value={order.collection_token || order.id} size={36} /></div>
-                      <div><p className="font-semibold text-sm text-green-600">Successful</p><p className="text-xs text-green-600/80">Tap to view QR</p></div>
+                      <div className="bg-white p-1.5 rounded-xl border border-emerald-100 shadow-sm"><QRCodeSVG value={order.collection_token || order.id} size={38} /></div>
+                      <div><p className="font-bold text-sm text-emerald-700">Ready for Pickup</p><p className="text-xs font-medium text-emerald-600/80">Tap to view full QR & Receipt</p></div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-green-500/60" />
+                    <ChevronRight className="h-5 w-5 text-emerald-400" />
+                  </div>
+                )}
+
+                {isCollected && (
+                  <div onClick={goToReceipt} className="bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded-xl border border-blue-100 shadow-sm"><ShoppingBag className="h-6 w-6 text-blue-500" /></div>
+                      <div><p className="font-bold text-sm text-blue-700">Order Collected</p><p className="text-xs font-medium text-blue-600/80">Tap to view Digital Receipt</p></div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-blue-400" />
+                  </div>
+                )}
+
+                {/* 🔥 THE MAGIC FIX: If failed but NOT timed out, show the big Retry box! */}
+                {isFailed && (
+                  <div 
+                    className={cn("bg-red-50/50 rounded-2xl border border-red-100 shadow-sm transition-transform", timedOut ? "p-3.5 flex items-center justify-between cursor-pointer active:scale-[0.98]" : "p-4")} 
+                    onClick={timedOut ? goToReceipt : undefined}
+                  >
+                    {timedOut ? (
+                      // Permantently Failed (Timeout reached)
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="bg-white p-2 rounded-xl border border-red-100 shadow-sm"><XCircle className="h-6 w-6 text-red-500" /></div>
+                          <div><p className="font-bold text-sm text-red-700">Payment Failed</p><p className="text-xs font-medium text-red-600/80 line-clamp-1">{order.rejection_reason || "Timeout reached."}</p></div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-red-400" />
+                      </>
+                    ) : (
+                      // 🔥 Bank Failed, BUT still under 10 minutes! Offer Retry!
+                      <div className="flex items-start gap-3 w-full">
+                        <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                        <div className="w-full">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-sm text-red-700">Payment Failed</p>
+                            <div className="flex items-center gap-1 text-red-700 bg-red-100/80 px-2.5 py-0.5 rounded-md border border-red-200">
+                              <Timer size={12} />
+                              <span className="text-xs font-black font-mono tracking-wider">{formatTime(rem)}</span>
+                            </div>
+                          </div>
+                          <p className="text-xs font-medium text-red-600/80 mt-1 line-clamp-1">{order.rejection_reason || "Bank error. You can still retry!"}</p>
+                          <Button className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-red-600/20" onClick={handleRetry}>
+                            <RefreshCw size={14} className="mr-2" /> Retry Payment
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isExp && (
+                  <div onClick={goToReceipt} className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm"><Ban className="h-6 w-6 text-gray-500" /></div>
+                      <div><p className="font-bold text-sm text-gray-700">Order Expired</p><p className="text-xs font-medium text-gray-500">Tap to view details</p></div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
                   </div>
                 )}
 
                 {isPending && (
-                  <div className="bg-orange-500/10 p-3 rounded-xl border border-orange-500/20">
+                  <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-200 shadow-sm">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
                       <div className="w-full">
                         <div className="flex items-center justify-between">
-                          <p className="font-semibold text-sm text-orange-600">Payment Pending</p>
-                          <div className="flex items-center gap-1 text-orange-600 bg-orange-500/10 px-2 py-0.5 rounded-full"><Timer size={12} /><span className="text-xs font-bold font-mono">{formatTime(rem)}</span></div>
+                          <p className="font-bold text-sm text-orange-700">Payment Pending</p>
+                          <div className="flex items-center gap-1 text-orange-700 bg-orange-100/80 px-2.5 py-0.5 rounded-md border border-orange-200"><Timer size={12} /><span className="text-xs font-black font-mono tracking-wider">{formatTime(rem)}</span></div>
                         </div>
-                        <p className="text-xs text-orange-600/80 mt-1">Complete within 10 mins</p>
-                        <Button className="w-full mt-2 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-semibold" onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`)}><RefreshCw size={14} className="mr-1.5" /> Pay Now</Button>
+                        <p className="text-xs font-medium text-orange-600/80 mt-1">Complete your payment to confirm order</p>
+                        <Button className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-orange-600/20" onClick={handleRetry}>
+                          <RefreshCw size={14} className="mr-2" /> Pay Now
+                        </Button>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {isFailed && (
-                  <div className="bg-destructive/10 p-3 rounded-xl border border-destructive/20 flex items-start gap-3">
-                    <XCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-                    <div><p className="font-semibold text-sm text-destructive">Payment Failed</p><p className="text-xs text-destructive/80 mt-1">{order.rejection_reason || "Transaction incomplete."}</p></div>
-                  </div>
-                )}
-
-                {isCollected && (
-                  <div className="bg-muted p-3 rounded-xl border border-border flex items-center gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
-                    <div><p className="font-semibold text-sm">Order Collected</p><p className="text-xs text-muted-foreground">Enjoy your meal!</p></div>
-                  </div>
-                )}
-
-                {isExp && (
-                  <div className="bg-muted p-3 rounded-xl border border-border text-center">
-                    <p className="text-sm font-medium text-muted-foreground flex items-center justify-center gap-1.5"><Ban size={14} /> Order Expired</p>
-                    <p className="text-xs text-muted-foreground mt-1">Not collected in time</p>
-                  </div>
-                )}
               </div>
             </div>
           );
