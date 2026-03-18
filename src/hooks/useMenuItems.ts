@@ -53,8 +53,15 @@ export function useMenuItems(): UseMenuItemsReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Determine if canteen is closed
-  const canteenClosed = !currentPeriod;
+  // Check if an item is marked as "all day" (has all 4 time periods including dinner)
+  const isAllDayItem = (item: MenuItem) => {
+    const allPeriods = ['breakfast', 'lunch', 'snacks', 'dinner'];
+    return allPeriods.every(p => item.availableTimePeriods.includes(p));
+  };
+
+  // Determine if canteen is closed (but all-day items still show)
+  const hasAllDayItems = menuItems.some(isAllDayItem);
+  const canteenClosed = !currentPeriod && !hasAllDayItems;
 
   // Compute next opening time
   const getNextOpenTime = (): string | null => {
