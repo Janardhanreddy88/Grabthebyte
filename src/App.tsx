@@ -29,7 +29,7 @@ const SelectCampus = lazy(() => import("./pages/SelectCampus"));
 const Menu = lazy(() => import("./pages/Menu"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
-const OrderSuccess = lazy(() => import("./pages/OrderSuccess"));
+
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const DedicatedScanner = lazy(() => import("./pages/DedicatedScanner"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
@@ -111,11 +111,6 @@ const App = () => (
                                   <Route path="/checkout" element={
                                     <CampusGate>
                                       <Checkout />
-                                    </CampusGate>
-                                  } />
-                                  <Route path="/order-success" element={
-                                    <CampusGate>
-                                      <OrderSuccess />
                                     </CampusGate>
                                   } />
                                   <Route path="/payment" element={
