@@ -15,12 +15,16 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   breakfast: <Coffee size={16} />,
   lunch: <UtensilsCrossed size={16} />,
   snacks: <Cookie size={16} />,
+  colddrinks: <Coffee size={16} />,
+  icecream: <Cookie size={16} />,
 };
 
 const ADMIN_CATEGORIES = [
   { id: 'breakfast', name: 'Breakfast' },
   { id: 'lunch', name: 'Lunch' },
   { id: 'snacks', name: 'Snacks' },
+  { id: 'colddrinks', name: 'Cold Drinks' },
+  { id: 'icecream', name: 'Ice Cream' },
 ] as const;
 
 const TIME_PERIODS = [
