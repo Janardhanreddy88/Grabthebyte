@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Loader2, AlertCircle, CheckCircle2, RefreshCw, ArrowLeft, CreditCard } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, RefreshCw, ArrowLeft, CreditCard, XCircle, ChevronRight, Home, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -44,6 +44,15 @@ export default function Payment() {
   const [errorMessage, setErrorMessage] = useState("");
   const paymentInitiated = useRef(false);
 
+  // 🔥 Helper to safely extract exact error messages (Bank failures, User cancellations, etc.)
+  const extractErrorMessage = (errorResponse: any) => {
+    if (typeof errorResponse === 'string') return errorResponse;
+    if (errorResponse?.error?.description) return errorResponse.error.description;
+    if (errorResponse?.description) return errorResponse.description;
+    if (errorResponse?.message) return errorResponse.message;
+    return 'Payment process was interrupted or failed.';
+  };
+
   // INITIATE DUAL-ENGINE PAYMENT
   const initiatePayment = useCallback(async () => {
     if (!orderId || !amount || !user || paymentInitiated.current) return;
@@ -51,7 +60,6 @@ export default function Payment() {
     setPaymentState('initiating');
 
     try {
-      // 1. Get order details from DB
       const { data: order } = await supabase
         .from('orders')
         .select('order_number, customer_name, customer_email, customer_phone')
@@ -63,7 +71,6 @@ export default function Payment() {
 
       const realPhoneNumber = order.customer_phone || user.phone || "";
 
-      // 2. Ask Backend to generate Razorpay Order ID
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
           orderId,
@@ -76,18 +83,15 @@ export default function Payment() {
 
       if (error || !data?.razorpayOrderId) throw new Error(data?.error || 'Failed to create Razorpay session');
       
-      // 🔥 STORE THE CURRENT ORDER ID & KEY ID
       const currentRzpOrderId = data.razorpayOrderId;
       const currentKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
       setPaymentState('processing');
 
-      // 🚀 THE BULLETPROOF SUCCESS HANDLER 
       const processSuccess = async (response: any) => {
         let paymentId = "";
         let signature = "";
 
-        // NATIVE CAPACITOR FIX: Extract the string if it was stripped
         if (typeof response === 'string') {
           paymentId = response;
         } else if (typeof response === 'object' && response !== null) {
@@ -107,7 +111,6 @@ export default function Payment() {
             }
           });
 
-          // 🔥 THE FIX: Safely parse the response data in case Supabase sends a string
           let isSuccess = false;
           if (verifyData && typeof verifyData === 'object' && verifyData.success) {
             isSuccess = true;
@@ -121,8 +124,8 @@ export default function Payment() {
 
           setPaymentState('success');
           clearCart();
+          // 🔥 DELETED THE AUTO-REDIRECT! The user stays on this screen now.
           toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
-          setTimeout(() => navigate(`/order-success?order_id=${orderId}`), 2000);
 
         } catch (err) {
           console.error(err);
@@ -131,7 +134,6 @@ export default function Payment() {
         }
       };
 
-      // 3. Define standard Options
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
         amount: Math.round(parseFloat(amount) * 100), 
@@ -150,7 +152,6 @@ export default function Payment() {
         }
       };
 
-      // 4. THE SPLIT: NATIVE APP vs WEB BROWSER
       if (Capacitor.isNativePlatform()) {
         console.log("📱 Triggering Native Razorpay SDK...");
         window.RazorpayCheckout.open(
@@ -158,7 +159,7 @@ export default function Payment() {
           (paymentResponse: any) => processSuccess(paymentResponse),
           (errorResponse: any) => {
             setPaymentState('failed');
-            setErrorMessage(errorResponse.description || 'Payment was cancelled or failed.');
+            setErrorMessage(extractErrorMessage(errorResponse));
             paymentInitiated.current = false;
           }
         );
@@ -182,7 +183,7 @@ export default function Payment() {
         const rzp = new window.Razorpay(webOptions);
         rzp.on('payment.failed', function (response: any) {
           setPaymentState('failed');
-          setErrorMessage(response.error.description || 'Payment failed.');
+          setErrorMessage(extractErrorMessage(response));
           paymentInitiated.current = false;
         });
         rzp.open();
@@ -203,70 +204,135 @@ export default function Payment() {
 
   const handleRetry = () => { paymentInitiated.current = false; setPaymentState('loading'); };
 
-  const StateIcon = ({ bg, children }: { bg: string; children: React.ReactNode }) => (
-    <div className={`w-14 h-14 ${bg} rounded-full flex items-center justify-center mx-auto mb-4`}>{children}</div>
-  );
-
+  // 🚀 UPGRADED PREMIUM UI COMPONENTS WITH QR CODE & BUTTONS
   const renderContent = () => {
     switch (paymentState) {
       case "loading":
       case "initiating":
-        return (
-          <div className="text-center py-8">
-            <StateIcon bg="bg-primary/10"><Loader2 className="w-7 h-7 text-primary animate-spin" /></StateIcon>
-            <h2 className="text-base font-bold mb-1">Preparing Payment</h2>
-            <p className="text-xs text-muted-foreground">Setting up secure payment...</p>
-          </div>
-        );
       case "processing":
-        return (
-          <div className="text-center py-8">
-            <StateIcon bg="bg-blue-500/10"><CreditCard className="w-7 h-7 text-blue-600" /></StateIcon>
-            <h2 className="text-base font-bold mb-1">Complete Your Payment</h2>
-            <p className="text-xs text-muted-foreground mb-3">If payment window didn't open:</p>
-            <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs"><RefreshCw size={12} /> Open Payment</Button>
-          </div>
-        );
       case "verifying":
         return (
-          <div className="text-center py-8">
-            <StateIcon bg="bg-yellow-500/10"><Loader2 className="w-7 h-7 text-yellow-600 animate-spin" /></StateIcon>
-            <h2 className="text-base font-bold mb-1">Verifying Payment</h2>
-            <p className="text-xs text-muted-foreground">Please wait...</p>
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+              className="relative w-20 h-20 mb-6"
+            >
+              <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full"></div>
+            </motion.div>
+            <h2 className="text-xl font-bold mb-2">
+              {paymentState === "verifying" ? "Verifying Payment" : "Processing"}
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-[250px]">
+              {paymentState === "verifying" 
+                ? "Please wait while we confirm your transaction securely." 
+                : "Please do not close this window or press the back button."}
+            </p>
+            {paymentState === "processing" && (
+              <Button variant="ghost" size="sm" onClick={handleRetry} className="mt-6 gap-2 text-muted-foreground">
+                <RefreshCw size={14} /> Re-open Payment
+              </Button>
+            )}
           </div>
         );
+
       case "success":
         return (
-          <div className="text-center py-8">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-              <StateIcon bg="bg-green-500/10"><CheckCircle2 className="w-7 h-7 text-green-600" /></StateIcon>
+          <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+            <motion.div 
+              initial={{ scale: 0.5, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-4 relative"
+            >
+              <motion.div 
+                initial={{ scale: 0 }} 
+                animate={{ scale: 1 }} 
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30"
+              >
+                <CheckCircle2 className="w-7 h-7 text-white" strokeWidth={3} />
+              </motion.div>
             </motion.div>
-            <h2 className="text-base font-bold mb-1 text-green-600">Payment Successful!</h2>
-            <p className="text-xs text-muted-foreground mb-2">Order #{orderNumber} confirmed</p>
-            <p className="text-[10px] text-muted-foreground">Redirecting...</p>
-          </div>
-        );
-      case "failed":
-        return (
-          <div className="text-center py-8">
-            <StateIcon bg="bg-orange-500/10"><AlertCircle className="w-7 h-7 text-orange-600" /></StateIcon>
-            <h2 className="text-base font-bold mb-1 text-orange-600">Payment Incomplete</h2>
-            <p className="text-xs text-muted-foreground mb-4">{errorMessage}</p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" size="sm" onClick={() => navigate("/my-orders")} className="text-xs">View Orders</Button>
-              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs bg-orange-600 hover:bg-orange-700"><RefreshCw size={12} /> Try Again</Button>
+            
+            <h2 className="text-2xl font-extrabold text-foreground mb-1">Payment Successful!</h2>
+            
+            <div className="bg-secondary/50 rounded-lg px-4 py-2 mb-4 border border-border/50">
+              <p className="text-sm font-medium text-muted-foreground">Order ID: <span className="text-foreground font-bold">#{orderNumber}</span></p>
+            </div>
+
+            {/* 🔥 LIVE QR CODE GENERATOR INCORPORATED HERE */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white p-3.5 rounded-2xl shadow-sm border border-border/80 mb-3 inline-block"
+            >
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${orderId}`} 
+                alt="Order QR Code" 
+                className="w-36 h-36"
+              />
+            </motion.div>
+            
+            <p className="text-xs font-medium text-muted-foreground mb-8 max-w-[220px]">
+              Show this QR code at the canteen counter to collect your order.
+            </p>
+
+            {/* 🔥 NEW ACTION BUTTONS */}
+            <div className="w-full flex flex-col gap-3">
+              <Button 
+                onClick={() => navigate("/my-orders")} 
+                className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20"
+              >
+                <Receipt size={18} className="mr-2" /> View Order Details
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate("/menu")} 
+                className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50"
+              >
+                <Home size={18} className="mr-2 text-muted-foreground" /> Back to Home
+              </Button>
             </div>
           </div>
         );
+
+      case "failed":
       case "error":
         return (
-          <div className="text-center py-8">
-            <StateIcon bg="bg-destructive/10"><AlertCircle className="w-7 h-7 text-destructive" /></StateIcon>
-            <h2 className="text-base font-bold mb-1 text-destructive">Something Went Wrong</h2>
-            <p className="text-xs text-muted-foreground mb-4">{errorMessage}</p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" size="sm" onClick={() => navigate("/menu")} className="text-xs">Back to Menu</Button>
-              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs"><RefreshCw size={12} /> Retry</Button>
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mb-5"
+            >
+              <div className="w-14 h-14 bg-destructive rounded-full flex items-center justify-center shadow-lg shadow-destructive/30">
+                <XCircle className="w-7 h-7 text-white" strokeWidth={2.5} />
+              </div>
+            </motion.div>
+            <h2 className="text-xl font-bold text-foreground mb-2">
+              {paymentState === "error" ? "Something went wrong" : "Payment Incomplete"}
+            </h2>
+            <p className="text-sm text-muted-foreground mb-8 max-w-[260px] leading-relaxed">
+              {errorMessage}
+            </p>
+            
+            <div className="w-full flex flex-col gap-3">
+              <Button 
+                onClick={handleRetry} 
+                className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20"
+              >
+                <RefreshCw size={18} className="mr-2" /> Try Payment Again
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate("/my-orders")} 
+                className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50"
+              >
+                View My Orders <ChevronRight size={18} className="ml-1 text-muted-foreground" />
+              </Button>
             </div>
           </div>
         );
@@ -276,12 +342,12 @@ export default function Payment() {
   if (!orderId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="max-w-sm w-full bg-card rounded-2xl border border-border p-6 text-center shadow-sm">
-          <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
-          <h2 className="text-sm font-bold mb-1">Invalid Payment Link</h2>
-          <p className="text-xs text-muted-foreground mb-3">No order information found</p>
-          <Button size="sm" onClick={() => navigate("/menu")} className="text-xs">
-            Go to Menu
+        <div className="max-w-sm w-full bg-card rounded-2xl border border-border p-8 text-center shadow-sm">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-lg font-bold mb-2">Invalid Payment Link</h2>
+          <p className="text-sm text-muted-foreground mb-6">We couldn't find the details for this order.</p>
+          <Button onClick={() => navigate("/menu")} className="w-full h-11 rounded-xl">
+            Return to Menu
           </Button>
         </div>
       </div>
@@ -289,34 +355,41 @@ export default function Payment() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-4 py-2.5 safe-top">
-        <div className="flex items-center gap-2 max-w-lg mx-auto">
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="sticky top-0 z-10 bg-background/90 backdrop-blur-xl border-b border-border/40 px-4 py-3 safe-top">
+        <div className="flex items-center gap-3 max-w-lg mx-auto">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
-            onClick={() => navigate("/my-orders")}
+            className="h-9 w-9 rounded-full bg-secondary/50"
+            onClick={() => navigate("/menu")}
             disabled={paymentState === "initiating" || paymentState === "verifying"}
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={18} />
           </Button>
           <div>
-            <h1 className="text-sm font-bold">Payment</h1>
-            <h2 className="text-xs text-muted-foreground">Order #{orderNumber}</h2>
+            <h1 className="text-base font-bold leading-tight">Secure Checkout</h1>
+            <h2 className="text-xs text-muted-foreground font-medium">Order #{orderNumber}</h2>
           </div>
         </div>
       </header>
-      <main className="p-4 max-w-lg mx-auto">
-        <div className="bg-card rounded-2xl border border-border shadow-sm">
-          {amount && (
-            <div className="text-center p-4 pb-3 border-b border-border">
-              <p className="text-[10px] text-muted-foreground mb-0.5">Amount to Pay</p>
-              <p className="text-3xl font-black text-primary">₹{amount}</p>
+      
+      <main className="flex-1 flex flex-col items-center p-4 max-w-lg mx-auto w-full pt-6">
+        <div className="w-full bg-card rounded-[24px] border border-border shadow-sm overflow-hidden">
+          {amount && paymentState !== "success" && (
+            <div className="text-center p-6 bg-secondary/30 border-b border-border/50">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Amount to Pay</p>
+              <p className="text-4xl font-black text-foreground tracking-tight">₹{amount}</p>
             </div>
           )}
-          <div className="p-4">{renderContent()}</div>
+          <div className="p-2">{renderContent()}</div>
         </div>
+        
+        {paymentState !== "success" && (
+          <div className="mt-8 flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
+            <CheckCircle2 size={14} className="text-green-600" /> 100% Secure & Encrypted Payments
+          </div>
+        )}
       </main>
     </div>
   );
