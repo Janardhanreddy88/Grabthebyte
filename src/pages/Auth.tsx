@@ -234,12 +234,12 @@ export default function Auth() {
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({
-            id: data.user.id,
+            user_id: data.user.id,
             full_name: signupName.trim(),
             phone: signupPhone.trim(), 
-            campus_id: campus?.id,
+            campus_id: campus?.id!,
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
+          }, { onConflict: 'user_id' });
 
         if (profileError) {
           console.error("Profile save error:", profileError);

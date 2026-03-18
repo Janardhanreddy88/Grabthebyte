@@ -17,10 +17,12 @@ const ADMIN_CATEGORIES = [
 ] as const;
 
 const TIME_PERIODS = [
-  { id: 'breakfast', name: 'Breakfast (8-11 AM)' },
-  { id: 'lunch', name: 'Lunch (11:15 AM - 2:45 PM)' },
-  { id: 'snacks', name: 'Snacks (3-5 PM)' },
+  { id: 'breakfast', name: 'Breakfast (8–11 AM)' },
+  { id: 'lunch', name: 'Lunch (11:15 AM – 2:45 PM)' },
+  { id: 'snacks', name: 'Snacks (3–5 PM)' },
 ];
+
+const ALL_DAY_PERIODS = ['breakfast', 'lunch', 'snacks', 'dinner'];
 
 const AVAILABLE_DAYS = [
   { id: 'mon-sat', name: 'Mon-Sat', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] },
@@ -218,6 +220,18 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
               <div className="space-y-2">
                 <Label>Available Time Periods</Label>
                 <div className="flex flex-wrap gap-2">
+                  {/* All Day toggle */}
+                  <button type="button"
+                    onClick={() => {
+                      const isAllDay = ALL_DAY_PERIODS.every(p => formData.available_time_periods.includes(p));
+                      setFormData({ ...formData, available_time_periods: isAllDay ? [] : [...ALL_DAY_PERIODS] });
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      ALL_DAY_PERIODS.every(p => formData.available_time_periods.includes(p))
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >All Day</button>
                   {TIME_PERIODS.map((period) => (
                     <button key={period.id} type="button"
                       onClick={() => {

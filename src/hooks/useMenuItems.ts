@@ -53,8 +53,15 @@ export function useMenuItems(): UseMenuItemsReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Determine if canteen is closed
-  const canteenClosed = !currentPeriod;
+  // Check if an item is marked as "all day" (has all 4 time periods including dinner)
+  const isAllDayItem = (item: MenuItem) => {
+    const allPeriods = ['breakfast', 'lunch', 'snacks', 'dinner'];
+    return allPeriods.every(p => item.availableTimePeriods.includes(p));
+  };
+
+  // Determine if canteen is closed (but all-day items still show)
+  const hasAllDayItems = menuItems.some(isAllDayItem);
+  const canteenClosed = !currentPeriod && !hasAllDayItems;
 
   // Compute next opening time
   const getNextOpenTime = (): string | null => {
@@ -75,15 +82,16 @@ export function useMenuItems(): UseMenuItemsReturn {
   const nextOpenTime = getNextOpenTime();
 
   // Filter items based on category and current time period
-  const filteredItems = canteenClosed
-    ? [] // Hide all items when canteen is closed
-    : menuItems.filter(item => {
-        const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-        const matchesTime = currentPeriod
-          ? item.availableTimePeriods.includes(currentPeriod.id)
-          : true;
-        return matchesCategory && matchesTime;
-      });
+  // All-day items (with all 4 periods including dinner) always show
+  const filteredItems = menuItems.filter(item => {
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    // All-day items bypass time restrictions
+    if (isAllDayItem(item)) return matchesCategory;
+    // Non-all-day items hidden when no active period
+    if (!currentPeriod) return false;
+    const matchesTime = item.availableTimePeriods.includes(currentPeriod.id);
+    return matchesCategory && matchesTime;
+  });
 
   // Get popular items for current time period
   const popularItems = menuItems.filter(item => {

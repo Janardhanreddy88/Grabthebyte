@@ -62,14 +62,14 @@ export default function Payment() {
     try {
       const { data: order } = await supabase
         .from('orders')
-        .select('order_number, customer_name, customer_email, customer_phone')
+        .select('order_number, customer_name, customer_email')
         .eq('id', orderId)
         .single();
         
       if (!order) throw new Error('Order not found');
       setOrderNumber(order.order_number);
 
-      const realPhoneNumber = order.customer_phone || user.phone || "";
+      const realPhoneNumber = user.phone || "";
 
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
