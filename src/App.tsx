@@ -29,7 +29,7 @@ const SelectCampus = lazy(() => import("./pages/SelectCampus"));
 const Menu = lazy(() => import("./pages/Menu"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
-const OrderSuccess = lazy(() => import("./pages/OrderSuccess"));
+
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const DedicatedScanner = lazy(() => import("./pages/DedicatedScanner"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
