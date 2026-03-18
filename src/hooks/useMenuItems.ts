@@ -82,15 +82,16 @@ export function useMenuItems(): UseMenuItemsReturn {
   const nextOpenTime = getNextOpenTime();
 
   // Filter items based on category and current time period
-  const filteredItems = canteenClosed
-    ? [] // Hide all items when canteen is closed
-    : menuItems.filter(item => {
-        const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-        const matchesTime = currentPeriod
-          ? item.availableTimePeriods.includes(currentPeriod.id)
-          : true;
-        return matchesCategory && matchesTime;
-      });
+  // All-day items (with all 4 periods including dinner) always show
+  const filteredItems = menuItems.filter(item => {
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    // All-day items bypass time restrictions
+    if (isAllDayItem(item)) return matchesCategory;
+    // Non-all-day items hidden when no active period
+    if (!currentPeriod) return false;
+    const matchesTime = item.availableTimePeriods.includes(currentPeriod.id);
+    return matchesCategory && matchesTime;
+  });
 
   // Get popular items for current time period
   const popularItems = menuItems.filter(item => {

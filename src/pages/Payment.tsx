@@ -69,7 +69,7 @@ export default function Payment() {
       if (!order) throw new Error('Order not found');
       setOrderNumber(order.order_number);
 
-      const realPhoneNumber = order.customer_phone || user.phone || "";
+      const realPhoneNumber = user.phone || "";
 
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
