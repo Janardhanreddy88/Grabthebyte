@@ -11,6 +11,7 @@ apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
     implementation project(':capacitor-app')
     implementation project(':capacitor-app-launcher')
+    implementation "com.razorpay:checkout:1.6.19"
     implementation "com.onesignal:OneSignal:5.7.2"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
 }

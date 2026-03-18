@@ -7,10 +7,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { Capacitor } from '@capacitor/core';
+
+// 🚨 Tell TypeScript that these Razorpay objects exist on the window!
+declare global {
+  interface Window {
+    Razorpay: any;
+    RazorpayCheckout: any;
+  }
+}
 
 type PaymentState = 'loading' | 'initiating' | 'processing' | 'verifying' | 'success' | 'failed' | 'error';
 
-// Helper to inject Razorpay script dynamically (ONLY ONCE NOW!)
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     const script = document.createElement("script");
@@ -36,102 +44,149 @@ export default function Payment() {
   const [errorMessage, setErrorMessage] = useState("");
   const paymentInitiated = useRef(false);
 
-  // 4. VERIFY THE PAYMENT (Calls Edge Function we will build in Phase 4)
-  const handlePaymentSuccess = async (response: any) => {
-    setPaymentState('verifying');
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-payment', {
-        body: {
-          orderId: orderId,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_signature: response.razorpay_signature,
-        }
-      });
-
-      if (error || !data?.success) {
-        throw new Error('Payment verification failed on server');
-      }
-
-      setPaymentState('success');
-      clearCart();
-      toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
-      setTimeout(() => navigate(`/order-success?order_id=${orderId}`), 2000);
-
-    } catch (err) {
-      console.error(err);
-      setPaymentState('error');
-      setErrorMessage('Payment was charged, but verification failed. Contact support.');
-    }
-  };
-
-  // INITIATE POPUP PAYMENT
+  // INITIATE DUAL-ENGINE PAYMENT
   const initiatePayment = useCallback(async () => {
     if (!orderId || !amount || !user || paymentInitiated.current) return;
     paymentInitiated.current = true;
     setPaymentState('initiating');
 
     try {
-      // 1. Load Razorpay Script
-      const res = await loadRazorpayScript();
-      if (!res) throw new Error("Razorpay SDK failed to load. Are you online?");
-
-      // 2. Get order details from DB
-      const { data: order } = await supabase.from('orders').select('order_number, customer_name, customer_email').eq('id', orderId).single();
+      // 1. Get order details from DB
+      const { data: order } = await supabase
+        .from('orders')
+        .select('order_number, customer_name, customer_email, customer_phone')
+        .eq('id', orderId)
+        .single();
+        
       if (!order) throw new Error('Order not found');
       setOrderNumber(order.order_number);
 
-      // 3. Ask Backend to generate Razorpay Order ID
+      const realPhoneNumber = order.customer_phone || user.phone || "";
+
+      // 2. Ask Backend to generate Razorpay Order ID
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
           orderId,
           amount: parseFloat(amount),
           customerName: order.customer_name || user.fullName,
           customerEmail: order.customer_email || user.email,
-          customerPhone: user.phone || '9999999999'
+          customerPhone: realPhoneNumber 
         }
       });
 
       if (error || !data?.razorpayOrderId) throw new Error(data?.error || 'Failed to create Razorpay session');
+      
+      // 🔥 STORE THE CURRENT ORDER ID & KEY ID
+      const currentRzpOrderId = data.razorpayOrderId;
+      const currentKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-      // 4. TRIGGER THE RAZORPAY POPUP MODAL
       setPaymentState('processing');
 
+      // 🚀 THE BULLETPROOF SUCCESS HANDLER 
+      const processSuccess = async (response: any) => {
+        let paymentId = "";
+        let signature = "";
+
+        // NATIVE CAPACITOR FIX: Extract the string if it was stripped
+        if (typeof response === 'string') {
+          paymentId = response;
+        } else if (typeof response === 'object' && response !== null) {
+          paymentId = response.razorpay_payment_id || response.payment_id || "";
+          signature = response.razorpay_signature || response.signature || "";
+        }
+
+        setPaymentState('verifying');
+        try {
+          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-payment', {
+            body: {
+              orderId: orderId,
+              razorpay_payment_id: paymentId,
+              razorpay_order_id: currentRzpOrderId, 
+              razorpay_signature: signature, 
+              razorpay_key_id: currentKeyId 
+            }
+          });
+
+          // 🔥 THE FIX: Safely parse the response data in case Supabase sends a string
+          let isSuccess = false;
+          if (verifyData && typeof verifyData === 'object' && verifyData.success) {
+            isSuccess = true;
+          } else if (typeof verifyData === 'string') {
+            try { isSuccess = JSON.parse(verifyData).success; } catch (e) {}
+          }
+
+          if (verifyError || !isSuccess) {
+            throw new Error('Payment verification failed on server');
+          }
+
+          setPaymentState('success');
+          clearCart();
+          toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
+          setTimeout(() => navigate(`/order-success?order_id=${orderId}`), 2000);
+
+        } catch (err) {
+          console.error(err);
+          setPaymentState('error');
+          setErrorMessage('Payment was charged, but verification failed. Contact support.');
+        }
+      };
+
+      // 3. Define standard Options
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
         amount: Math.round(parseFloat(amount) * 100), 
         currency: "INR",
         name: "GrabTheByte",
         description: `Order #${order.order_number}`,
-        image: "/pwa-192x192.png", // Your red PWA icon!
-        order_id: data.razorpayOrderId, 
-        handler: function (response: any) {
-          handlePaymentSuccess(response);
-        },
+        image: "/pwa-192x192.png", 
+        order_id: currentRzpOrderId, 
         prefill: {
           name: order.customer_name || user.fullName,
           email: order.customer_email || user.email,
-          contact: user.phone || "9999999999"
+          contact: realPhoneNumber 
         },
         theme: {
-          color: "#E50914" // GrabTheByte Red
-        },
-        modal: {
-          ondismiss: function() {
-            setPaymentState('failed');
-            setErrorMessage('Payment window was closed.');
-            paymentInitiated.current = false;
-          }
+          color: "#E50914" 
         }
       };
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function (response: any) {
-        setPaymentState('failed');
-        setErrorMessage(response.error.description || 'Payment failed.');
-        paymentInitiated.current = false;
-      });
-      rzp.open();
+      // 4. THE SPLIT: NATIVE APP vs WEB BROWSER
+      if (Capacitor.isNativePlatform()) {
+        console.log("📱 Triggering Native Razorpay SDK...");
+        window.RazorpayCheckout.open(
+          options,
+          (paymentResponse: any) => processSuccess(paymentResponse),
+          (errorResponse: any) => {
+            setPaymentState('failed');
+            setErrorMessage(errorResponse.description || 'Payment was cancelled or failed.');
+            paymentInitiated.current = false;
+          }
+        );
+      } else {
+        console.log("💻 Triggering Web Razorpay SDK...");
+        const res = await loadRazorpayScript();
+        if (!res) throw new Error("Razorpay SDK failed to load. Are you online?");
+
+        const webOptions = {
+          ...options,
+          handler: function (response: any) { processSuccess(response); },
+          modal: {
+            ondismiss: function() {
+              setPaymentState('failed');
+              setErrorMessage('Payment window was closed.');
+              paymentInitiated.current = false;
+            }
+          }
+        };
+
+        const rzp = new window.Razorpay(webOptions);
+        rzp.on('payment.failed', function (response: any) {
+          setPaymentState('failed');
+          setErrorMessage(response.error.description || 'Payment failed.');
+          paymentInitiated.current = false;
+        });
+        rzp.open();
+      }
 
     } catch (err) {
       setPaymentState('error');
@@ -158,9 +213,7 @@ export default function Payment() {
       case "initiating":
         return (
           <div className="text-center py-8">
-            <StateIcon bg="bg-primary/10">
-              <Loader2 className="w-7 h-7 text-primary animate-spin" />
-            </StateIcon>
+            <StateIcon bg="bg-primary/10"><Loader2 className="w-7 h-7 text-primary animate-spin" /></StateIcon>
             <h2 className="text-base font-bold mb-1">Preparing Payment</h2>
             <p className="text-xs text-muted-foreground">Setting up secure payment...</p>
           </div>
@@ -168,22 +221,16 @@ export default function Payment() {
       case "processing":
         return (
           <div className="text-center py-8">
-            <StateIcon bg="bg-blue-500/10">
-              <CreditCard className="w-7 h-7 text-blue-600" />
-            </StateIcon>
+            <StateIcon bg="bg-blue-500/10"><CreditCard className="w-7 h-7 text-blue-600" /></StateIcon>
             <h2 className="text-base font-bold mb-1">Complete Your Payment</h2>
             <p className="text-xs text-muted-foreground mb-3">If payment window didn't open:</p>
-            <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs">
-              <RefreshCw size={12} /> Open Payment
-            </Button>
+            <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs"><RefreshCw size={12} /> Open Payment</Button>
           </div>
         );
       case "verifying":
         return (
           <div className="text-center py-8">
-            <StateIcon bg="bg-yellow-500/10">
-              <Loader2 className="w-7 h-7 text-yellow-600 animate-spin" />
-            </StateIcon>
+            <StateIcon bg="bg-yellow-500/10"><Loader2 className="w-7 h-7 text-yellow-600 animate-spin" /></StateIcon>
             <h2 className="text-base font-bold mb-1">Verifying Payment</h2>
             <p className="text-xs text-muted-foreground">Please wait...</p>
           </div>
@@ -192,9 +239,7 @@ export default function Payment() {
         return (
           <div className="text-center py-8">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-              <StateIcon bg="bg-green-500/10">
-                <CheckCircle2 className="w-7 h-7 text-green-600" />
-              </StateIcon>
+              <StateIcon bg="bg-green-500/10"><CheckCircle2 className="w-7 h-7 text-green-600" /></StateIcon>
             </motion.div>
             <h2 className="text-base font-bold mb-1 text-green-600">Payment Successful!</h2>
             <p className="text-xs text-muted-foreground mb-2">Order #{orderNumber} confirmed</p>
@@ -204,36 +249,24 @@ export default function Payment() {
       case "failed":
         return (
           <div className="text-center py-8">
-            <StateIcon bg="bg-orange-500/10">
-              <AlertCircle className="w-7 h-7 text-orange-600" />
-            </StateIcon>
+            <StateIcon bg="bg-orange-500/10"><AlertCircle className="w-7 h-7 text-orange-600" /></StateIcon>
             <h2 className="text-base font-bold mb-1 text-orange-600">Payment Incomplete</h2>
             <p className="text-xs text-muted-foreground mb-4">{errorMessage}</p>
             <div className="flex gap-2 justify-center">
-              <Button variant="outline" size="sm" onClick={() => navigate("/my-orders")} className="text-xs">
-                View Orders
-              </Button>
-              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs bg-orange-600 hover:bg-orange-700">
-                <RefreshCw size={12} /> Try Again
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate("/my-orders")} className="text-xs">View Orders</Button>
+              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs bg-orange-600 hover:bg-orange-700"><RefreshCw size={12} /> Try Again</Button>
             </div>
           </div>
         );
       case "error":
         return (
           <div className="text-center py-8">
-            <StateIcon bg="bg-destructive/10">
-              <AlertCircle className="w-7 h-7 text-destructive" />
-            </StateIcon>
+            <StateIcon bg="bg-destructive/10"><AlertCircle className="w-7 h-7 text-destructive" /></StateIcon>
             <h2 className="text-base font-bold mb-1 text-destructive">Something Went Wrong</h2>
             <p className="text-xs text-muted-foreground mb-4">{errorMessage}</p>
             <div className="flex gap-2 justify-center">
-              <Button variant="outline" size="sm" onClick={() => navigate("/menu")} className="text-xs">
-                Back to Menu
-              </Button>
-              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs">
-                <RefreshCw size={12} /> Retry
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate("/menu")} className="text-xs">Back to Menu</Button>
+              <Button size="sm" onClick={handleRetry} className="gap-1.5 text-xs"><RefreshCw size={12} /> Retry</Button>
             </div>
           </div>
         );

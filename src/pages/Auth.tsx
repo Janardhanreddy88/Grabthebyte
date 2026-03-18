@@ -214,6 +214,7 @@ export default function Auth() {
     }
   };
 
+  // 🔥 THE FIX: Using UPSERT to bypass race conditions
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -229,8 +230,21 @@ export default function Auth() {
         return;
       }
 
-      if (data.session) {
-        await supabase.from('profiles').update({ phone: signupPhone.trim() }).eq('id', data.user?.id);
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            full_name: signupName.trim(),
+            phone: signupPhone.trim(), 
+            campus_id: campus?.id,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        if (profileError) {
+          console.error("Profile save error:", profileError);
+        }
+
         toast({ title: 'Account Verified!', description: 'Welcome to GrabTheByte.' });
       }
     } catch {
