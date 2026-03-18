@@ -28,7 +28,7 @@ const menuItemUpdateSchema = z.object({
   is_veg: z.boolean().optional(),
   is_popular: z.boolean().optional(),
   is_available: z.boolean().optional(),
-  available_time_periods: z.array(z.enum(['breakfast', 'lunch', 'snacks'])).optional(),
+  available_time_periods: z.array(z.enum(['breakfast', 'lunch', 'snacks', 'dinner'])).optional(),
   available_days: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])).optional(),
   description: z.string().max(1000).optional(),
 });
