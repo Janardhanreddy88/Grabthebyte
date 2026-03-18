@@ -113,11 +113,6 @@ const App = () => (
                                       <Checkout />
                                     </CampusGate>
                                   } />
-                                  <Route path="/order-success" element={
-                                    <CampusGate>
-                                      <OrderSuccess />
-                                    </CampusGate>
-                                  } />
                                   <Route path="/payment" element={
                                     <CampusGate>
                                       <Payment />
