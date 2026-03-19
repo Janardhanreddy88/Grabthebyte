@@ -65,11 +65,11 @@ export function AdminAnalyticsTab({
                 </CardContent>
               </Card>
               <Card className="rounded-2xl card-shadow bg-secondary/5">
-                <CardContent className="p-3 sm:p-4">
+                <CardContent className="p-4">
                   <div className="text-center">
                     <IndianRupee className="w-6 h-6 mx-auto text-secondary mb-1" />
-                    <p className="text-2xl sm:text-3xl font-bold text-secondary">₹{(todayStats?.totalRevenue || 0).toLocaleString()}</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">Today Total Revenue</p>
+                    <p className="text-3xl font-bold text-secondary">₹{(todayStats?.totalRevenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Today Total Revenue</p>
                   </div>
                 </CardContent>
               </Card>
