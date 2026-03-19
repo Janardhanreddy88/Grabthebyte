@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
 import { z } from 'zod';
 
-// Validation schemas
+// Validation schemas (CLEANED: No more time periods or days!)
 const menuItemCreateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name too long').trim(),
   price: z.number().positive('Price must be positive').max(999999, 'Price too high'),
@@ -13,8 +13,6 @@ const menuItemCreateSchema = z.object({
   is_veg: z.boolean().optional(),
   is_popular: z.boolean().optional(),
   is_available: z.boolean().optional(),
-  available_time_periods: z.array(z.enum(['breakfast', 'lunch', 'snacks', 'dinner'])).optional(),
-  available_days: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])).optional(),
   description: z.string().max(1000).optional(),
 });
 
@@ -28,15 +26,13 @@ const menuItemUpdateSchema = z.object({
   is_veg: z.boolean().optional(),
   is_popular: z.boolean().optional(),
   is_available: z.boolean().optional(),
-  available_time_periods: z.array(z.enum(['breakfast', 'lunch', 'snacks', 'dinner'])).optional(),
-  available_days: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])).optional(),
   description: z.string().max(1000).optional(),
 });
 
 // Simplified token system - no preparing/ready states
 const orderStatusSchema = z.enum(['pending', 'confirmed', 'collected', 'expired', 'failed']);
 
-// Types matching Supabase schema
+// Types matching Supabase schema (CLEANED)
 interface MenuItem {
   id: string;
   campus_id: string;
@@ -48,7 +44,6 @@ interface MenuItem {
   is_veg: boolean;
   is_popular: boolean;
   is_available: boolean;
-  available_time_periods: string[];
   stock_quantity: number | null;
   created_at: string;
   updated_at: string;
@@ -90,7 +85,7 @@ interface OrderStats {
   chartData: { day: string; revenue: number; orders: number }[];
 }
 
-// Fetch menu items for the current campus
+// Fetch menu items for the current campus (CLEANED)
 export function useAdminMenuItems() {
   const { campus } = useCampus();
 
@@ -118,8 +113,6 @@ export function useAdminMenuItems() {
         is_veg: item.is_veg,
         is_popular: item.is_popular,
         is_available: item.is_available,
-        available_time_periods: item.available_time_periods || [],
-        available_days: item.available_days || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
         description: item.description,
       }));
     },
@@ -127,7 +120,7 @@ export function useAdminMenuItems() {
   });
 }
 
-// Create a new menu item
+// Create a new menu item (CLEANED)
 export function useCreateMenuItem() {
   const queryClient = useQueryClient();
   const { campus } = useCampus();
@@ -142,8 +135,6 @@ export function useCreateMenuItem() {
       is_veg?: boolean;
       is_popular?: boolean;
       is_available?: boolean;
-      available_time_periods?: string[];
-      available_days?: string[];
       description?: string;
     }) => {
       if (!campus?.id) throw new Error('No campus selected');
@@ -168,8 +159,6 @@ export function useCreateMenuItem() {
           is_veg: validatedItem.is_veg ?? true,
           is_popular: validatedItem.is_popular ?? false,
           is_available: validatedItem.is_available ?? true,
-          available_time_periods: (validatedItem.available_time_periods || []) as ('breakfast' | 'lunch' | 'snacks')[],
-          available_days: (validatedItem.available_days || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']) as ('mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat')[],
           description: validatedItem.description || null,
         }])
         .select()
@@ -185,7 +174,7 @@ export function useCreateMenuItem() {
   });
 }
 
-// Update an existing menu item
+// Update an existing menu item (CLEANED)
 export function useUpdateMenuItem() {
   const queryClient = useQueryClient();
 
@@ -200,8 +189,6 @@ export function useUpdateMenuItem() {
       is_veg?: boolean;
       is_popular?: boolean;
       is_available?: boolean;
-      available_time_periods?: string[];
-      available_days?: string[];
       description?: string;
     }) => {
       // Validate input

@@ -8,7 +8,6 @@ import { CartPanel } from "@/components/CartPanel";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MobileCart } from "@/components/MobileCart";
 import { MobileProfilePanel } from "@/components/MobileProfilePanel";
-import { TimePeriodBanner } from "@/components/TimePeriodBanner";
 import { MenuItemSkeletonGrid } from "@/components/skeletons/MenuItemSkeleton";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
@@ -32,7 +31,6 @@ export default function Menu() {
 
   const {
     filteredItems,
-    currentPeriod,
     canteenClosed,
     nextOpenTime,
     isLoading,
@@ -46,13 +44,26 @@ export default function Menu() {
     navigate("/auth?logout=true");
   };
 
-  const searchedItems = searchQuery
+  // 1. Filter by search query
+  const baseItems = searchQuery
     ? filteredItems.filter(
         (item) =>
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchQuery.toLowerCase())
+          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : filteredItems;
+
+  // 2. 🔥 THE BULLETPROOF SORTING LOGIC 🔥
+  const searchedItems = [...baseItems].sort((a: any, b: any) => {
+    // Safely check both camelCase and snake_case to prevent undefined errors!
+    const aAvail = a.isAvailable !== undefined ? a.isAvailable : a.is_available;
+    const bAvail = b.isAvailable !== undefined ? b.isAvailable : b.is_available;
+
+    if (aAvail === bAvail) {
+      return a.name.localeCompare(b.name); // If both have same status, sort alphabetically
+    }
+    return aAvail ? -1 : 1; // Available items go to the top, dead items sink to the bottom!
+  });
 
   return (
     <PageTransition>
@@ -128,11 +139,6 @@ export default function Menu() {
                     {nextOpenTime ? `Next opening: ${nextOpenTime}.` : "Please check back later."}
                   </p>
                 </motion.div>
-              )}
-
-              {/* Time Period */}
-              {currentPeriod && !searchQuery && selectedCategory === "all" && (
-                <TimePeriodBanner period={currentPeriod} />
               )}
 
               {/* Section Header */}

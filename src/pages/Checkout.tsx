@@ -77,18 +77,38 @@ export default function Checkout() {
 
     try {
       const result = await checkStock(cart);
+      
+      // 🔥 THE NEW SMART STOCK HANDLER 🔥
       if (!result.success) {
-        const itemNames = result.unavailableItems.map((i) => i.name).join(", ");
-        setStockError(`${itemNames} just sold out.`);
+        let errorMessage = "";
+
+        // Scenario 1: Completely Sold Out
+        if (result.soldOutItems && result.soldOutItems.length > 0) {
+          const soldOutNames = result.soldOutItems.map((i) => i.name).join(", ");
+          errorMessage += `${soldOutNames} completely sold out. `;
+          result.soldOutItems.forEach((item) => removeFromCart(item.id));
+        }
+
+        // Scenario 2: Partially Available (The Dosa Scenario!)
+        if (result.adjustedItems && result.adjustedItems.length > 0) {
+          const adjustedNames = result.adjustedItems.map((adj) => `${adj.item.name} (Only ${adj.availableStock} left)`).join(", ");
+          errorMessage += `Adjusted quantities for: ${adjustedNames}. `;
+          // Gently lower their cart quantity to the max available!
+          result.adjustedItems.forEach((adj) => updateQuantity(adj.item.id, adj.availableStock));
+        }
+
+        setStockError("Cart updated due to stock changes. Please review and try again.");
         toast({
-          title: "Items Unavailable",
-          description: `Sorry! ${itemNames} just sold out.`,
+          title: "Cart Updated",
+          description: errorMessage.trim(),
           variant: "destructive",
         });
-        result.unavailableItems.forEach((item) => removeFromCart(item.id));
-        return;
+        
+        // Stop the checkout process so the student can review the new prices/quantities!
+        return; 
       }
 
+      // If stock is perfect, proceed to payment!
       const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "razorpay", customerName: user.fullName, customerEmail: user.email });      
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 

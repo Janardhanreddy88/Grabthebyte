@@ -5,15 +5,25 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
-interface MenuItem extends BaseMenuItem { quantity?: number; }
+// Safely added is_available just in case the backend passes it as snake_case
+interface MenuItem extends BaseMenuItem { quantity?: number; is_available?: boolean; }
 interface MenuItemCardProps { item: MenuItem; }
 
 export function MenuItemCard({ item }: MenuItemCardProps) {
   const { cart, addToCart, updateQuantity } = useCart();
   const cartItem = cart.find((i) => i.id === item.id);
   const quantity = cartItem?.quantity || 0;
+  
+  // 🔥 THE NEW PRIORITY LOGIC 🔥
+  // 1. Check if the admin explicitly turned it off (Master Toggle / Item Toggle)
+  const isItemEnabled = item.isAvailable !== undefined ? item.isAvailable : item.is_available !== undefined ? item.is_available : true;
+  const isUnavailable = !isItemEnabled;
+
+  // 2. Check if the stock is zero
   const isOutOfStock = (item.quantity !== undefined && item.quantity !== null) ? item.quantity <= 0 : false;
-  const isSoldOut = !item.isAvailable || isOutOfStock;
+
+  // 3. Combine them: The item is un-buyable if EITHER is true
+  const isSoldOut = isUnavailable || isOutOfStock;
 
   return (
     <motion.div whileHover={!isSoldOut ? { y: -2 } : {}} whileTap={!isSoldOut ? { scale: 0.98 } : {}}
@@ -36,11 +46,13 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
           className={cn("w-full h-full object-cover transition-transform duration-500",
             !isSoldOut && "group-hover:scale-105", isSoldOut && "grayscale-[0.5]")}
           onError={(e) => { e.currentTarget.src = "/placeholder.svg"; }} />
+        
+        {/* 🔥 OVERLAY LOGIC (Unavailable wins over Out of Stock) */}
         {isSoldOut && (
           <div className="absolute inset-0 bg-background/55 flex items-center justify-center backdrop-blur-[2px]">
             <span className={cn("px-3.5 py-1.5 rounded-lg font-bold text-xs border",
-              isOutOfStock ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-muted text-muted-foreground border-border")}>
-              {isOutOfStock ? "Out of Stock" : "Unavailable"}
+              isUnavailable ? "bg-muted text-muted-foreground border-border" : "bg-destructive/10 text-destructive border-destructive/20")}>
+              {isUnavailable ? "Unavailable" : "Out of Stock"}
             </span>
           </div>
         )}
@@ -66,7 +78,10 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
               </Button>
             )
           ) : (
-            <Button disabled size="sm" variant="outline" className="rounded-lg text-xs font-medium border-dashed text-muted-foreground bg-transparent">Sold Out</Button>
+            <Button disabled size="sm" variant="outline" className="rounded-lg text-xs font-medium border-dashed text-muted-foreground bg-transparent">
+              {/* 🔥 BUTTON TEXT LOGIC */}
+              {isUnavailable ? "Unavailable" : "Sold Out"}
+            </Button>
           )}
         </div>
       </div>

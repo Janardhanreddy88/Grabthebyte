@@ -27,24 +27,6 @@ const ADMIN_CATEGORIES = [
   { id: 'icecream', name: 'Ice Cream' },
 ] as const;
 
-const TIME_PERIODS = [
-  { id: 'breakfast', name: 'Breakfast (8–11 AM)' },
-  { id: 'lunch', name: 'Lunch (11:15 AM – 2:45 PM)' },
-  { id: 'snacks', name: 'Snacks (3–5 PM)' },
-];
-
-const ALL_DAY_PERIODS = ['breakfast', 'lunch', 'snacks', 'dinner'];
-
-const AVAILABLE_DAYS = [
-  { id: 'mon-sat', name: 'Mon-Sat', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] },
-  { id: 'mon', name: 'Mon' },
-  { id: 'tue', name: 'Tue' },
-  { id: 'wed', name: 'Wed' },
-  { id: 'thu', name: 'Thu' },
-  { id: 'fri', name: 'Fri' },
-  { id: 'sat', name: 'Sat' },
-] as const;
-
 interface MenuItem {
   id: string;
   name: string;
@@ -55,8 +37,6 @@ interface MenuItem {
   is_popular: boolean;
   is_available: boolean;
   quantity: number | null;
-  available_time_periods: string[];
-  available_days: string[];
 }
 
 interface AdminMenuTabProps {
@@ -72,22 +52,21 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const [togglingCategory, setTogglingCategory] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadImage, isUploading } = useImageUpload();
 
   const [formData, setFormData] = useState({
     name: '', price: '', quantity: '', category: 'snacks', image: '',
     is_veg: true, is_popular: false, is_available: true,
-    available_time_periods: [] as string[],
-    available_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as string[],
   });
 
   const resetForm = () => {
     setFormData({
       name: '', price: '', quantity: '', category: 'snacks', image: '',
       is_veg: true, is_popular: false, is_available: true,
-      available_time_periods: [],
-      available_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
     });
     setEditingItem(null);
     setImagePreview(null);
@@ -121,14 +100,18 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
         if (!uploadedUrl) { toast.error('Failed to upload image'); return; }
         imageUrl = uploadedUrl;
       }
+      
       const payload = {
-        name: formData.name, price: parseFloat(formData.price),
-        quantity: parseInt(formData.quantity) || 0, category: formData.category,
-        image: imageUrl || undefined, is_veg: formData.is_veg,
-        is_popular: formData.is_popular, is_available: formData.is_available,
-        available_time_periods: formData.available_time_periods,
-        available_days: formData.available_days,
+        name: formData.name, 
+        price: parseFloat(formData.price),
+        quantity: parseInt(formData.quantity) || 0, 
+        category: formData.category,
+        image: imageUrl || undefined, 
+        is_veg: formData.is_veg,
+        is_popular: formData.is_popular, 
+        is_available: formData.is_available,
       };
+
       if (editingItem) {
         await updateMenuItem.mutateAsync({ id: editingItem, ...payload });
         toast.success('Item updated successfully');
@@ -143,12 +126,14 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
 
   const handleEdit = (item: MenuItem) => {
     setFormData({
-      name: item.name, price: item.price.toString(),
-      quantity: (item.quantity ?? 0).toString(), category: item.category,
-      image: item.image || '', is_veg: item.is_veg ?? true,
-      is_popular: item.is_popular ?? false, is_available: item.is_available ?? true,
-      available_time_periods: item.available_time_periods || [],
-      available_days: item.available_days || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+      name: item.name, 
+      price: item.price.toString(),
+      quantity: (item.quantity ?? 0).toString(), 
+      category: item.category,
+      image: item.image || '', 
+      is_veg: item.is_veg ?? true,
+      is_popular: item.is_popular ?? false, 
+      is_available: item.is_available ?? true,
     });
     setEditingItem(item.id);
     setSelectedFile(null);
@@ -168,6 +153,24 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
     catch { toast.error('Failed to update availability'); }
   };
 
+  const handleCategoryToggle = async (categoryName: string, items: MenuItem[], newState: boolean) => {
+    setTogglingCategory(categoryName);
+    try {
+      await Promise.all(
+        items.map(item => {
+          if (item.is_available !== newState) {
+            return updateMenuItem.mutateAsync({ id: item.id, is_available: newState });
+          }
+        })
+      );
+      toast.success(`${categoryName} is now ${newState ? 'Available' : 'Out of Stock'}`);
+    } catch (error) {
+      toast.error(`Failed to update ${categoryName}`);
+    } finally {
+      setTogglingCategory(null);
+    }
+  };
+
   return (
     <Card className="rounded-2xl card-shadow">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -181,14 +184,17 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
               <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
+              
               <div className="space-y-2">
                 <Label>Name *</Label>
                 <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Item name" />
               </div>
+              
               <div className="space-y-2">
                 <Label>Quantity (Stock) *</Label>
                 <Input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} placeholder="e.g., 150" />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Price *</Label>
@@ -227,76 +233,14 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
                 )}
               </div>
 
-              {/* Time Periods */}
-              <div className="space-y-2">
-                <Label>Available Time Periods</Label>
-                <div className="flex flex-wrap gap-2">
-                  {/* All Day toggle */}
-                  <button type="button"
-                    onClick={() => {
-                      const isAllDay = ALL_DAY_PERIODS.every(p => formData.available_time_periods.includes(p));
-                      setFormData({ ...formData, available_time_periods: isAllDay ? [] : [...ALL_DAY_PERIODS] });
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      ALL_DAY_PERIODS.every(p => formData.available_time_periods.includes(p))
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >All Day</button>
-                  {TIME_PERIODS.map((period) => (
-                    <button key={period.id} type="button"
-                      onClick={() => {
-                        const periods = formData.available_time_periods.includes(period.id)
-                          ? formData.available_time_periods.filter((p) => p !== period.id)
-                          : [...formData.available_time_periods, period.id];
-                        setFormData({ ...formData, available_time_periods: periods });
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        formData.available_time_periods.includes(period.id)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >{period.name}</button>
-                  ))}
-                </div>
+              {/* Simple Toggles */}
+              <div className="pt-2 space-y-3">
+                <div className="flex items-center justify-between"><Label>Vegetarian</Label><Switch checked={formData.is_veg} onCheckedChange={(checked) => setFormData({ ...formData, is_veg: checked })} /></div>
+                <div className="flex items-center justify-between"><Label>Popular Item (Bestseller)</Label><Switch checked={formData.is_popular} onCheckedChange={(checked) => setFormData({ ...formData, is_popular: checked })} /></div>
+                <div className="flex items-center justify-between"><Label>Currently Available</Label><Switch checked={formData.is_available} onCheckedChange={(checked) => setFormData({ ...formData, is_available: checked })} /></div>
               </div>
 
-              {/* Available Days */}
-              <div className="space-y-2">
-                <Label>Available Days</Label>
-                <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_DAYS.map((day) => {
-                    const isMonSat = day.id === 'mon-sat';
-                    const isSelected = isMonSat
-                      ? formData.available_days.length === 6 && ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].every(d => formData.available_days.includes(d))
-                      : formData.available_days.includes(day.id);
-                    return (
-                      <button key={day.id} type="button"
-                        onClick={() => {
-                          if (isMonSat) {
-                            setFormData({ ...formData, available_days: isSelected ? [] : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] });
-                          } else {
-                            const days = formData.available_days.includes(day.id)
-                              ? formData.available_days.filter((d) => d !== day.id)
-                              : [...formData.available_days, day.id];
-                            setFormData({ ...formData, available_days: days });
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                          isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >{day.name}</button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Toggles */}
-              <div className="flex items-center justify-between"><Label>Vegetarian</Label><Switch checked={formData.is_veg} onCheckedChange={(checked) => setFormData({ ...formData, is_veg: checked })} /></div>
-              <div className="flex items-center justify-between"><Label>Popular</Label><Switch checked={formData.is_popular} onCheckedChange={(checked) => setFormData({ ...formData, is_popular: checked })} /></div>
-              <div className="flex items-center justify-between"><Label>Available</Label><Switch checked={formData.is_available} onCheckedChange={(checked) => setFormData({ ...formData, is_available: checked })} /></div>
-
-              <Button className="w-full" onClick={handleSubmit} disabled={createMenuItem.isPending || updateMenuItem.isPending}>
+              <Button className="w-full mt-4" onClick={handleSubmit} disabled={createMenuItem.isPending || updateMenuItem.isPending}>
                 {createMenuItem.isPending || updateMenuItem.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : editingItem ? 'Update Item' : 'Add Item'}
               </Button>
             </div>
@@ -313,6 +257,9 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
             {ADMIN_CATEGORIES.map((cat) => {
               const categoryItems = menuItems.filter((item) => item.category === cat.id);
               if (categoryItems.length === 0) return null;
+              
+              const isCategoryActive = categoryItems.some(item => item.is_available);
+
               return (
                 <Collapsible key={cat.id} defaultOpen>
                   <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-xl bg-muted/70 hover:bg-muted transition-colors group">
@@ -321,7 +268,24 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
                       <span className="font-semibold text-sm">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">({categoryItems.length})</span>
                     </div>
-                    <ChevronDown size={16} className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hidden sm:block">
+                          {isCategoryActive ? 'Serving' : 'Stopped'}
+                        </span>
+                        {togglingCategory === cat.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary mr-1" />
+                        ) : (
+                          <Switch 
+                            checked={isCategoryActive} 
+                            onCheckedChange={(checked) => handleCategoryToggle(cat.id, categoryItems, checked)} 
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                        )}
+                      </div>
+                      <ChevronDown size={16} className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                    </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="space-y-2 mt-2 pl-2">
@@ -355,10 +319,14 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
                 </Collapsible>
               );
             })}
+            
             {/* Uncategorized items */}
             {(() => {
               const uncategorized = menuItems.filter((item) => !ADMIN_CATEGORIES.some((c) => c.id === item.category));
               if (uncategorized.length === 0) return null;
+              
+              const isCategoryActive = uncategorized.some(item => item.is_available);
+
               return (
                 <Collapsible defaultOpen>
                   <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-xl bg-muted/70 hover:bg-muted transition-colors group">
@@ -366,7 +334,23 @@ export function AdminMenuTab({ menuItems, menuLoading, createMenuItem, updateMen
                       <span className="font-semibold text-sm">Other</span>
                       <span className="text-xs text-muted-foreground">({uncategorized.length})</span>
                     </div>
-                    <ChevronDown size={16} className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hidden sm:block">
+                          {isCategoryActive ? 'Serving' : 'Stopped'}
+                        </span>
+                        {togglingCategory === 'other' ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary mr-1" />
+                        ) : (
+                          <Switch 
+                            checked={isCategoryActive} 
+                            onCheckedChange={(checked) => handleCategoryToggle('other', uncategorized, checked)} 
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                        )}
+                      </div>
+                      <ChevronDown size={16} className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                    </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="space-y-2 mt-2 pl-2">

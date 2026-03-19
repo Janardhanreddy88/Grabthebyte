@@ -42,17 +42,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
 
       // Transform to match MenuItem type
       const items: MenuItem[] = (data || []).map(item => {
-        
-        // 1. Get the real stock from DB
-        const stockQty = item.stock_quantity; 
-
-        // 2. CALCULATE AVAILABILITY (The Magic Logic) 🪄
-        // It is available ONLY IF:
-        // - Admin says it is available (item.is_available)
-        // - AND Stock is NOT zero (stockQty !== 0)
-        // (Note: stockQty === null means "Unlimited", so that is allowed)
-        const computedAvailability = item.is_available && (stockQty === null || stockQty > 0);
-
         return {
           id: item.id,
           name: item.name,
@@ -63,13 +52,14 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           isVeg: item.is_veg,
           isPopular: item.is_popular,
           
-          quantity: stockQty, // Save the stock number
-
-          // 3. FORCE "SOLD OUT" IF STOCK IS 0
-          // ✅ THIS IS THE FIX YOU MISSED
-          isAvailable: computedAvailability, 
+          quantity: item.stock_quantity, // Raw stock number
           
-          availableTimePeriods: item.available_time_periods || [],
+          // 🔥 STRICT DB PASS-THROUGH 🔥
+          // No more "Magic Logic" overwriting this! If admin says true, it stays true.
+          isAvailable: item.is_available, 
+          
+          // Fallback empty array since we deleted this from DB
+          availableTimePeriods: [], 
         };
       });
 

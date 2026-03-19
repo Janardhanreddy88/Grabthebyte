@@ -2,9 +2,11 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CartItem } from '@/types/canteen';
 
-interface StockCheckResult {
+// 🔥 NEW: Smarter return type to handle partial stock!
+export interface StockCheckResult {
   success: boolean;
-  unavailableItems: CartItem[];
+  soldOutItems: CartItem[];
+  adjustedItems: { item: CartItem; availableStock: number }[];
 }
 
 // ✅ FIX: Use the REAL column name from your database
@@ -18,10 +20,11 @@ interface DbMenuItem {
 export function useStockCheck() {
   
   const checkStock = useCallback(async (cartItems: CartItem[]): Promise<StockCheckResult> => {
-    const unavailableItems: CartItem[] = [];
+    const soldOutItems: CartItem[] = [];
+    const adjustedItems: { item: CartItem; availableStock: number }[] = [];
 
     try {
-      if (cartItems.length === 0) return { success: true, unavailableItems: [] };
+      if (cartItems.length === 0) return { success: true, soldOutItems: [], adjustedItems: [] };
 
       const itemIds = cartItems.map(item => item.id);
 
@@ -33,7 +36,7 @@ export function useStockCheck() {
 
       if (error || !data) {
         console.error("Stock check failed:", error);
-        return { success: false, unavailableItems: cartItems }; 
+        return { success: false, soldOutItems: cartItems, adjustedItems: [] }; 
       }
 
       const dbItems = data as unknown as DbMenuItem[];
@@ -41,30 +44,36 @@ export function useStockCheck() {
       for (const cartItem of cartItems) {
         const dbItem = dbItems.find(i => i.id === cartItem.id);
 
-        if (!dbItem || dbItem.is_available === false) {
-          unavailableItems.push(cartItem);
+        // 1. COMPLETELY SOLD OUT OR ADMIN TURNED IT OFF
+        if (!dbItem || dbItem.is_available === false || dbItem.stock_quantity === 0) {
+          soldOutItems.push(cartItem);
           continue;
         }
 
-        // ✅ FIX: Check 'stock_quantity' for NULL (Unlimited)
+        // 2. UNLIMITED STOCK (No limits, skip check)
         if (dbItem.stock_quantity === null) {
             continue; 
         }
 
-        // ✅ FIX: Compare 'stock_quantity' vs Cart Quantity
+        // 3. PARTIAL STOCK (e.g., They want 3 Dosas, but only 2 exist)
         if (dbItem.stock_quantity < cartItem.quantity) {
-          unavailableItems.push(cartItem);
+          adjustedItems.push({
+            item: cartItem,
+            availableStock: dbItem.stock_quantity
+          });
         }
       }
 
     } catch (err) {
       console.error("Stock check error:", err);
-      return { success: false, unavailableItems: cartItems };
+      return { success: false, soldOutItems: cartItems, adjustedItems: [] };
     }
 
     return {
-      success: unavailableItems.length === 0,
-      unavailableItems,
+      // It's only successful if BOTH arrays are empty
+      success: soldOutItems.length === 0 && adjustedItems.length === 0,
+      soldOutItems,
+      adjustedItems,
     };
   }, []);
 
