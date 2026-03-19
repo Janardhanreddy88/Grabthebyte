@@ -232,10 +232,6 @@ export type Database = {
       }
       menu_items: {
         Row: {
-          available_days: Database["public"]["Enums"]["day_of_week"][] | null
-          available_time_periods:
-            | Database["public"]["Enums"]["time_period"][]
-            | null
           campus_id: string
           category: string | null
           category_id: string | null
@@ -252,10 +248,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          available_days?: Database["public"]["Enums"]["day_of_week"][] | null
-          available_time_periods?:
-            | Database["public"]["Enums"]["time_period"][]
-            | null
           campus_id: string
           category?: string | null
           category_id?: string | null
@@ -272,10 +264,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          available_days?: Database["public"]["Enums"]["day_of_week"][] | null
-          available_time_periods?:
-            | Database["public"]["Enums"]["time_period"][]
-            | null
           campus_id?: string
           category?: string | null
           category_id?: string | null

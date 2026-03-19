@@ -33,8 +33,8 @@ export function StatSummaryCards({ stats, columns = 4 }: StatSummaryCardsProps) 
                 </div>
               )}
               <div className={stat.icon ? '' : 'text-center w-full'}>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{stat.label}</p>
-                <p className={`text-xl sm:text-2xl font-bold ${stat.valueColor || ''}`}>
+                <p className="text-xs text-muted-foreground">{stat.label}</p>
+                <p className={`text-2xl font-bold ${stat.valueColor || ''}`}>
                   {stat.value}
                 </p>
               </div>
