@@ -56,11 +56,11 @@ export function AdminAnalyticsTab({
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card className="rounded-2xl card-shadow bg-primary/5">
-                <CardContent className="p-3 sm:p-4">
+                <CardContent className="p-4">
                   <div className="text-center">
                     <ShoppingBag className="w-6 h-6 mx-auto text-primary mb-1" />
-                    <p className="text-2xl sm:text-3xl font-bold text-primary">{todayStats?.totalOrders || 0}</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">Total Orders</p>
+                    <p className="text-3xl font-bold text-primary">{todayStats?.totalOrders || 0}</p>
+                    <p className="text-xs text-muted-foreground">Total Orders</p>
                   </div>
                 </CardContent>
               </Card>
