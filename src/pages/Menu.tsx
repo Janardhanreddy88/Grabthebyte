@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBar } from "@/components/SearchBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PageTransition, staggerContainer, staggerItem } from "@/components/PageTransition";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { useMenuItems } from "@/hooks/useMenuItems";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
