@@ -44,7 +44,7 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
-const Support = lazy(() => import("./pages/Support"));
+
 
 // Super Admin Pages
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard").then(m => ({ default: m.SuperAdminDashboard })));
@@ -52,7 +52,7 @@ const SuperAdminOrders = lazy(() => import("./pages/super-admin/SuperAdminOrders
 const Settlements = lazy(() => import("./pages/super-admin/Settlements").then(m => ({ default: m.Settlements })));
 const CampusManagement = lazy(() => import("./pages/super-admin/CampusManagement").then(m => ({ default: m.CampusManagement })));
 const SuperAdminSettings = lazy(() => import("./pages/super-admin/SuperAdminSettings").then(m => ({ default: m.SuperAdminSettings })));
-const SupportTickets = lazy(() => import("./pages/super-admin/SupportTickets").then(m => ({ default: m.SupportTickets })));
+
 const UserManagement = lazy(() => import("./pages/super-admin/UserManagement").then(m => ({ default: m.UserManagement })));
 const AuditLogs = lazy(() => import("./pages/super-admin/AuditLogs").then(m => ({ default: m.AuditLogs })));
 const Analytics = lazy(() => import("./pages/super-admin/Analytics").then(m => ({ default: m.Analytics })));
@@ -128,7 +128,7 @@ const App = () => (
                                   <Route path="/terms" element={<TermsAndConditions />} />
                                   <Route path="/privacy" element={<PrivacyPolicy />} />
                                   <Route path="/refund-policy" element={<RefundPolicy />} />
-                                  <Route path="/support" element={<Support />} />
+                                  
                                   
                                   <Route path="/my-orders" element={
                                     <CampusGate>
@@ -213,16 +213,6 @@ const App = () => (
                                       <SuperAdminRoute>
                                         <SuperAdminLayout>
                                           <SuperAdminSettings />
-                                        </SuperAdminLayout>
-                                      </SuperAdminRoute>
-                                    } 
-                                  />
-                                  <Route 
-                                    path="/super-admin/support" 
-                                    element={
-                                      <SuperAdminRoute>
-                                        <SuperAdminLayout>
-                                          <SupportTickets />
                                         </SuperAdminLayout>
                                       </SuperAdminRoute>
                                     } 

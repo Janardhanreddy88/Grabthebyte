@@ -11,7 +11,7 @@ import {
   X,
   ChevronDown,
   Bell,
-  MessageCircle,
+  
   Users,
   History,
   BarChart3
@@ -47,7 +47,7 @@ const navItems = [
   { path: '/super-admin/settlements', icon: Wallet, label: 'Settlements' },
   { path: '/super-admin/campuses', icon: Building2, label: 'Campuses' },
   { path: '/super-admin/users', icon: Users, label: 'Users' },
-  { path: '/super-admin/support', icon: MessageCircle, label: 'Support Tickets' },
+  
   { path: '/super-admin/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/super-admin/audit-logs', icon: History, label: 'Audit Logs' },
   { path: '/super-admin/settings', icon: Settings, label: 'Settings' },
