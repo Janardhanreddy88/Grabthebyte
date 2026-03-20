@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight, ShoppingBag, RefreshCw, AlertCircle, Timer, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -81,6 +82,7 @@ export default function MyOrders() {
         </div>
       </header>
 
+      <PullToRefresh onRefresh={fetchOrders}>
       <main className="p-4 space-y-4 max-w-lg mx-auto">
         {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-3xl" />) : orders.length === 0 ? (
           <div className="text-center py-20">
@@ -221,6 +223,7 @@ export default function MyOrders() {
           );
         })}
       </main>
+      </PullToRefresh>
     </div>
   );
 }

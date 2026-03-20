@@ -53,11 +53,12 @@ export function OfflineDetector() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -100, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className={`fixed top-0 left-0 right-0 z-[100] px-4 py-3 ${
+          className={`fixed top-0 left-0 right-0 z-[100] px-4 ${
             isOnline 
               ? 'bg-secondary text-secondary-foreground' 
               : 'bg-destructive text-destructive-foreground'
           }`}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: '12px' }}
         >
           <div className="flex items-center justify-center gap-3 max-w-lg mx-auto">
             {isOnline ? (

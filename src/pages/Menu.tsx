@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/Logo";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBar } from "@/components/SearchBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PageTransition, staggerContainer, staggerItem } from "@/components/PageTransition";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { useMenuItems } from "@/hooks/useMenuItems";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -43,6 +44,10 @@ export default function Menu() {
   const handleSignOut = () => {
     navigate("/auth?logout=true");
   };
+
+  const handlePullRefresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   // 1. Filter by search query
   const baseItems = searchQuery
@@ -107,6 +112,7 @@ export default function Menu() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
+            <PullToRefresh onRefresh={handlePullRefresh}>
             <div className="p-3 lg:p-5">
               <HeroBanner />
 
@@ -201,6 +207,7 @@ export default function Menu() {
                 />
               )}
             </div>
+            </PullToRefresh>
           </main>
 
           {/* Desktop Cart */}

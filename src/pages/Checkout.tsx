@@ -15,7 +15,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/Logo";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { useToast } from "@/hooks/use-toast";
 import { useStockCheck } from "@/hooks/useStockCheck";
 import { useAuth } from "@/context/AuthContext";
@@ -56,7 +57,7 @@ export default function Checkout() {
   if (cart.length === 0) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <header className="flex-shrink-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/40">
+        <header className="flex-shrink-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/40 safe-top">
           <div className="flex items-center gap-3 px-4 h-14">
             <button
               onClick={() => navigate("/menu")}
@@ -170,6 +171,7 @@ export default function Checkout() {
       </header>
 
       <main className="flex-1 overflow-y-auto">
+        <PullToRefresh onRefresh={async () => window.location.reload()}>
         <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
           <AnimatePresence>
             {stockError && (
@@ -283,6 +285,7 @@ export default function Checkout() {
             </div>
           </section>
         </div>
+        </PullToRefresh>
       </main>
 
       {/* Sticky Bottom Actions */}
