@@ -82,6 +82,7 @@ export default function MyOrders() {
         </div>
       </header>
 
+      <PullToRefresh onRefresh={fetchOrders}>
       <main className="p-4 space-y-4 max-w-lg mx-auto">
         {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-3xl" />) : orders.length === 0 ? (
           <div className="text-center py-20">
