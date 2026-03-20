@@ -45,6 +45,10 @@ export default function Menu() {
     navigate("/auth?logout=true");
   };
 
+  const handlePullRefresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+
   // 1. Filter by search query
   const baseItems = searchQuery
     ? filteredItems.filter(
