@@ -223,6 +223,7 @@ export default function MyOrders() {
           );
         })}
       </main>
+      </PullToRefresh>
     </div>
   );
 }
