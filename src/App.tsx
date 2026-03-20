@@ -22,8 +22,10 @@ import { SessionExpiryHandler } from "@/components/SessionExpiryHandler";
 
 import { Loader2 } from "lucide-react";
 
+// INSTANT LOAD FOR SPLASH SCREEN (Fixed the flash!)
+import Index from "./pages/Index"; 
+
 // Lazy loaded pages
-const Index = lazy(() => import("./pages/Index"));
 const Auth = lazy(() => import("./pages/Auth"));
 const SelectCampus = lazy(() => import("./pages/SelectCampus"));
 const Menu = lazy(() => import("./pages/Menu"));

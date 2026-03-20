@@ -8,13 +8,14 @@ import {
   Minus,
   Plus,
   ArrowRight,
+  WifiOff // 🚀 Added for Offline UX
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/Logo";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useStockCheck } from "@/hooks/useStockCheck";
 import { useAuth } from "@/context/AuthContext";
@@ -33,8 +34,24 @@ export default function Checkout() {
 
   const [isCheckingStock, setIsCheckingStock] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
+  
+  // 🚀 THE NETWORK GUARDIAN
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
   const lastSubmitRef = useRef<number>(0);
   const SUBMIT_COOLDOWN_MS = 2000;
+
+  // Real-time network listener
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   if (cart.length === 0) {
     return (
@@ -63,6 +80,12 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
+    // 🚀 SHIELD 1: Prevent offline submissions
+    if (isOffline) {
+      toast({ title: "No Connection", description: "Internet required to place order.", variant: "destructive" });
+      return;
+    }
+
     if (!user) {
       toast({ title: "Login Required", description: "You must be logged in.", variant: "destructive" });
       navigate("/auth");
@@ -78,22 +101,18 @@ export default function Checkout() {
     try {
       const result = await checkStock(cart);
       
-      // 🔥 THE NEW SMART STOCK HANDLER 🔥
       if (!result.success) {
         let errorMessage = "";
 
-        // Scenario 1: Completely Sold Out
         if (result.soldOutItems && result.soldOutItems.length > 0) {
           const soldOutNames = result.soldOutItems.map((i) => i.name).join(", ");
           errorMessage += `${soldOutNames} completely sold out. `;
           result.soldOutItems.forEach((item) => removeFromCart(item.id));
         }
 
-        // Scenario 2: Partially Available (The Dosa Scenario!)
         if (result.adjustedItems && result.adjustedItems.length > 0) {
           const adjustedNames = result.adjustedItems.map((adj) => `${adj.item.name} (Only ${adj.availableStock} left)`).join(", ");
           errorMessage += `Adjusted quantities for: ${adjustedNames}. `;
-          // Gently lower their cart quantity to the max available!
           result.adjustedItems.forEach((adj) => updateQuantity(adj.item.id, adj.availableStock));
         }
 
@@ -104,12 +123,17 @@ export default function Checkout() {
           variant: "destructive",
         });
         
-        // Stop the checkout process so the student can review the new prices/quantities!
         return; 
       }
 
-      // If stock is perfect, proceed to payment!
-      const order = await createOrder({ items: cart, total: totalPrice, paymentMethod: "razorpay", customerName: user.fullName, customerEmail: user.email });      
+      const order = await createOrder({ 
+        items: cart, 
+        total: totalPrice, 
+        paymentMethod: "razorpay", 
+        customerName: user.fullName, 
+        customerEmail: user.email 
+      });      
+
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 
       } else { 
@@ -126,7 +150,6 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40 safe-top">
         <div className="flex items-center justify-between px-3 h-12 max-w-2xl mx-auto w-full">
           <div className="flex items-center gap-3">
@@ -164,7 +187,7 @@ export default function Checkout() {
             )}
           </AnimatePresence>
 
-          {/* Items */}
+          {/* Items List */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <ShoppingBag size={15} />
@@ -223,7 +246,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Bill */}
+          {/* Bill Summary */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Receipt size={15} />
@@ -236,9 +259,7 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Taxes & Charges</span>
-                <span className="text-green-600 text-xs font-medium px-2 py-0.5 bg-green-500/10 rounded-full">
-                  FREE
-                </span>
+                <span className="text-green-600 text-xs font-medium px-2 py-0.5 bg-green-500/10 rounded-full">FREE</span>
               </div>
               <Separator className="my-1.5" />
               <div className="flex justify-between items-center">
@@ -250,42 +271,41 @@ export default function Checkout() {
 
           {/* Payment Method */}
           <section>
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/5 rounded-xl ring-2 ring-primary pointer-events-none" />
-              <div className="relative p-4 flex items-center gap-3 bg-card rounded-xl">
-                <div className="h-11 w-11 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
-                  <Receipt className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-sm">Online Payment</h3>
-                  <p className="text-xs text-muted-foreground">UPI, Cards, Netbanking</p>
-                </div>
-                <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                  <CheckCircle2 size={12} className="text-primary-foreground" />
-                </div>
+            <div className="relative p-4 flex items-center gap-3 bg-card rounded-xl border border-primary/20 bg-primary/5">
+              <div className="h-11 w-11 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
+                <Receipt className="w-5 h-5 text-primary-foreground" />
               </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-sm">Online Payment</h3>
+                <p className="text-xs text-muted-foreground">UPI, Cards, Netbanking</p>
+              </div>
+              <CheckCircle2 size={16} className="text-primary" />
             </div>
           </section>
         </div>
       </main>
 
-      {/* Sticky Bottom */}
+      {/* Sticky Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50">
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
             <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
           </div>
-          <motion.div className="flex-[1.5]" whileTap={{ scale: 0.98 }}>
+          <motion.div className="flex-[1.5]" whileTap={!isOffline ? { scale: 0.98 } : {}}>
             <Button
-              className="w-full h-10 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
+              className={`w-full h-10 rounded-xl text-sm font-bold shadow-lg ${isOffline ? 'bg-muted text-muted-foreground' : 'shadow-primary/20'}`}
               onClick={handlePlaceOrder}
-              disabled={isLoading}
+              disabled={isLoading || isOffline}
             >
-              {isLoading ? (
+              {isOffline ? (
+                <span className="flex items-center gap-2">
+                  <WifiOff size={16} /> Offline: Connect to Pay
+                </span>
+              ) : isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="animate-spin" size={16} />
-                  {isCreating ? "Creating Order..." : "Checking..."}
+                  {isCreating ? "Ordering..." : "Checking..."}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">

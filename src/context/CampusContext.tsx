@@ -8,13 +8,14 @@ interface CampusContextType {
   error: string | null;
   settings: CampusSettings | null;
   setCampusByCode: (code: string) => Promise<{ success: boolean; error?: string }>;
-  clearCampus: () => void;
+  switchCampus: () => void; // RENAME: Changed from clearCampus to switchCampus
   hasCampus: boolean;
 }
 
 const CampusContext = createContext<CampusContextType | undefined>(undefined);
 
 const CAMPUS_CODE_KEY = 'campus_code';
+const CAMPUS_DATA_CACHE_KEY = 'campus_data_cache'; // 🚀 THE OFFLINE MEMORY BANK
 
 // Default settings fallback
 const defaultSettings: CampusSettings = {
@@ -46,10 +47,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch campus by code - uses public view for initial lookup (no sensitive settings exposed)
-  // Then fetches full data if user is authenticated
   const fetchCampusByCode = useCallback(async (code: string): Promise<Campus | null> => {
-    // First, check if campus exists using the public view (no auth required)
     console.log('[Campus] Looking up code:', code.toUpperCase());
     const { data: publicData, error: publicError } = await supabase
       .from('campus_public_info')
@@ -57,21 +55,17 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       .eq('code', code.toUpperCase())
       .maybeSingle();
 
-    console.log('[Campus] Public lookup result:', { publicData, publicError });
-
     if (publicError || !publicData) {
       console.error('[Campus] Lookup failed:', publicError?.message || 'Not found', publicError);
       return null;
     }
 
-    // Try to get full campus data if user is authenticated
     const { data: fullData } = await supabase
       .from('campuses')
       .select('*')
       .eq('id', publicData.id)
       .single();
 
-    // If we got full data (authenticated user at their campus), use it
     if (fullData) {
       const settings = {
         ...defaultSettings,
@@ -83,8 +77,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       } as Campus;
     }
 
-    // Otherwise, construct from public data with default settings
-    // Merge public branding/operational settings into defaults
     const publicBranding = publicData.branding as Partial<CampusSettings['branding']> | null;
     const publicOperational = publicData.public_operational_settings as Partial<CampusSettings['operational']> | null;
 
@@ -114,7 +106,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchCampusById = useCallback(async (id: string): Promise<Campus | null> => {
-    // Try full campuses table first (for authenticated users at their campus)
     const { data: fullData } = await supabase
       .from('campuses')
       .select('*')
@@ -133,7 +124,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       } as Campus;
     }
 
-    // Fall back to public view if not authorized for full data
     const { data: publicData, error: publicError } = await supabase
       .from('campus_public_info')
       .select('*')
@@ -170,84 +160,88 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     } as Campus;
   }, []);
 
-  // Initialize campus from localStorage on mount
   useEffect(() => {
     const initCampus = async () => {
-      const savedCode = localStorage.getItem(CAMPUS_CODE_KEY);
+      try {
+        const savedCode = localStorage.getItem(CAMPUS_CODE_KEY);
+        
+        // 🚀 1. INSTANT OFFLINE LOAD: If we have the cache, load it and STOP!
+        const cachedData = localStorage.getItem(CAMPUS_DATA_CACHE_KEY);
+        if (cachedData) {
+          try {
+            const parsedCampus = JSON.parse(cachedData);
+            setCampus(parsedCampus);
+            setIsLoading(false);
+            return; // STOP HERE!
+          } catch (e) { console.error("Cache parse failed"); }
+        }
 
-      // 1) Preferred: restore campus by saved code
-      if (savedCode) {
-        const campusData = await fetchCampusByCode(savedCode);
-        if (campusData) {
-          setCampus(campusData);
+        // 🚀 2. NETWORK ASSASSIN PROTECTION: Do not attempt network if offline
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
           setIsLoading(false);
           return;
         }
-        // Invalid saved code, clear it
-        localStorage.removeItem(CAMPUS_CODE_KEY);
-      }
 
-      // 2) Fallback: if user is already logged in, infer campus from user metadata
-      const { data: { session } } = await supabase.auth.getSession();
-      const campusId = session?.user?.user_metadata?.campus_id;
-      if (typeof campusId === 'string' && campusId) {
-        const campusData = await fetchCampusById(campusId);
-        if (campusData) {
-          setCampus(campusData);
-          localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
+        if (savedCode) {
+          const campusData = await fetchCampusByCode(savedCode);
+          if (campusData) {
+            setCampus(campusData);
+            localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData)); 
+            setIsLoading(false);
+            return;
+          }
+          // Note: We DO NOT remove the item on fail anymore.
         }
-      }
 
-      setIsLoading(false);
+        const { data: { session } } = await supabase.auth.getSession();
+        const campusId = session?.user?.user_metadata?.campus_id;
+        if (typeof campusId === 'string' && campusId) {
+          const campusData = await fetchCampusById(campusId);
+          if (campusData) {
+            setCampus(campusData);
+            localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
+            localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData));
+          }
+        }
+      } catch (err) {
+        console.error("Boot error:", err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     initCampus();
   }, [fetchCampusByCode, fetchCampusById]);
 
-  // Set campus by code (used by campus selector)
   const setCampusByCode = useCallback(async (code: string) => {
     setIsLoading(true);
     setError(null);
-
     try {
       const campusData = await fetchCampusByCode(code);
-      
       if (!campusData) {
         setError('Campus not found. Please check the code and try again.');
         return { success: false, error: 'Campus not found' };
       }
-
       setCampus(campusData);
       localStorage.setItem(CAMPUS_CODE_KEY, code.toUpperCase());
-      
+      localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData)); 
       return { success: true };
     } catch (err) {
-      const message = 'Failed to fetch campus details';
-      setError(message);
-      return { success: false, error: message };
+      setError('Failed to fetch campus details');
+      return { success: false, error: 'Failed' };
     } finally {
       setIsLoading(false);
     }
   }, [fetchCampusByCode]);
 
-  // Clear campus (logout or switch)
-  const clearCampus = useCallback(() => {
+  const switchCampus = useCallback(() => {
     setCampus(null);
     localStorage.removeItem(CAMPUS_CODE_KEY);
+    localStorage.removeItem(CAMPUS_DATA_CACHE_KEY); 
   }, []);
 
   return (
-    <CampusContext.Provider
-      value={{
-        campus,
-        isLoading,
-        error,
-        settings: campus?.settings || null,
-        setCampusByCode,
-        clearCampus,
-        hasCampus: !!campus,
-      }}
-    >
+    <CampusContext.Provider value={{ campus, isLoading, error, settings: campus?.settings || null, setCampusByCode, switchCampus, hasCampus: !!campus }}>
       {children}
     </CampusContext.Provider>
   );
@@ -255,8 +249,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
 
 export function useCampus() {
   const context = useContext(CampusContext);
-  if (!context) {
-    throw new Error('useCampus must be used within a CampusProvider');
-  }
+  if (!context) throw new Error('useCampus must be used within a CampusProvider');
   return context;
 }

@@ -20,7 +20,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { campus } = useCampus();
 
-  // Fetch menu items from Supabase
+  // Fetch menu items from Supabase (Now with Stale-While-Revalidate caching!)
   const fetchMenuItems = useCallback(async () => {
     if (!campus?.id) {
       setMenuItems([]);
@@ -28,9 +28,28 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    const cacheKey = `menu_cache_${campus.id}`;
 
+    // 🚀 STEP 1: INSTANT CACHE LOAD
+    const cachedData = localStorage.getItem(cacheKey);
+    if (cachedData) {
+      try {
+        setMenuItems(JSON.parse(cachedData));
+        setIsLoading(false); // Stop the spinner early if we have data
+      } catch (e) {
+        console.error("Failed to parse cached menu");
+      }
+    } else {
+      setIsLoading(true); 
+    }
+
+    // 🚀 STEP 2: OFFLINE SHIELD
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsLoading(false);
+      return; 
+    }
+
+    setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('menu_items')
@@ -40,7 +59,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
 
       if (fetchError) throw fetchError;
 
-      // Transform to match MenuItem type
       const items: MenuItem[] = (data || []).map(item => {
         return {
           id: item.id,
@@ -51,30 +69,40 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           category: item.category || 'snacks',
           isVeg: item.is_veg,
           isPopular: item.is_popular,
-          
-          quantity: item.stock_quantity, // Raw stock number
-          
-          // 🔥 STRICT DB PASS-THROUGH 🔥
-          // No more "Magic Logic" overwriting this! If admin says true, it stays true.
+          quantity: item.stock_quantity,
           isAvailable: item.is_available, 
-          
-          // Fallback empty array since we deleted this from DB
           availableTimePeriods: [], 
         };
       });
 
       setMenuItems(items);
-    } catch {
-      setError('Failed to load menu items');
-      setMenuItems([]);
+      // 🚀 STEP 3: REFRESH CACHE
+      localStorage.setItem(cacheKey, JSON.stringify(items));
+
+    } catch (err) {
+      // 🚀 STEP 4: NETWORK FAILURE PROTECTION
+      // If network fails, we DON'T clear the menu, we keep showing the cache!
+      console.error("Menu sync failed, relying on cache.", err);
     } finally {
       setIsLoading(false);
     }
   }, [campus?.id]);
 
-  // Load menu items when campus changes
+  // Initial load
   useEffect(() => {
     fetchMenuItems();
+  }, [fetchMenuItems]);
+
+  // 🚀 STEP 5: AUTOMATIC RESURRECTION TRIGGER
+  // Auto-refresh the menu as soon as the internet connection returns
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log("🌐 Connection restored! Refreshing menu...");
+      fetchMenuItems();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [fetchMenuItems]);
 
   // Subscribe to real-time updates
@@ -92,7 +120,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           filter: `campus_id=eq.${campus.id}`,
         },
         () => {
-          // Refetch on any change (Stock update, etc.)
           fetchMenuItems();
         }
       )
@@ -104,7 +131,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   }, [campus?.id, fetchMenuItems]);
 
   const updateItemAvailability = useCallback(async (itemId: string, isAvailable: boolean) => {
-    // Optimistic update
     setMenuItems(prev =>
       prev.map(item =>
         item.id === itemId ? { ...item, isAvailable } : item
@@ -118,7 +144,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         .eq('id', itemId);
 
       if (error) {
-        // Revert on error
         setMenuItems(prev =>
           prev.map(item =>
             item.id === itemId ? { ...item, isAvailable: !isAvailable } : item
@@ -126,10 +151,19 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         );
         throw error;
       }
+      
+      // Update cache to reflect availability change
+      const cacheKey = `menu_cache_${campus?.id}`;
+      const currentCache = localStorage.getItem(cacheKey);
+      if(currentCache) {
+          const parsedCache: MenuItem[] = JSON.parse(currentCache);
+          const updatedCache = parsedCache.map(i => i.id === itemId ? { ...i, isAvailable } : i);
+          localStorage.setItem(cacheKey, JSON.stringify(updatedCache));
+      }
     } catch {
-      // Silently fail - optimistic update already reverted
+      // Reversion handled in 'if (error)' block
     }
-  }, []);
+  }, [campus?.id]);
 
   const getMenuItem = useCallback((itemId: string) => {
     return menuItems.find(item => item.id === itemId);

@@ -34,7 +34,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                 <span className="font-display text-xl font-semibold text-foreground tracking-tight">Grab</span>
                 <span className="font-display text-xl font-bold text-primary tracking-tight">TheByte</span>
               </div>
-              <span className="text-xs text-muted-foreground">Order ahead, skip the queue</span>
+              {/* 🚀 THE BILLION-DOLLAR TAGLINE UPGRADE */}
+              <span className="text-xs text-muted-foreground">Beat the crowd. Grab the byte.</span>
             </motion.div>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="flex gap-1">
               {[0, 1, 2].map((i) => (
