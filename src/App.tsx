@@ -44,7 +44,7 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
-const Support = lazy(() => import("./pages/Support"));
+
 
 // Super Admin Pages
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard").then(m => ({ default: m.SuperAdminDashboard })));
