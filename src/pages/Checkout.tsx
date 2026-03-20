@@ -285,6 +285,7 @@ export default function Checkout() {
             </div>
           </section>
         </div>
+        </PullToRefresh>
       </main>
 
       {/* Sticky Bottom Actions */}
