@@ -11,7 +11,7 @@ import {
   X,
   ChevronDown,
   Bell,
-  MessageCircle,
+  
   Users,
   History,
   BarChart3
