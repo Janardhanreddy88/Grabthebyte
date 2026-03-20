@@ -207,6 +207,7 @@ export default function Menu() {
                 />
               )}
             </div>
+            </PullToRefresh>
           </main>
 
           {/* Desktop Cart */}
