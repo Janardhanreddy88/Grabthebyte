@@ -218,16 +218,6 @@ const App = () => (
                                     } 
                                   />
                                   <Route 
-                                    path="/super-admin/support" 
-                                    element={
-                                      <SuperAdminRoute>
-                                        <SuperAdminLayout>
-                                          <SupportTickets />
-                                        </SuperAdminLayout>
-                                      </SuperAdminRoute>
-                                    } 
-                                  />
-                                  <Route 
                                     path="/super-admin/users" 
                                     element={
                                       <SuperAdminRoute>

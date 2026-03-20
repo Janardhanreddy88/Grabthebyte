@@ -488,7 +488,7 @@ export function SuperAdminDashboard() {
                 { to: '/super-admin/users', label: 'Manage Users', icon: Users },
                 { to: '/super-admin/settlements', label: 'Settlements', icon: Wallet },
                 { to: '/super-admin/analytics', label: 'Full Analytics', icon: BarChart3 },
-                { to: '/super-admin/support', label: 'Support Tickets', icon: AlertCircle },
+                
               ].map(link => (
                 <Link key={link.to} to={link.to}
                   className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-muted transition-colors text-sm">
