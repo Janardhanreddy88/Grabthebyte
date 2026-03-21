@@ -2,13 +2,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Clock, TrendingUp, ShoppingBag, IndianRupee, Package, Users,
-  Sun, Utensils, Cookie, ChevronDown, Calendar, PieChart, Loader2,
+  ChevronDown, Calendar, PieChart, Loader2, UtensilsCrossed,
 } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { PeriodBreakdown } from './PeriodBreakdown';
+import { CategoryBreakdown } from './CategoryBreakdown';
 import { TopItemsList } from './TopItemsList';
 import { StatSummaryCards } from './StatSummaryCards';
+
+const PIE_COLORS = [
+  'hsl(var(--primary))', 'hsl(var(--secondary))',
+  'hsl(45, 93%, 47%)', 'hsl(270, 50%, 60%)',
+  'hsl(217, 91%, 60%)', 'hsl(24, 95%, 53%)',
+];
 
 interface AdminAnalyticsTabProps {
   todayStats: any;
@@ -31,21 +37,14 @@ export function AdminAnalyticsTab({
     <div className="space-y-6">
       {/* Today's Report */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold">Today's Report</h3>
-              <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Clock className="w-5 h-5 text-primary" />
           </div>
-          {todayStats?.currentPeriod && (
-            <span className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-sm font-medium animate-pulse">
-              {todayStats.currentPeriod}
-            </span>
-          )}
+          <div>
+            <h3 className="text-lg font-semibold">Today's Report</h3>
+            <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
+          </div>
         </div>
 
         {todayLoading ? (
@@ -79,11 +78,11 @@ export function AdminAnalyticsTab({
               <Card className="rounded-2xl card-shadow">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Clock className="h-4 w-4" /> Orders by Time Period
+                    <UtensilsCrossed className="h-4 w-4" /> Orders by Category
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <PeriodBreakdown data={todayStats?.periodBreakdown || []} showActiveIndicator />
+                  <CategoryBreakdown data={todayStats?.categoryBreakdown || []} />
                 </CardContent>
               </Card>
 
@@ -116,9 +115,7 @@ export function AdminAnalyticsTab({
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4">
           {weeklyLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
           ) : (
             <>
               <StatSummaryCards stats={[
@@ -132,11 +129,11 @@ export function AdminAnalyticsTab({
                 <Card className="rounded-2xl card-shadow">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Clock className="h-4 w-4" /> Orders by Time Period
+                      <UtensilsCrossed className="h-4 w-4" /> Orders by Category
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <PeriodBreakdown data={weeklyStats?.periodBreakdown || []} />
+                    <CategoryBreakdown data={weeklyStats?.categoryBreakdown || []} />
                   </CardContent>
                 </Card>
 
@@ -152,13 +149,10 @@ export function AdminAnalyticsTab({
                 </Card>
               </div>
 
-              {/* Daily Orders Chart */}
               <Card className="rounded-2xl card-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Daily Orders (Mon-Sun)</CardTitle>
-                </CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base">Daily Orders (Mon-Sun)</CardTitle></CardHeader>
                 <CardContent>
-                  {weeklyStats?.dailyBreakdown && weeklyStats.dailyBreakdown.some((d: any) => d.orders > 0) ? (
+                  {weeklyStats?.dailyBreakdown?.some((d: any) => d.orders > 0) ? (
                     <div className="h-[200px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={weeklyStats.dailyBreakdown}>
@@ -166,15 +160,8 @@ export function AdminAnalyticsTab({
                           <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                           <Tooltip
-                            formatter={(value: number, name: string) => [
-                              name === 'revenue' ? `₹${value.toLocaleString()}` : value,
-                              name === 'revenue' ? 'Revenue' : 'Orders'
-                            ]}
-                            contentStyle={{
-                              background: "hsl(var(--card))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "12px",
-                            }}
+                            formatter={(value: number, name: string) => [name === 'revenue' ? `₹${value.toLocaleString()}` : value, name === 'revenue' ? 'Revenue' : 'Orders']}
+                            contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
                           />
                           <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
                         </BarChart>
@@ -186,7 +173,6 @@ export function AdminAnalyticsTab({
                 </CardContent>
               </Card>
 
-              {/* Additional Metrics */}
               <div className="grid grid-cols-2 gap-3">
                 <Card className="rounded-2xl card-shadow">
                   <CardContent className="p-4">
@@ -225,84 +211,64 @@ export function AdminAnalyticsTab({
         <CollapsibleTrigger className="w-full group">
           <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
             <Calendar className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold">
-              {monthlyStats?.monthName} {monthlyStats?.year} Analytics
-            </h3>
+            <h3 className="text-lg font-semibold">{monthlyStats?.monthName} {monthlyStats?.year} Analytics</h3>
             <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180" />
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4">
           {monthlyLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
           ) : (
             <>
-              <StatSummaryCards
-                columns={3}
-                stats={[
-                  { label: 'Total Orders', value: monthlyStats?.totalOrders || 0, valueColor: 'text-primary' },
-                  { label: 'Total Revenue', value: `₹${(monthlyStats?.totalRevenue || 0).toLocaleString()}`, valueColor: 'text-secondary' },
-                  { label: 'Avg Order', value: `₹${monthlyStats?.avgOrderValue || 0}` },
-                ]}
-              />
+              <StatSummaryCards columns={3} stats={[
+                { label: 'Total Orders', value: monthlyStats?.totalOrders || 0, valueColor: 'text-primary' },
+                { label: 'Total Revenue', value: `₹${(monthlyStats?.totalRevenue || 0).toLocaleString()}`, valueColor: 'text-secondary' },
+                { label: 'Avg Order', value: `₹${monthlyStats?.avgOrderValue || 0}` },
+              ]} />
 
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Pie Chart */}
                 <Card className="rounded-2xl card-shadow">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <PieChart className="h-5 w-5" /> Revenue by Time Period
+                      <PieChart className="h-5 w-5" /> Revenue by Category
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {monthlyStats?.periodBreakdown && monthlyStats.periodBreakdown.some((p: any) => p.orders > 0) ? (
+                    {monthlyStats?.categoryBreakdown?.some((p: any) => p.orders > 0) ? (
                       <>
                         <div className="h-[200px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <RechartsPie>
                               <Pie
-                                data={monthlyStats.periodBreakdown.filter((p: any) => p.revenue > 0)}
-                                dataKey="revenue"
-                                nameKey="period"
-                                cx="50%" cy="50%"
-                                innerRadius={40} outerRadius={80}
-                                paddingAngle={2}
+                                data={monthlyStats.categoryBreakdown.filter((p: any) => p.revenue > 0)}
+                                dataKey="revenue" nameKey="category"
+                                cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={2}
                               >
-                                {monthlyStats.periodBreakdown.filter((p: any) => p.revenue > 0).map((_: any, index: number) => (
-                                  <Cell key={`cell-${index}`} fill={[
-                                    'hsl(45, 93%, 47%)', 'hsl(217, 91%, 60%)',
-                                    'hsl(270, 50%, 60%)', 'hsl(24, 95%, 53%)',
-                                  ][index % 4]} />
+                                {monthlyStats.categoryBreakdown.filter((p: any) => p.revenue > 0).map((_: any, index: number) => (
+                                  <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                 ))}
                               </Pie>
                               <Legend />
                               <Tooltip
                                 formatter={(value: number) => `₹${value.toLocaleString()}`}
-                                contentStyle={{
-                                  background: "hsl(var(--card))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "12px",
-                                }}
+                                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
                               />
                             </RechartsPie>
                           </ResponsiveContainer>
                         </div>
                         <div className="space-y-2 mt-4">
-                          {monthlyStats.periodBreakdown.map((period: any, idx: number) => {
-                            const colors = ['bg-amber-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500'];
-                            const icons = [Sun, Utensils, Cookie, Utensils];
-                            const Icon = icons[idx];
+                          {monthlyStats.categoryBreakdown.map((cat: any, idx: number) => {
+                            const colors = ['bg-primary', 'bg-secondary', 'bg-amber-500', 'bg-purple-500', 'bg-blue-500', 'bg-orange-500'];
                             return (
-                              <div key={period.period} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                              <div key={cat.category} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                                 <div className="flex items-center gap-2">
-                                  <div className={`w-3 h-3 rounded-full ${colors[idx]}`} />
-                                  <Icon className="h-4 w-4 text-muted-foreground" />
-                                  <span className="font-medium text-sm">{period.period}</span>
+                                  <div className={`w-3 h-3 rounded-full ${colors[idx % colors.length]}`} />
+                                  <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium text-sm">{cat.category}</span>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-sm font-bold">₹{period.revenue.toLocaleString()}</p>
-                                  <p className="text-xs text-muted-foreground">{period.orders} orders</p>
+                                  <p className="text-sm font-bold">₹{cat.revenue.toLocaleString()}</p>
+                                  <p className="text-xs text-muted-foreground">{cat.orders} orders</p>
                                 </div>
                               </div>
                             );
@@ -315,13 +281,10 @@ export function AdminAnalyticsTab({
                   </CardContent>
                 </Card>
 
-                {/* Daily Trends */}
                 <Card className="rounded-2xl card-shadow">
-                  <CardHeader>
-                    <CardTitle className="text-lg">Daily Trends</CardTitle>
-                  </CardHeader>
+                  <CardHeader><CardTitle className="text-lg">Daily Trends</CardTitle></CardHeader>
                   <CardContent>
-                    {monthlyStats?.dailyTrends && monthlyStats.dailyTrends.some((d: any) => d.orders > 0) ? (
+                    {monthlyStats?.dailyTrends?.some((d: any) => d.orders > 0) ? (
                       <div className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={monthlyStats.dailyTrends}>
@@ -335,16 +298,9 @@ export function AdminAnalyticsTab({
                             <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={10} interval="preserveStartEnd" />
                             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
                             <Tooltip
-                              formatter={(value: number, name: string) => [
-                                name === 'revenue' ? `₹${value.toLocaleString()}` : value,
-                                name === 'revenue' ? 'Revenue' : 'Orders'
-                              ]}
+                              formatter={(value: number, name: string) => [name === 'revenue' ? `₹${value.toLocaleString()}` : value, name === 'revenue' ? 'Revenue' : 'Orders']}
                               labelFormatter={(label) => `Day ${label}`}
-                              contentStyle={{
-                                background: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "12px",
-                              }}
+                              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px" }}
                             />
                             <Area type="monotone" dataKey="revenue" stroke="hsl(var(--secondary))" strokeWidth={2} fill="url(#colorMonthlyRevenue)" />
                           </AreaChart>
