@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   LogOut, CheckCircle, XCircle, AlertCircle, RefreshCw,
   Bluetooth, BluetoothOff, Volume2, VolumeX, Loader2,
-  Printer, Search, Clock, ChevronRight, History, X, Camera
+  Search, Clock, History, X, Camera, SwitchCamera
 } from 'lucide-react';
 import jsQR from 'jsqr';
 
@@ -66,12 +66,13 @@ export default function KioskScanner() {
   const { toast } = useToast();
   const { verifyQrCode, verifyByCollectionToken } = useOrdersContext();
   const { logout } = useAuth();
-  const { isPrinterConnected, isConnecting, isPrinting, connectPrinter, disconnectPrinter, printTicket } = usePrinter();
+  const { isPrinterConnected, isConnecting, connectPrinter, disconnectPrinter, printTicket } = usePrinter();
 
   // Camera State
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   // Results State
   const [showResult, setShowResult] = useState(false);
@@ -94,6 +95,9 @@ export default function KioskScanner() {
   const animationRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef<boolean>(false);
+  const facingModeRef = useRef(facingMode);
+
+  useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
 
   // ─── Camera Management ───
   const stopCamera = useCallback(() => {
@@ -135,17 +139,19 @@ export default function KioskScanner() {
     animationRef.current = requestAnimationFrame(scan);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (mode?: 'user' | 'environment') => {
     stopCamera();
     setCameraError(null);
     setShowResult(false);
     setResultType(null);
     setScanning(false);
 
+    const useFacing = mode || facingModeRef.current;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'environment' },
+          facingMode: { ideal: useFacing },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -168,6 +174,12 @@ export default function KioskScanner() {
     }
   }, [stopCamera, scanQRFromCamera]);
 
+  const switchCamera = useCallback(() => {
+    const newMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newMode);
+    startCamera(newMode);
+  }, [facingMode, startCamera]);
+
   useEffect(() => {
     startCamera();
     return () => stopCamera();
@@ -180,17 +192,12 @@ export default function KioskScanner() {
 
     try {
       const cleanedToken = qrData.trim();
-      
-
-      // Check if it looks like a UUID (collection_token)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const isCollectionToken = uuidRegex.test(cleanedToken);
 
       if (isCollectionToken) {
-        // ── Use secure RPC directly with collection_token ──
         const result = await verifyByCollectionToken(cleanedToken);
 
-        // Fetch order details for display
         const { data: orderData } = await supabase
           .from('orders')
           .select(`*, order_items(id, name, price, quantity)`)
@@ -215,10 +222,9 @@ export default function KioskScanner() {
 
         if (result.success) {
           setResultType('success');
-          setResultMessage('Order Verified! Deliver Food.');
+          setResultMessage('Verified ✓ Printing Token');
           if (soundEnabled) playSuccessSound();
 
-          // Auto-print
           if (isPrinterConnected && orderData) {
             printTicket({
               orderNumber: orderData.order_number,
@@ -229,7 +235,6 @@ export default function KioskScanner() {
             });
           }
         } else {
-          // Determine specific error type
           if (result.message.includes('Already Collected')) {
             setResultType('used');
           } else if (result.message.includes('Expired')) {
@@ -243,26 +248,23 @@ export default function KioskScanner() {
           if (soundEnabled) playErrorSound();
         }
       } else {
-        // ── Fallback: Look up by order_number ──
         const order = await verifyQrCode(cleanedToken);
 
         if (!order) {
           setResultType('invalid');
-          setResultMessage('Order not found in database.');
+          setResultMessage('Order not found.');
           if (soundEnabled) playErrorSound();
           setLastOrderDetails(null);
         } else {
-          // Found order, check status
           if (order.status === 'collected' || order.isUsed) {
             setResultType('used');
-            setResultMessage('This order has already been collected.');
+            setResultMessage('Already collected.');
             if (soundEnabled) playErrorSound();
           } else if (order.status === 'expired') {
             setResultType('expired');
-            setResultMessage('This order has expired (5+ hours old).');
+            setResultMessage('Order expired.');
             if (soundEnabled) playErrorSound();
           } else if (order.status === 'confirmed') {
-            // Use secure RPC via markOrderCollected
             const { data: tokenData } = await supabase
               .from('orders')
               .select('collection_token')
@@ -288,7 +290,7 @@ export default function KioskScanner() {
 
               if (result.success) {
                 setResultType('success');
-                setResultMessage('Order Verified! Deliver Food.');
+                setResultMessage('Verified ✓ Printing Token');
                 if (soundEnabled) playSuccessSound();
 
                 if (isPrinterConnected) {
@@ -307,12 +309,12 @@ export default function KioskScanner() {
               }
             } else {
               setResultType('invalid');
-              setResultMessage('Order missing collection token.');
+              setResultMessage('Missing collection token.');
               if (soundEnabled) playErrorSound();
             }
           } else {
             setResultType('payment_pending');
-            setResultMessage('Payment not yet confirmed for this order.');
+            setResultMessage('Payment not confirmed.');
             if (soundEnabled) playErrorSound();
           }
 
@@ -333,12 +335,11 @@ export default function KioskScanner() {
     } catch (err) {
       console.error('Scan Error:', err);
       setResultType('invalid');
-      setResultMessage('Scanner error. Please try again.');
+      setResultMessage('Scanner error. Try again.');
       setShowResult(true);
       if (soundEnabled) playErrorSound();
     } finally {
       setScanning(false);
-      // Cooldown before next scan
       setTimeout(() => {
         scanCooldownRef.current = false;
         lastScannedRef.current = '';
@@ -363,21 +364,17 @@ export default function KioskScanner() {
     setLastOrderDetails(null);
     lastScannedRef.current = '';
     scanCooldownRef.current = false;
-    startCamera();
-  }, [startCamera]);
+  }, []);
 
-  // Auto-dismiss error overlays after 3s
+  // Auto-dismiss ALL results after 3s (including success) and ready for next scan
   useEffect(() => {
-    if (showResult && resultType && resultType !== 'success') {
+    if (showResult && resultType) {
       const timer = setTimeout(() => {
-        setShowResult(false);
-        setResultType(null);
-        scanCooldownRef.current = false;
-        lastScannedRef.current = '';
+        resetAndRestart();
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [showResult, resultType]);
+  }, [showResult, resultType, resetAndRestart]);
 
   // ─── Result Config ───
   const getResultConfig = () => {
@@ -387,7 +384,7 @@ export default function KioskScanner() {
       case 'used':
         return { icon: XCircle, bg: 'bg-amber-600', title: 'ALREADY COLLECTED', color: 'text-white' };
       case 'expired':
-        return { icon: AlertCircle, bg: 'bg-orange-600', title: 'ORDER EXPIRED', color: 'text-white' };
+        return { icon: AlertCircle, bg: 'bg-orange-600', title: 'EXPIRED', color: 'text-white' };
       case 'payment_pending':
         return { icon: Clock, bg: 'bg-yellow-600', title: 'PAYMENT PENDING', color: 'text-white' };
       case 'invalid':
@@ -402,9 +399,8 @@ export default function KioskScanner() {
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
       {/* ─── HEADER BAR ─── */}
-      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent">
         <div className="flex items-center gap-3">
-          {/* Printer Status */}
           <button
             onClick={isPrinterConnected ? disconnectPrinter : connectPrinter}
             disabled={isConnecting}
@@ -424,6 +420,15 @@ export default function KioskScanner() {
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Switch Camera */}
+          <Button
+            variant="ghost" size="icon"
+            onClick={switchCamera}
+            className="text-white hover:bg-white/10"
+          >
+            <SwitchCamera className="w-5 h-5" />
+          </Button>
+
           {/* History Toggle */}
           <Button
             variant="ghost" size="icon"
@@ -469,7 +474,7 @@ export default function KioskScanner() {
 
       {/* ─── MANUAL INPUT BAR ─── */}
       {showManualInput && (
-        <div className="absolute top-16 left-0 right-0 z-40 px-4 py-3 bg-black/80 backdrop-blur-lg border-b border-white/10 animate-fade-in">
+        <div className="absolute top-20 left-0 right-0 z-40 px-4 py-3 bg-black/80 backdrop-blur-lg border-b border-white/10 animate-fade-in">
           <div className="flex gap-2 max-w-md mx-auto">
             <Input
               placeholder="Enter order number (e.g. RCDC-0042)"
@@ -502,24 +507,16 @@ export default function KioskScanner() {
       {/* ─── SCANNING RETICLE ─── */}
       {!showResult && cameraActive && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          {/* Dim overlay with cutout */}
           <div className="absolute inset-0 bg-black/40" />
-
-          {/* Reticle */}
           <div className="relative w-72 h-72 z-10">
-            {/* Corner markers */}
             <div className="absolute top-0 left-0 w-10 h-10 border-t-[3px] border-l-[3px] border-emerald-400 rounded-tl-lg" />
             <div className="absolute top-0 right-0 w-10 h-10 border-t-[3px] border-r-[3px] border-emerald-400 rounded-tr-lg" />
             <div className="absolute bottom-0 left-0 w-10 h-10 border-b-[3px] border-l-[3px] border-emerald-400 rounded-bl-lg" />
             <div className="absolute bottom-0 right-0 w-10 h-10 border-b-[3px] border-r-[3px] border-emerald-400 rounded-br-lg" />
-
-            {/* Scan line animation */}
             <div className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" 
               style={{ top: '50%' }}
             />
           </div>
-
-          {/* Status Text */}
           <div className="absolute bottom-24 z-10">
             <div className="bg-black/60 backdrop-blur-md text-white px-5 py-2.5 rounded-full text-sm font-medium border border-white/10">
               {scanning ? (
@@ -536,87 +533,25 @@ export default function KioskScanner() {
         </div>
       )}
 
-      {/* ─── ERROR OVERLAYS (Auto-dismiss) ─── */}
-      {showResult && resultType && resultType !== 'success' && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
-          <div className={`p-8 rounded-3xl flex flex-col items-center shadow-2xl max-w-sm mx-4 ${resultConfig.bg}`}>
-            <ResultIcon className="w-20 h-20 text-white mb-4" />
-            <h2 className="text-2xl font-bold text-white text-center">{resultConfig.title}</h2>
-            <p className="text-white/80 mt-3 text-center text-sm">{resultMessage}</p>
-            {lastOrderDetails && (
-              <div className="mt-4 bg-white/10 rounded-xl p-3 w-full">
-                <p className="text-white/90 text-sm font-mono text-center">#{lastOrderDetails.orderNumber}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ─── SUCCESS SCREEN ─── */}
-      {showResult && resultType === 'success' && (
-        <div className="absolute inset-0 z-50 bg-emerald-600 flex flex-col items-center justify-center p-6 animate-in slide-in-from-bottom-10 duration-300">
-          <div className="relative">
-            <CheckCircle className="w-28 h-28 text-white mb-4" />
-            <div className="absolute inset-0 animate-ping">
-              <CheckCircle className="w-28 h-28 text-white/30" />
-            </div>
-          </div>
-
-          <h1 className="text-4xl font-extrabold text-white mt-2 tracking-tight">VERIFIED!</h1>
-          <p className="text-white/80 text-sm mt-1">Deliver the food to the customer</p>
-
-          {lastOrderDetails && (
-            <div className="mt-6 w-full max-w-sm">
-              <div className="bg-white/15 backdrop-blur-md rounded-2xl p-5 border border-white/20">
-                <p className="text-2xl font-mono font-bold text-white text-center mb-3">
-                  #{lastOrderDetails.orderNumber}
+      {/* ─── COMPACT RESULT BANNER (Success & Error) ─── */}
+      {showResult && resultType && (
+        <div className="absolute bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-200">
+          <div className={`${resultConfig.bg} px-5 py-4 flex items-center gap-3`}>
+            <ResultIcon className="w-8 h-8 text-white shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm">{resultConfig.title}</p>
+              {lastOrderDetails && resultType === 'success' ? (
+                <p className="text-white/80 text-xs truncate">
+                  #{lastOrderDetails.orderNumber} · ₹{lastOrderDetails.total.toFixed(0)} · {lastOrderDetails.customerName}
                 </p>
-                <div className="space-y-2 mb-4">
-                  {lastOrderDetails.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-white/90 text-sm">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>₹{(item.price * item.quantity).toFixed(0)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-white/20 pt-3 flex justify-between text-white font-bold">
-                  <span>Total</span>
-                  <span>₹{lastOrderDetails.total.toFixed(0)}</span>
-                </div>
-              </div>
-
-              {/* Print button if printer connected */}
-              {isPrinterConnected && (
-                <Button
-                  onClick={() => {
-                    printTicket({
-                      orderNumber: lastOrderDetails.orderNumber,
-                      items: lastOrderDetails.items,
-                      totalAmount: lastOrderDetails.total,
-                      customerName: lastOrderDetails.customerName,
-                      createdAt: lastOrderDetails.scannedAt.toISOString(),
-                    });
-                  }}
-                  disabled={isPrinting}
-                  className="w-full mt-3 bg-white/20 hover:bg-white/30 text-white border border-white/30"
-                >
-                  {isPrinting ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Printing...</>
-                  ) : (
-                    <><Printer className="w-4 h-4 mr-2" /> Reprint Ticket</>
-                  )}
-                </Button>
+              ) : (
+                <p className="text-white/80 text-xs truncate">{resultMessage}</p>
               )}
             </div>
-          )}
-
-          <Button
-            onClick={resetAndRestart}
-            size="lg"
-            className="mt-6 bg-white text-emerald-700 hover:bg-white/90 font-bold px-8 rounded-full shadow-lg"
-          >
-            <RefreshCw className="w-5 h-5 mr-2" /> Scan Next Order
-          </Button>
+            {lastOrderDetails && resultType === 'success' && (
+              <span className="text-white/60 text-[10px] shrink-0">Auto-closing...</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -627,7 +562,7 @@ export default function KioskScanner() {
           <h2 className="text-white text-lg font-semibold mb-2">Camera Error</h2>
           <p className="text-white/60 text-center mb-6 max-w-sm">{cameraError}</p>
           <div className="flex gap-3">
-            <Button onClick={startCamera} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button onClick={() => startCamera()} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               <RefreshCw className="w-4 h-4 mr-2" /> Retry Camera
             </Button>
             <Button
@@ -692,7 +627,7 @@ export default function KioskScanner() {
           {scannedHistory.length > 0 && (
             <div className="p-3 border-t border-white/10">
               <div className="flex justify-between text-xs text-white/50">
-                <span>Total Scanned: {scannedHistory.length}</span>
+                <span>Total: {scannedHistory.length}</span>
                 <span>Verified: {scannedHistory.filter(o => o.status === 'success').length}</span>
               </div>
             </div>
