@@ -7,24 +7,32 @@ import { useState, useEffect } from 'react';
 export default function Index() {
   const navigate = useNavigate();
   const { hasCampus } = useCampus();
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth(); // 🚀 Added isAuthLoading
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [splashFinished, setSplashFinished] = useState(false);
 
-  // 🧠 THE SMART SYNC: Wait for BOTH the animation AND the Auth data
   useEffect(() => {
     if (splashFinished && !isAuthLoading) {
       if (!hasCampus) {
         navigate('/select-campus');
-      } else if (isAuthenticated) {
-        navigate('/menu');
+      } else if (isAuthenticated && user) {
+        // Route based on role
+        if (user.role === 'admin') {
+          navigate('/admin');
+        } else if (user.role === 'kiosk') {
+          navigate('/kiosk-scanner');
+        } else if (user.role === 'super_admin') {
+          navigate('/super-admin');
+        } else {
+          navigate('/menu');
+        }
       } else {
         navigate('/auth');
       }
     }
-  }, [splashFinished, isAuthLoading, isAuthenticated, hasCampus, navigate]);
+  }, [splashFinished, isAuthLoading, isAuthenticated, user, hasCampus, navigate]);
 
   const handleComplete = () => {
-    setSplashFinished(true); // Animation is done, now we wait for Auth to be ready
+    setSplashFinished(true);
   };
 
   return <SplashScreen onComplete={handleComplete} />;
