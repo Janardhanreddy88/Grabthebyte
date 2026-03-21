@@ -278,6 +278,7 @@ export default function AdminDashboard() {
               orders={orders}
               ordersLoading={ordersLoading}
               markTokenUsed={markTokenUsed}
+              menuItems={menuItems}
             />
           </TabsContent>
 
