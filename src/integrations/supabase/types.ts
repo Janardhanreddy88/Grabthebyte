@@ -753,7 +753,6 @@ export type Database = {
         Args: { p_item_id: string; p_quantity: number }
         Returns: undefined
       }
-      expire_old_orders: { Args: never; Returns: undefined }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_super_admin_stats: { Args: { p_campus_id?: string }; Returns: Json }
@@ -778,6 +777,17 @@ export type Database = {
       mark_order_collected: { Args: { p_order_id: string }; Returns: Json }
       mark_order_collected_secure: {
         Args: { p_secret_token: string }
+        Returns: Json
+      }
+      place_order_atomic: {
+        Args: {
+          p_campus_id: string
+          p_customer_email: string
+          p_customer_name: string
+          p_items: Json
+          p_total: number
+          p_user_id: string
+        }
         Returns: Json
       }
       reset_item_stock: {
