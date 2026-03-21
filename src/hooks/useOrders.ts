@@ -144,7 +144,7 @@ export function useOrders(): UseOrdersReturn {
       }));
 
       // 4. Hit the Titanium Vault (Atomic Checkout)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic', {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic' as any, {
         p_user_id: session.session.user.id,
         p_campus_id: campus.id,
         p_total: params.total,
