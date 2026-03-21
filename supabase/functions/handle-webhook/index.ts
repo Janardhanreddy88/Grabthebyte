@@ -84,9 +84,9 @@ Deno.serve(async (req) => {
       newPaymentStatus = "failed";
     }
 
-    // 9. UPDATE DATABASE
+    // 9. UPDATE DATABASE (Stock is already reserved at checkout, so we just update status!)
     if (newPaymentStatus !== order.payment_status) {
-      const { data: updatedRows } = await supabase
+      await supabase
         .from("orders")
         .update({
           status: newOrderStatus,
@@ -95,13 +95,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id)
-        .eq("payment_status", "pending") 
-        .select();
-
-      // 10. ATOMIC STOCK DECREMENT
-      if (updatedRows && updatedRows.length > 0 && newPaymentStatus === "completed") {
-        await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
-      }
+        .eq("payment_status", "pending");
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

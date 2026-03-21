@@ -38,7 +38,7 @@ async function sendAdminNotification(campusId: string, orderNumber: string) {
   if (!appId || !restKey || !campusId) return;
 
   try {
-    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+    await fetch("https://onesignal.com/api/v1/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Basic ${restKey}` },
       body: JSON.stringify({
@@ -86,7 +86,6 @@ Deno.serve(async (req) => {
 
     if (order.payment_status === "completed") {
       await sendAdminNotification(order.campus_id, order.order_number);
-      // 🔥 FIX: ADDED CONTENT-TYPE HEADER SO REACT CAN READ IT
       return new Response(JSON.stringify({ success: true, status: "completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -118,7 +117,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: false, message: "Payment verification failed." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: updatedRows, error: updateError } = await supabase
+    // Update order to confirmed (Stock is already handled at checkout!)
+    const { error: updateError } = await supabase
       .from("orders")
       .update({
         status: "confirmed",
@@ -128,22 +128,13 @@ Deno.serve(async (req) => {
         razorpay_signature: payload.razorpay_signature || "api_verified", 
       })
       .eq("id", order.id)
-      .eq("payment_status", "pending") 
-      .select();
+      .eq("payment_status", "pending");
 
     if (updateError) throw updateError;
 
-    if (updatedRows && updatedRows.length > 0) {
-      try {
-        await supabase.rpc("atomic_decrement_stock", { p_order_id: order.id });
-      } catch (e) {
-        console.error("Stock decrement skipped:", e);
-      }
-    }
-
+    // Dispatch Push Notification to Canteen Staff
     await sendAdminNotification(order.campus_id, order.order_number);
 
-    // 🔥 FIX: ADDED CONTENT-TYPE HEADER HERE TOO
     return new Response(JSON.stringify({ success: true, status: "completed", orderId: order.id, orderNumber: order.order_number }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
