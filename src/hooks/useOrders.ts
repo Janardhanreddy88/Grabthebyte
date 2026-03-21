@@ -160,12 +160,13 @@ export function useOrders(): UseOrdersReturn {
       }
 
       // 6. Build Local State Object
+      const rpcResult = rpcData as any;
       const newOrder: Order = {
-        id: rpcData.order_id,
+        id: rpcResult.order_id,
         items: params.items,
         total: params.total,
         status: 'pending',
-        qrCode: rpcData.order_number || '',
+        qrCode: rpcResult.order_number || '',
         createdAt: new Date(),
         isUsed: false,
         customerName: params.customerName || profile?.full_name || 'Guest',
