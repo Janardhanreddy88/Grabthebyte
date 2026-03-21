@@ -2,14 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
 
-// ... (Interfaces remain the same) ...
-interface TimePeriodStats {
-  period: string;
-  periodId: string;
+interface CategoryStats {
+  category: string;
   orders: number;
   revenue: number;
   percentage: number;
-  isActive: boolean;
 }
 
 interface TopItem {
@@ -28,7 +25,7 @@ interface TodayAnalytics {
   totalOrders: number;
   totalRevenue: number;
   avgOrderValue: number;
-  periodBreakdown: TimePeriodStats[];
+  categoryBreakdown: CategoryStats[];
   topItems: TopItem[];
   hourlyData: HourlyData[];
   peakHour: string;
@@ -37,25 +34,8 @@ interface TodayAnalytics {
   confirmedOrders: number;
   activeOrders: number;
   collectedOrders: number;
-  currentPeriod: string;
   dateString: string;
 }
-
-// ... (Helper functions remain the same) ...
-const getTimePeriod = (hour: number): string => {
-  if (hour >= 7 && hour < 11) return 'breakfast';
-  if (hour >= 11 && hour < 15) return 'lunch';
-  if (hour >= 15 && hour < 18) return 'snacks';
-  if (hour >= 18 && hour < 22) return 'dinner';
-  return 'other';
-};
-
-const periodNames: Record<string, string> = {
-  breakfast: 'Breakfast',
-  lunch: 'Lunch',
-  snacks: 'Snacks',
-  dinner: 'Dinner',
-};
 
 const formatHour = (hour: number) => {
   const suffix = hour >= 12 ? 'PM' : 'AM';
@@ -70,37 +50,15 @@ export function useTodayAnalytics() {
     queryKey: ['today-analytics', campus?.id],
     queryFn: async (): Promise<TodayAnalytics> => {
       const now = new Date();
-      const currentHour = now.getHours();
-      const currentPeriod = getTimePeriod(currentHour);
       const dateString = now.toLocaleDateString('en-IN', { 
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
       });
 
       const createDefaultData = (): TodayAnalytics => ({
-        totalOrders: 0,
-        totalRevenue: 0,
-        avgOrderValue: 0,
-        periodBreakdown: ['breakfast', 'lunch', 'snacks', 'dinner'].map(period => ({
-          period: periodNames[period],
-          periodId: period,
-          orders: 0,
-          revenue: 0,
-          percentage: 0,
-          isActive: period === currentPeriod,
-        })),
-        topItems: [],
-        hourlyData: [],
-        peakHour: '-',
-        completionRate: 0,
-        pendingOrders: 0,
-        confirmedOrders: 0,
-        activeOrders: 0,
-        collectedOrders: 0,
-        currentPeriod: periodNames[currentPeriod] || 'Off Hours',
-        dateString,
+        totalOrders: 0, totalRevenue: 0, avgOrderValue: 0,
+        categoryBreakdown: [], topItems: [], hourlyData: [],
+        peakHour: '-', completionRate: 0, pendingOrders: 0,
+        confirmedOrders: 0, activeOrders: 0, collectedOrders: 0, dateString,
       });
 
       if (!campus?.id) return createDefaultData();
@@ -112,128 +70,95 @@ export function useTodayAnalytics() {
         .from('orders')
         .select(`
           id, total, created_at, status,
-          order_items (name, quantity, price)
+          order_items (name, quantity, price, menu_item_id)
         `)
         .eq('campus_id', campus.id)
         .gte('created_at', todayStart.toISOString())
         .lte('created_at', todayEnd.toISOString());
 
-      if (error) {
-        console.error('Error fetching today analytics:', error);
-        return createDefaultData();
-      }
+      if (error) { console.error('Error fetching today analytics:', error); return createDefaultData(); }
+
+      // Fetch menu items to get categories
+      const { data: menuItems } = await supabase
+        .from('menu_items')
+        .select('id, category')
+        .eq('campus_id', campus.id);
+
+      const categoryMap: Record<string, string> = {};
+      (menuItems || []).forEach(item => {
+        categoryMap[item.id] = item.category || 'other';
+      });
 
       const ordersList = orders || [];
-
-      // ✅ FIX: "Completed" means MONEY RECEIVED (Confirmed or Collected)
-      // We filter out 'pending', 'cancelled', 'failed' for Revenue Stats
       const paidOrders = ordersList.filter(o => o.status === 'confirmed' || o.status === 'collected');
       const collectedOrdersList = ordersList.filter(o => o.status === 'collected');
 
-      // Calculate totals based ONLY on Paid Orders
       const totalOrders = paidOrders.length;
       const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-      
-      // Completion rate is (Collected / Total Paid Orders)
       const completionRate = paidOrders.length > 0 
-        ? Math.round((collectedOrdersList.length / paidOrders.length) * 100) 
-        : 0;
+        ? Math.round((collectedOrdersList.length / paidOrders.length) * 100) : 0;
 
-      // Status counts (for the dashboard badges)
       const pendingOrders = ordersList.filter(o => o.status === 'pending').length;
       const confirmedOrders = ordersList.filter(o => o.status === 'confirmed').length;
-      // "Active" usually means things the kitchen needs to worry about (Confirmed but not collected)
-      const activeOrders = confirmedOrders; 
 
-      const periodStats: Record<string, { orders: number; revenue: number }> = {
-        breakfast: { orders: 0, revenue: 0 },
-        lunch: { orders: 0, revenue: 0 },
-        snacks: { orders: 0, revenue: 0 },
-        dinner: { orders: 0, revenue: 0 },
-      };
-
+      const catStats: Record<string, { orders: Set<string>; revenue: number; itemCount: number }> = {};
       const hourCounts: Record<number, { orders: number; revenue: number }> = {};
-      for (let h = 7; h <= 22; h++) {
-        hourCounts[h] = { orders: 0, revenue: 0 };
-      }
-
+      for (let h = 7; h <= 22; h++) hourCounts[h] = { orders: 0, revenue: 0 };
       const itemCounts: Record<string, { quantity: number; revenue: number }> = {};
 
-      // ✅ FIX: Only iterate over PAID orders for charts/graphs
       paidOrders.forEach(order => {
         const orderDate = new Date(order.created_at);
         const hour = orderDate.getHours();
-        const period = getTimePeriod(hour);
-
-        if (periodStats[period]) {
-          periodStats[period].orders += 1;
-          periodStats[period].revenue += Number(order.total);
-        }
-
         if (hourCounts[hour]) {
           hourCounts[hour].orders += 1;
           hourCounts[hour].revenue += Number(order.total);
         }
 
-        const items = order.order_items as Array<{ name: string; quantity: number; price: number }> || [];
-        items.forEach((item) => {
-          if (!itemCounts[item.name]) {
-            itemCounts[item.name] = { quantity: 0, revenue: 0 };
-          }
+        const items = order.order_items as Array<{ name: string; quantity: number; price: number; menu_item_id: string | null }> || [];
+        items.forEach(item => {
+          const cat = (item.menu_item_id && categoryMap[item.menu_item_id]) || 'other';
+          if (!catStats[cat]) catStats[cat] = { orders: new Set(), revenue: 0, itemCount: 0 };
+          catStats[cat].orders.add(order.id);
+          catStats[cat].revenue += item.price * item.quantity;
+          catStats[cat].itemCount += item.quantity;
+
+          if (!itemCounts[item.name]) itemCounts[item.name] = { quantity: 0, revenue: 0 };
           itemCounts[item.name].quantity += item.quantity;
           itemCounts[item.name].revenue += item.price * item.quantity;
         });
       });
 
-      const periodBreakdown: TimePeriodStats[] = ['breakfast', 'lunch', 'snacks', 'dinner'].map(period => ({
-        period: periodNames[period],
-        periodId: period,
-        orders: periodStats[period].orders,
-        revenue: periodStats[period].revenue,
-        percentage: totalOrders > 0 ? Math.round((periodStats[period].orders / totalOrders) * 100) : 0,
-        isActive: period === currentPeriod,
-      }));
+      const totalItemRevenue = Object.values(catStats).reduce((s, c) => s + c.revenue, 0);
+      const categoryBreakdown: CategoryStats[] = Object.entries(catStats)
+        .map(([cat, stats]) => ({
+          category: cat.charAt(0).toUpperCase() + cat.slice(1),
+          orders: stats.orders.size,
+          revenue: stats.revenue,
+          percentage: totalItemRevenue > 0 ? Math.round((stats.revenue / totalItemRevenue) * 100) : 0,
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
 
-      const topItems: TopItem[] = Object.entries(itemCounts)
+      const topItems = Object.entries(itemCounts)
         .map(([name, stats]) => ({ name, ...stats }))
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
 
       const hourlyData: HourlyData[] = [];
       for (let h = 7; h <= 21; h++) {
-        hourlyData.push({
-          hour: formatHour(h),
-          orders: hourCounts[h]?.orders || 0,
-          revenue: hourCounts[h]?.revenue || 0,
-        });
+        hourlyData.push({ hour: formatHour(h), orders: hourCounts[h]?.orders || 0, revenue: hourCounts[h]?.revenue || 0 });
       }
 
-      let peakHourVal = 0;
-      let peakHourCount = 0;
+      let peakHourVal = 0, peakHourCount = 0;
       Object.entries(hourCounts).forEach(([hour, stats]) => {
-        if (stats.orders > peakHourCount) {
-          peakHourCount = stats.orders;
-          peakHourVal = parseInt(hour);
-        }
+        if (stats.orders > peakHourCount) { peakHourCount = stats.orders; peakHourVal = parseInt(hour); }
       });
-      const peakHour = peakHourCount > 0 ? formatHour(peakHourVal) : '-';
 
       return {
-        totalOrders,
-        totalRevenue,
-        avgOrderValue,
-        periodBreakdown,
-        topItems,
-        hourlyData,
-        peakHour,
-        completionRate,
-        pendingOrders,
-        confirmedOrders,
-        activeOrders,
-        collectedOrders: collectedOrdersList.length,
-        currentPeriod: periodNames[currentPeriod] || 'Off Hours',
-        dateString,
+        totalOrders, totalRevenue, avgOrderValue, categoryBreakdown,
+        topItems, hourlyData, peakHour: peakHourCount > 0 ? formatHour(peakHourVal) : '-',
+        completionRate, pendingOrders, confirmedOrders, activeOrders: confirmedOrders,
+        collectedOrders: collectedOrdersList.length, dateString,
       };
     },
     enabled: !!campus?.id,
