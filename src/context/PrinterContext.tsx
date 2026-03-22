@@ -23,7 +23,6 @@ interface PrinterContextType {
   disconnectPrinter: () => void;
   printTicket: (orderData: OrderData) => Promise<boolean>;
 }
-
 const PrinterContext = createContext<PrinterContextType | null>(null);
 
 // ESC/POS Commands
@@ -35,7 +34,7 @@ const DEFAULT_PRINTER_SETTINGS: PrinterSettings = {
   paper_width: '58mm',
   bluetooth_name_prefix: 'BlueTooth Printer', 
   print_logo: false,
-  footer_text: 'Thank you for your order!',
+  footer_text: 'Thank you! Enjoy the meal.', // Updated per your request
 };
 
 export function PrinterProvider({ children }: { children: React.ReactNode }) {
@@ -48,48 +47,80 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const printerSettings = campusSettings?.printer || DEFAULT_PRINTER_SETTINGS;
   const textEncoder = new TextEncoder();
 
-  // 1. EXACT SAME ESC/POS FORMATTER
+  // 🌟 MODIFIED: THE NEW TOKEN DESIGN 🌟
   const createESCPOSCommands = useCallback((orderData: OrderData): Uint8Array => {
     const commands: number[] = [];
     const is80mm = printerSettings.paper_width === '80mm';
     const lineWidth = is80mm ? 48 : 32;
     const separator = '-'.repeat(lineWidth);
+
+    // 1. Dynamic Campus Extractor (e.g. "CMRTC-245" -> "CMRTC")
+    const campusCode = orderData.orderNumber.includes('-') 
+      ? orderData.orderNumber.split('-')[0].toUpperCase() 
+      : 'CAMPUS';
+
+    // Helper: Formats items into 3 columns (Name, Qty, Price)
+    const formatRow = (name: string, qty: string, price: string) => {
+      const nameLen = is80mm ? 30 : 16;
+      const qtyLen = 3;
+      const priceLen = is80mm ? 12 : 9;
+      
+      const n = name.length > nameLen ? name.substring(0, nameLen - 1) + "." : name.padEnd(nameLen, ' ');
+      const q = qty.padStart(qtyLen, ' ');
+      const p = price.padStart(priceLen, ' ');
+      
+      return `${n} ${q}  ${p}\n`; 
+    };
+
+    // 2. HEADER
+    commands.push(ESC, 0x40); // Initialize Printer
+    commands.push(ESC, 0x61, 0x01); // Center Align
     
-    commands.push(ESC, 0x40); // Initialize
-    commands.push(ESC, 0x61, 0x01); // Center
+    // Brand Name
     commands.push(ESC, 0x45, 0x01); // Bold ON
-    commands.push(GS, 0x21, 0x11); // Double size
+    commands.push(GS, 0x21, 0x11); // Double size width/height
+    commands.push(...textEncoder.encode(`GrabTheByte\n`));
     
-    commands.push(...textEncoder.encode(`TOKEN #${orderData.orderNumber}\n`));
-    
+    // Dynamic Canteen Name
+    commands.push(GS, 0x21, 0x01); // Smaller but still bold
+    commands.push(...textEncoder.encode(`${campusCode} CANTEEN\n`));
     commands.push(GS, 0x21, 0x00); // Normal size
     commands.push(ESC, 0x45, 0x00); // Bold OFF
     commands.push(...textEncoder.encode(`${separator}\n`));
-    commands.push(ESC, 0x61, 0x00); // Left
-    commands.push(...textEncoder.encode(`Customer: ${orderData.customerName}\n\n`));
-    
+
+    // 3. ORDER INFO
+    commands.push(ESC, 0x61, 0x00); // Left Align
     commands.push(ESC, 0x45, 0x01); // Bold ON
-    commands.push(...textEncoder.encode('ITEMS:\n'));
+    commands.push(...textEncoder.encode(`Order No: #${orderData.orderNumber}\n`));
     commands.push(ESC, 0x45, 0x00); // Bold OFF
     
-    orderData.items.forEach(item => {
-      commands.push(...textEncoder.encode(`${item.quantity}x ${item.name}\n`));
-      commands.push(...textEncoder.encode(`   Rs.${item.price * item.quantity}\n`));
-    });
-    
     commands.push(...textEncoder.encode(`${separator}\n`));
+
+    // 4. TABLE HEADER
     commands.push(ESC, 0x45, 0x01); // Bold ON
-    commands.push(GS, 0x21, 0x01); // Slightly larger
+    commands.push(...textEncoder.encode(formatRow('ITEM', 'QTY', 'PRICE')));
+    commands.push(ESC, 0x45, 0x00); // Bold OFF
+    commands.push(...textEncoder.encode(`${separator}\n`));
+
+    // 5. THE ITEMS
+    orderData.items.forEach(item => {
+      commands.push(...textEncoder.encode(formatRow(item.name, String(item.quantity), String(item.price * item.quantity))));
+    });
+    commands.push(...textEncoder.encode(`${separator}\n`));
+
+    // 6. TOTAL PRICE
+    commands.push(ESC, 0x61, 0x02); // Right Align
+    commands.push(ESC, 0x45, 0x01); // Bold ON
+    commands.push(GS, 0x21, 0x11); // Double size
     commands.push(...textEncoder.encode(`TOTAL: Rs.${orderData.totalAmount}\n`));
     commands.push(GS, 0x21, 0x00); // Normal size
     commands.push(ESC, 0x45, 0x00); // Bold OFF
-    
-    commands.push(ESC, 0x61, 0x01); // Center
-    const dateStr = new Date(orderData.createdAt).toLocaleDateString('en-IN', { 
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-    commands.push(...textEncoder.encode(`\n${dateStr}\n`));
-    commands.push(...textEncoder.encode(`\n${printerSettings.footer_text}\n\n`));
+
+    // 7. FOOTER
+    commands.push(ESC, 0x61, 0x01); // Center Align
+    commands.push(...textEncoder.encode(`\n${separator}\n`));
+    commands.push(ESC, 0x45, 0x01); // Bold ON
+    commands.push(...textEncoder.encode(`${printerSettings.footer_text}\n\n\n\n`)); // Uses the "Thank you! Enjoy the meal." setting
     
     commands.push(ESC, 0x64, 0x04); // Feed 4 lines
     commands.push(GS, 0x56, 0x00); // Full cut
