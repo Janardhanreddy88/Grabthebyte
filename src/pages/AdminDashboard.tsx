@@ -268,6 +268,9 @@ export default function AdminDashboard() {
               weeklyLoading={weeklyLoading}
               monthlyStats={monthlyStats}
               monthlyLoading={monthlyLoading}
+              monthlySelectedMonth={monthlySelectedMonth}
+              monthlySetSelectedMonth={monthlySetSelectedMonth}
+              monthlyMonthOptions={monthlyMonthOptions}
               lowStockItems={lowStockItems}
               onRestockClick={handleRestockClick}
             />
