@@ -150,7 +150,7 @@ export default function AdminDashboard() {
   const { data: menuItems = [], isLoading: menuLoading } = useAdminMenuItems();
   const { data: orders = [], isLoading: ordersLoading } = useAdminOrders();
   const { data: stats } = useOrderStats();
-  const { data: monthlyStats, isLoading: monthlyLoading } = useMonthlyAnalytics();
+  const { data: monthlyStats, isLoading: monthlyLoading, selectedMonth: monthlySelectedMonth, setSelectedMonth: monthlySetSelectedMonth, monthOptions: monthlyMonthOptions } = useMonthlyAnalytics();
   const { data: weeklyStats, isLoading: weeklyLoading } = useWeeklyAnalytics();
   const { data: todayStats, isLoading: todayLoading } = useTodayAnalytics();
   const createMenuItem = useCreateMenuItem();
@@ -268,6 +268,9 @@ export default function AdminDashboard() {
               weeklyLoading={weeklyLoading}
               monthlyStats={monthlyStats}
               monthlyLoading={monthlyLoading}
+              monthlySelectedMonth={monthlySelectedMonth}
+              monthlySetSelectedMonth={monthlySetSelectedMonth}
+              monthlyMonthOptions={monthlyMonthOptions}
               lowStockItems={lowStockItems}
               onRestockClick={handleRestockClick}
             />
