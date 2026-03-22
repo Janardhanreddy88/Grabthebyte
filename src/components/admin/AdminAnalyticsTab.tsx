@@ -1,14 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Clock, TrendingUp, ShoppingBag, IndianRupee, Package, Users,
-  ChevronDown, Calendar, PieChart, Loader2, UtensilsCrossed,
+  Clock, TrendingUp, TrendingDown, Minus, ShoppingBag, IndianRupee, Package, Users,
+  ChevronDown, Calendar, PieChart, Loader2, UtensilsCrossed, Hash,
 } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { CategoryBreakdown } from './CategoryBreakdown';
 import { TopItemsList } from './TopItemsList';
 import { StatSummaryCards } from './StatSummaryCards';
+import { cn } from '@/lib/utils';
 
 const PIE_COLORS = [
   'hsl(var(--primary))', 'hsl(var(--secondary))',
@@ -23,6 +26,9 @@ interface AdminAnalyticsTabProps {
   weeklyLoading: boolean;
   monthlyStats: any;
   monthlyLoading: boolean;
+  monthlySelectedMonth: Date;
+  monthlySetSelectedMonth: (d: Date) => void;
+  monthlyMonthOptions: Array<{ value: string; label: string }>;
   lowStockItems: Array<{ id: string; name: string; quantity: number; category: string }>;
   onRestockClick: (itemId: string) => void;
 }
@@ -31,6 +37,7 @@ export function AdminAnalyticsTab({
   todayStats, todayLoading,
   weeklyStats, weeklyLoading,
   monthlyStats, monthlyLoading,
+  monthlySelectedMonth, monthlySetSelectedMonth, monthlyMonthOptions,
   lowStockItems, onRestockClick,
 }: AdminAnalyticsTabProps) {
   return (
@@ -106,9 +113,20 @@ export function AdminAnalyticsTab({
         <CollapsibleTrigger className="w-full group">
           <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
             <TrendingUp className="h-5 w-5 text-secondary" />
-            <h3 className="text-lg font-semibold">Weekly Review</h3>
+            <h3 className="text-lg font-semibold">Weekly Report</h3>
             {weeklyStats?.weekRange && (
               <span className="text-sm text-muted-foreground">({weeklyStats.weekRange})</span>
+            )}
+            {/* Weekly growth badge */}
+            {weeklyStats && weeklyStats.weeklyGrowth !== 0 && (
+              <span className={cn(
+                "text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-0.5",
+                weeklyStats.weeklyGrowth > 0 ? "bg-green-500/10 text-green-600" :
+                "bg-red-500/10 text-red-600"
+              )}>
+                {weeklyStats.weeklyGrowth > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                {weeklyStats.weeklyGrowth > 0 ? '+' : ''}{weeklyStats.weeklyGrowth}%
+              </span>
             )}
             <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180" />
           </div>
@@ -118,12 +136,81 @@ export function AdminAnalyticsTab({
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
           ) : (
             <>
+              {/* Big summary cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="rounded-2xl card-shadow bg-primary/5">
+                  <CardContent className="p-4 text-center">
+                    <Hash className="w-5 h-5 mx-auto text-primary mb-1" />
+                    <p className="text-3xl font-bold text-primary">{weeklyStats?.totalItemsSold?.toLocaleString() || 0}</p>
+                    <p className="text-xs text-muted-foreground">Items Sold</p>
+                    <p className="text-[10px] text-muted-foreground">in {weeklyStats?.daysElapsed || 0} days</p>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-2xl card-shadow bg-secondary/5">
+                  <CardContent className="p-4 text-center">
+                    <IndianRupee className="w-5 h-5 mx-auto text-secondary mb-1" />
+                    <p className="text-3xl font-bold text-secondary">₹{(weeklyStats?.totalRevenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Revenue</p>
+                    <p className="text-[10px] text-muted-foreground">This Week</p>
+                  </CardContent>
+                </Card>
+              </div>
+
               <StatSummaryCards stats={[
                 { label: 'Total Orders', value: weeklyStats?.totalOrders || 0, valueColor: 'text-primary' },
-                { label: 'Revenue', value: `₹${(weeklyStats?.totalRevenue || 0).toLocaleString()}`, valueColor: 'text-secondary' },
+                { label: 'Avg/Day', value: `₹${(weeklyStats?.avgRevenuePerDay || 0).toLocaleString()}` },
                 { label: 'Busiest Day', value: weeklyStats?.busiestDay || '-' },
                 { label: 'Peak Hour', value: weeklyStats?.peakHour || '-' },
               ]} />
+
+              {/* Day-by-Day Table */}
+              <Card className="rounded-2xl card-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Day-by-Day Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 sm:p-6 sm:pt-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Day</TableHead>
+                          <TableHead className="text-xs">Date</TableHead>
+                          <TableHead className="text-xs text-right">Orders</TableHead>
+                          <TableHead className="text-xs text-right">Sales</TableHead>
+                          <TableHead className="text-xs text-right">vs Last Wk</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(weeklyStats?.dailyBreakdown || []).map((day: any) => (
+                          <TableRow key={day.day} className={cn(
+                            day.isToday && "bg-primary/5 font-semibold",
+                            day.isFuture && "opacity-40"
+                          )}>
+                            <TableCell className="text-xs font-medium">
+                              {day.day} {day.isToday && <span className="text-primary">•</span>}
+                            </TableCell>
+                            <TableCell className="text-xs">{day.date}</TableCell>
+                            <TableCell className="text-xs text-right">{day.orders}</TableCell>
+                            <TableCell className="text-xs text-right">₹{day.revenue.toLocaleString()}</TableCell>
+                            <TableCell className="text-xs text-right">
+                              {!day.isFuture && day.lastWeekRevenue > 0 && (
+                                <span className={cn(
+                                  "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                                  day.diffPercent > 0 ? "bg-green-500/10 text-green-600" :
+                                  day.diffPercent < 0 ? "bg-red-500/10 text-red-600" :
+                                  "bg-muted text-muted-foreground"
+                                )}>
+                                  {day.diffPercent > 0 ? '+' : ''}{day.diffPercent}%
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid lg:grid-cols-2 gap-4">
                 <Card className="rounded-2xl card-shadow">
@@ -149,6 +236,7 @@ export function AdminAnalyticsTab({
                 </Card>
               </div>
 
+              {/* Bar chart */}
               <Card className="rounded-2xl card-shadow">
                 <CardHeader className="pb-2"><CardTitle className="text-base">Daily Orders (Mon-Sun)</CardTitle></CardHeader>
                 <CardContent>
@@ -211,26 +299,57 @@ export function AdminAnalyticsTab({
         <CollapsibleTrigger className="w-full group">
           <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
             <Calendar className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold">{monthlyStats?.monthName} {monthlyStats?.year} Analytics</h3>
+            <h3 className="text-lg font-semibold">Monthly Report</h3>
             <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180" />
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4">
+          {/* Month selector */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{monthlyStats?.monthName} {monthlyStats?.year}</p>
+            <Select
+              value={monthlySelectedMonth.toISOString()}
+              onValueChange={(val) => monthlySetSelectedMonth(new Date(val))}
+            >
+              <SelectTrigger className="w-[180px] h-9 rounded-xl text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthlyMonthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {monthlyLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
           ) : (
             <>
-              <StatSummaryCards columns={3} stats={[
-                { label: 'Total Orders', value: monthlyStats?.totalOrders || 0, valueColor: 'text-primary' },
-                { label: 'Total Revenue', value: `₹${(monthlyStats?.totalRevenue || 0).toLocaleString()}`, valueColor: 'text-secondary' },
-                { label: 'Avg Order', value: `₹${monthlyStats?.avgOrderValue || 0}` },
-              ]} />
+              {/* Month summary */}
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="rounded-2xl card-shadow bg-primary/5">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-3xl font-bold text-primary">{monthlyStats?.totalOrders || 0}</p>
+                    <p className="text-xs text-muted-foreground">Total Orders</p>
+                    <p className="text-[10px] text-muted-foreground">{monthlyStats?.daysCount || 0} days</p>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-2xl card-shadow bg-secondary/5">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-3xl font-bold text-secondary">₹{(monthlyStats?.totalRevenue || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Total Revenue</p>
+                    <p className="text-[10px] text-muted-foreground">{monthlyStats?.monthName}</p>
+                  </CardContent>
+                </Card>
+              </div>
 
               <div className="grid lg:grid-cols-2 gap-6">
+                {/* Pie chart */}
                 <Card className="rounded-2xl card-shadow">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <PieChart className="h-5 w-5" /> Revenue by Category
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <PieChart className="h-4 w-4" /> Revenue by Category
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -263,7 +382,6 @@ export function AdminAnalyticsTab({
                               <div key={cat.category} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                                 <div className="flex items-center gap-2">
                                   <div className={`w-3 h-3 rounded-full ${colors[idx % colors.length]}`} />
-                                  <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
                                   <span className="font-medium text-sm">{cat.category}</span>
                                 </div>
                                 <div className="text-right">
@@ -281,8 +399,9 @@ export function AdminAnalyticsTab({
                   </CardContent>
                 </Card>
 
+                {/* Daily trends */}
                 <Card className="rounded-2xl card-shadow">
-                  <CardHeader><CardTitle className="text-lg">Daily Trends</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-base">Daily Trends</CardTitle></CardHeader>
                   <CardContent>
                     {monthlyStats?.dailyTrends?.some((d: any) => d.orders > 0) ? (
                       <div className="h-[300px]">
@@ -312,6 +431,51 @@ export function AdminAnalyticsTab({
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Item-wise Monthly Breakdown */}
+              <Card className="rounded-2xl card-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShoppingBag className="h-4 w-4" /> Item-wise Sales
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(monthlyStats?.topItems || []).length > 0 ? (
+                    <div className="space-y-2">
+                      {monthlyStats.topItems.map((item: any, index: number) => (
+                        <div key={item.name} className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            <span className={cn(
+                              "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
+                              index === 0 ? "bg-yellow-500 text-yellow-950" :
+                              index === 1 ? "bg-gray-300 text-gray-700" :
+                              index === 2 ? "bg-amber-600 text-amber-50" :
+                              "bg-muted text-muted-foreground"
+                            )}>
+                              {index + 1}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                {index < 3 && <span className="text-sm">🏆</span>}
+                                <p className="font-medium text-sm">{item.name}</p>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                                {item.category}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-primary">×{item.quantity}</p>
+                            <p className="text-xs text-muted-foreground">₹{item.revenue.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center py-6 text-muted-foreground">No sales data for this month</p>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
         </CollapsibleContent>
