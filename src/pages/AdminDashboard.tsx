@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAuth } from "@/context/AuthContext";
+import { usePrinter } from "@/context/PrinterContext"; // 🌟 INJECTED PRINTER ENGINE
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query"; // Added to trigger re-fetches
-import { useToast } from "@/hooks/use-toast"; // Added for notifications
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import {
   useAdminMenuItems,
   useCreateMenuItem,
@@ -24,7 +25,7 @@ import { useWeeklyAnalytics } from "@/hooks/useWeeklyAnalytics";
 import { useTodayAnalytics } from "@/hooks/useTodayAnalytics";
 import {
   LogOut, QrCode, LayoutDashboard, UtensilsCrossed, TrendingUp,
-  Package, Users, User, Mail, Phone, Building2, BellRing
+  Package, Users, User, Mail, Phone, Building2, BellRing, Printer, BluetoothOff
 } from "lucide-react";
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
@@ -43,20 +44,31 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // 🌟 PULL IN THE PRINTER CONTEXT
+  const { isPrinterConnected, printTicket } = usePrinter();
+  
+  // 🌟 REFS FOR THE REALTIME LISTENER (Prevents stale closures)
+  const printerRef = useRef(isPrinterConnected);
+  const printTicketRef = useRef(printTicket);
+
+  useEffect(() => {
+    printerRef.current = isPrinterConnected;
+    printTicketRef.current = printTicket;
+  }, [isPrinterConnected, printTicket]);
+
   const [profileData, setProfileData] = useState<{
     full_name: string | null;
     email: string | null;
     phone: string | null;
     campus_name: string | null;
     campus_code: string | null;
-    campus_id: string | null; // Added to filter orders for this specific campus
+    campus_id: string | null;
   } | null>(null);
 
   // --- AUDIO HELPER FOR NOTIFICATIONS ---
   const playNotificationSound = useCallback(() => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
       const playTone = (frequency: number, startTime: number, duration: number) => {
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
@@ -70,11 +82,8 @@ export default function AdminDashboard() {
         oscillator.start(audioCtx.currentTime + startTime);
         oscillator.stop(audioCtx.currentTime + startTime + duration);
       };
-
-      // Play a pleasant "Ding-Ding" sound
       playTone(880, 0, 0.2); // A5
       playTone(1108.73, 0.15, 0.4); // C#6
-      
     } catch (e) {
       console.log("Audio play failed, browser might be blocking auto-play", e);
     }
@@ -95,14 +104,14 @@ export default function AdminDashboard() {
         setProfileData({
           full_name: data.full_name, email: data.email, phone: data.phone,
           campus_name: campusData?.name || null, campus_code: campusData?.code || null,
-          campus_id: data.campus_id // Store campus_id to listen for the right orders
+          campus_id: data.campus_id 
         });
       }
     };
     fetchProfile();
   }, []);
 
-  // --- SUPABASE REALTIME LISTENER ---
+  // --- 🌟 SUPABASE REALTIME LISTENER (WITH AUTO-PRINT) 🌟 ---
   useEffect(() => {
     if (!profileData?.campus_id) return;
 
@@ -113,19 +122,16 @@ export default function AdminDashboard() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE', // We listen for UPDATE because it goes from pending -> confirmed
+          event: 'UPDATE', 
           schema: 'public',
           table: 'orders',
           filter: `campus_id=eq.${profileData.campus_id}`,
         },
-        (payload) => {
-          // If the order just became 'confirmed' (payment successful)
+        async (payload) => {
           if (payload.new.status === 'confirmed' && payload.old.status === 'pending') {
             
-            // 1. Play the sound!
+            // 1. Play the sound & Show the toast
             playNotificationSound();
-            
-            // 2. Show the toast popup!
             toast({
               title: "🔔 New Order Received!",
               description: `Order #${payload.new.order_number} has been paid for.`,
@@ -133,9 +139,33 @@ export default function AdminDashboard() {
               duration: 5000,
             });
 
-            // 3. Silently refresh all the data on the screen!
+            // 2. Refresh UI
             queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
             queryClient.invalidateQueries({ queryKey: ["today-analytics"] });
+
+            // 3. 🖨️ AUTO-PRINT THE TICKET!
+            if (printerRef.current) {
+              console.log("Printer is connected! Fetching items to print auto-token...");
+              
+              // We must fetch the items because the realtime payload only contains the top-level order row
+              const { data: fullOrder } = await supabase
+                .from('orders')
+                .select('*, order_items(id, name, price, quantity)')
+                .eq('id', payload.new.id)
+                .single();
+
+              if (fullOrder && fullOrder.order_items) {
+                printTicketRef.current({
+                  orderNumber: fullOrder.order_number,
+                  items: fullOrder.order_items.map((i: any) => ({
+                    name: i.name, quantity: i.quantity, price: Number(i.price)
+                  })),
+                  totalAmount: Number(fullOrder.total),
+                  customerName: fullOrder.customer_name || 'Customer',
+                  createdAt: fullOrder.created_at
+                });
+              }
+            }
           }
         }
       )
@@ -178,10 +208,7 @@ export default function AdminDashboard() {
     }))
     .sort((a, b) => a.quantity - b.quantity);
 
-  const handleRestockClick = (itemId: string) => {
-    // This triggers the menu tab - but since MenuTab manages its own dialog, 
-    // we just navigate there. For now, toast a hint.
-  };
+  const handleRestockClick = (itemId: string) => {};
 
   return (
     <div className="min-h-screen bg-background">
@@ -190,11 +217,25 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between px-3 lg:px-5 h-13">
           <Logo size="sm" />
           <div className="flex items-center gap-2">
+            
+            {/* Printer Status Indicator for the Dashboard */}
+            {isPrinterConnected ? (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/15 text-emerald-600 border border-emerald-500/20 rounded-lg text-xs font-bold mr-1">
+                <Printer size={14} /> Printer Ready
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-500/15 text-orange-600 border border-orange-500/20 rounded-lg text-xs font-bold mr-1">
+                <BluetoothOff size={14} /> No Printer
+              </div>
+            )}
+
             <Button onClick={() => navigate("/menu")} variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-semibold border-border/60">
               <Users size={15} />
               <span className="hidden sm:inline">Student View</span>
             </Button>
-            <Button onClick={() => navigate("/kiosk-scanner")} size="sm" className="gap-1.5 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/90 text-secondary-foreground">
+            
+            {/* 🌟 THE MAGIC FLAG ADDED HERE 🌟 */}
+            <Button onClick={() => navigate("/kiosk-scanner", { state: { fromAdmin: true } })} size="sm" className="gap-1.5 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/90 text-secondary-foreground">
               <QrCode size={15} />
               <span className="hidden sm:inline">🚀 Kiosk</span>
             </Button>

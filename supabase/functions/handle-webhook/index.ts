@@ -15,7 +15,6 @@ async function verifySignature(rawBody: string, signature: string, secretKey: st
   const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signatureBytes = await crypto.subtle.sign("HMAC", key, dataToSign);
 
-  // Convert binary to HEX (Razorpay standard)
   const hashArray = Array.from(new Uint8Array(signatureBytes));
   const computedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
@@ -56,7 +55,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // 6. LOG WEBHOOK (Using your logging table)
+    // 6. LOG WEBHOOK
     await supabase.from("payment_webhooks").insert({
       razorpay_order_id: razorpayOrderId,
       razorpay_payment_id: razorpayPaymentId,
@@ -73,6 +72,13 @@ Deno.serve(async (req) => {
 
     if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
 
+    // 🌟 FIX 1: THE ARMOR PLATING!
+    // If the order is ALREADY paid, ignore any delayed "failed" webhooks from previous bad pin attempts!
+    if (order.payment_status === "completed" || order.status === "confirmed") {
+      console.log(`Order ${order.id} is already completed. Ignoring ${eventType} webhook.`);
+      return new Response(JSON.stringify({ success: true, message: "Order already completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // 8. STATUS LOGIC
     let newPaymentStatus = order.payment_status;
     let newOrderStatus = order.status;
@@ -82,9 +88,10 @@ Deno.serve(async (req) => {
       newOrderStatus = "confirmed";
     } else if (eventType === "payment.failed") {
       newPaymentStatus = "failed";
+      // Notice we do NOT change orderStatus to failed here. We leave it pending so they can retry!
     }
 
-    // 9. UPDATE DATABASE (Stock is already reserved at checkout, so we just update status!)
+    // 9. UPDATE DATABASE
     if (newPaymentStatus !== order.payment_status) {
       await supabase
         .from("orders")
@@ -94,8 +101,8 @@ Deno.serve(async (req) => {
           razorpay_payment_id: razorpayPaymentId,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", order.id)
-        .eq("payment_status", "pending");
+        .eq("id", order.id); 
+        // 🌟 FIX 2: REMOVED .eq("payment_status", "pending") SO IT CAN UPGRADE FROM 'failed' TO 'completed'!
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

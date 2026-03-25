@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MenuItem, TimePeriod } from '@/types/canteen';
 import { useMenu } from '@/context/MenuContext';
-import { categories } from '@/data/menuData'; // We removed the time imports!
+import { categories } from '@/data/menuData'; 
 
 interface UseMenuItemsReturn {
-  items: MenuItem[];
+  items: MenuItem[]; // RAW DATA FOR OUR BYPASS
   filteredItems: MenuItem[];
   popularItems: MenuItem[];
   categories: typeof categories;
@@ -19,7 +19,8 @@ interface UseMenuItemsReturn {
 }
 
 export function useMenuItems(): UseMenuItemsReturn {
-  const { menuItems, refreshMenu } = useMenu();
+  // 1. We pull menuItems (the raw array) and the loading state from Context
+  const { menuItems, refreshMenu, isLoading: contextLoading } = useMenu();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -42,33 +43,39 @@ export function useMenuItems(): UseMenuItemsReturn {
     fetchItems();
   }, [fetchItems]);
 
-  // 🔥 PLAN A: THE UNIFIED MENU OVERHAUL
-  // 1. We tell the UI the canteen is ALWAYS open for browsing. 
-  // (If you want a global shut-off switch later, we can add it to the admin panel!)
+  // 2. Global Status Config
   const canteenClosed = false;
   const nextOpenTime = null;
-  const currentPeriod = null; // Setting this to null safely hides your TimePeriodBanner
+  const currentPeriod = null; 
 
-  // 2. Filter items ONLY based on the Category Chips. No time restrictions!
-  const filteredItems = menuItems.filter(item => {
-    // If "All" is selected, show everything. Otherwise, match the category.
-    return selectedCategory === 'all' || item.category === selectedCategory;
+  // 3. 🔥 THE HOOK FILTER (Safety Net) 🔥
+  // Even though Menu.tsx does its own bypass, we keep this clean
+  const filteredItems = (menuItems || []).filter(item => {
+    if (selectedCategory === 'all') return true;
+    
+    const itemCategory = (item.category || '').toLowerCase().trim();
+    const targetCategory = selectedCategory.toLowerCase().trim();
+    
+    return itemCategory === targetCategory;
   });
 
-  // 3. Popular items are simply popular items that are currently in stock.
-  const popularItems = menuItems.filter(item => {
-    return item.isPopular && item.isAvailable;
+  // 4. Popular Items logic
+  const popularItems = (menuItems || []).filter(item => {
+    // Treat null/undefined as false for production stability
+    const isAvail = item.isAvailable === true || (item as any).is_available === true;
+    return item.isPopular && isAvail;
   });
 
   return {
-    items: menuItems,
+    items: menuItems || [], // 👈 This is what Menu.tsx uses for the bypass!
     filteredItems,
     popularItems,
     categories,
     currentPeriod,
     canteenClosed,
     nextOpenTime,
-    isLoading,
+    // 🌟 THE LOADING SHIELD: Prevents "No Items" flash while database is thinking
+    isLoading: isLoading || contextLoading,
     error,
     selectedCategory,
     setSelectedCategory,

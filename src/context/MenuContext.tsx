@@ -20,7 +20,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { campus } = useCampus();
 
-  // Fetch menu items from Supabase (Now with Stale-While-Revalidate caching!)
   const fetchMenuItems = useCallback(async () => {
     if (!campus?.id) {
       setMenuItems([]);
@@ -30,12 +29,12 @@ export function MenuProvider({ children }: { children: ReactNode }) {
 
     const cacheKey = `menu_cache_${campus.id}`;
 
-    // 🚀 STEP 1: INSTANT CACHE LOAD
+    // 1. CACHE LOAD
     const cachedData = localStorage.getItem(cacheKey);
     if (cachedData) {
       try {
         setMenuItems(JSON.parse(cachedData));
-        setIsLoading(false); // Stop the spinner early if we have data
+        setIsLoading(false);
       } catch (e) {
         console.error("Failed to parse cached menu");
       }
@@ -43,7 +42,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       setIsLoading(true); 
     }
 
-    // 🚀 STEP 2: OFFLINE SHIELD
+    // 2. OFFLINE SHIELD
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setIsLoading(false);
       return; 
@@ -59,6 +58,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
 
       if (fetchError) throw fetchError;
 
+      // 🔥 THE SANITIZER: This forces the database data into perfect shapes!
       const items: MenuItem[] = (data || []).map(item => {
         return {
           id: item.id,
@@ -66,46 +66,39 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           description: item.description || '',
           price: Number(item.price),
           image: item.image_url || '/placeholder.svg',
-          category: item.category || 'snacks',
-          isVeg: item.is_veg,
-          isPopular: item.is_popular,
-          quantity: item.stock_quantity,
-          isAvailable: item.is_available, 
+          // Force category to lowercase so it perfectly matches your chips!
+          category: item.category ? String(item.category).toLowerCase().trim() : 'uncategorized',
+          isVeg: Boolean(item.is_veg),
+          isPopular: Boolean(item.is_popular),
+          quantity: Number(item.stock_quantity || 0),
+          // 🔥 MAGIC FIX: If it is anything OTHER than strictly true, force it to be FALSE!
+          isAvailable: item.is_available === true, 
           availableTimePeriods: [], 
         };
       });
 
       setMenuItems(items);
-      // 🚀 STEP 3: REFRESH CACHE
       localStorage.setItem(cacheKey, JSON.stringify(items));
 
     } catch (err) {
-      // 🚀 STEP 4: NETWORK FAILURE PROTECTION
-      // If network fails, we DON'T clear the menu, we keep showing the cache!
       console.error("Menu sync failed, relying on cache.", err);
     } finally {
       setIsLoading(false);
     }
   }, [campus?.id]);
 
-  // Initial load
   useEffect(() => {
     fetchMenuItems();
   }, [fetchMenuItems]);
 
-  // 🚀 STEP 5: AUTOMATIC RESURRECTION TRIGGER
-  // Auto-refresh the menu as soon as the internet connection returns
   useEffect(() => {
     const handleOnline = () => {
-      console.log("🌐 Connection restored! Refreshing menu...");
       fetchMenuItems();
     };
-
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [fetchMenuItems]);
 
-  // Subscribe to real-time updates
   useEffect(() => {
     if (!campus?.id) return;
 
@@ -152,7 +145,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         throw error;
       }
       
-      // Update cache to reflect availability change
       const cacheKey = `menu_cache_${campus?.id}`;
       const currentCache = localStorage.getItem(cacheKey);
       if(currentCache) {
@@ -161,7 +153,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(cacheKey, JSON.stringify(updatedCache));
       }
     } catch {
-      // Reversion handled in 'if (error)' block
+      // Reversion handled
     }
   }, [campus?.id]);
 

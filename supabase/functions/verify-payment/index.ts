@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
 
     if (orderError || !order) return new Response(JSON.stringify({ error: "Order not found." }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // If already marked as completed (by webhook or retry), just return success
     if (order.payment_status === "completed") {
       await sendAdminNotification(order.campus_id, order.order_number);
       return new Response(JSON.stringify({ success: true, status: "completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -117,7 +118,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: false, message: "Payment verification failed." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Update order to confirmed (Stock is already handled at checkout!)
+    // 🌟 FIX: Removed the .eq("payment_status", "pending") lock here!
+    // This function now has supreme authority to mark ANY verified order as completed,
+    // even if a webhook previously marked it as failed.
     const { error: updateError } = await supabase
       .from("orders")
       .update({
@@ -127,8 +130,7 @@ Deno.serve(async (req) => {
         razorpay_payment_id: payload.razorpay_payment_id,
         razorpay_signature: payload.razorpay_signature || "api_verified", 
       })
-      .eq("id", order.id)
-      .eq("payment_status", "pending");
+      .eq("id", order.id);
 
     if (updateError) throw updateError;
 

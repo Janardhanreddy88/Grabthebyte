@@ -9,7 +9,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { Capacitor } from '@capacitor/core';
 
-// 🚨 Tell TypeScript that these Razorpay objects exist on the window!
 declare global {
   interface Window {
     Razorpay: any;
@@ -44,7 +43,6 @@ export default function Payment() {
   const [errorMessage, setErrorMessage] = useState("");
   const paymentInitiated = useRef(false);
 
-  // 🔥 Helper to safely extract exact error messages (Bank failures, User cancellations, etc.)
   const extractErrorMessage = (errorResponse: any) => {
     if (typeof errorResponse === 'string') return errorResponse;
     if (errorResponse?.error?.description) return errorResponse.error.description;
@@ -53,23 +51,44 @@ export default function Payment() {
     return 'Payment process was interrupted or failed.';
   };
 
-  // INITIATE DUAL-ENGINE PAYMENT
   const initiatePayment = useCallback(async () => {
     if (!orderId || !amount || !user || paymentInitiated.current) return;
     paymentInitiated.current = true;
     setPaymentState('initiating');
 
     try {
+      // 1. Get the Order Details AND the customer_phone
       const { data: order } = await supabase
         .from('orders')
-        .select('order_number, customer_name, customer_email')
+        .select('order_number, customer_name, customer_email, customer_phone')
         .eq('id', orderId)
-        .single();
+        .maybeSingle();
         
       if (!order) throw new Error('Order not found');
       setOrderNumber(order.order_number);
 
-      const realPhoneNumber = user.phone || "";
+      // 2. QUERY THE PROFILES TABLE DIRECTLY (using user_id column)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('user_id', user.id) 
+        .maybeSingle();
+
+      // 3. Combine potential sources for the phone number
+      const rawPhoneNumber = 
+        order?.customer_phone || 
+        profile?.phone || 
+        user?.phone || 
+        (user as any)?.user_metadata?.phone || 
+        ""; 
+
+      // Sanitization: Keep only numbers
+      let cleanPhone = String(rawPhoneNumber).replace(/\D/g, ''); 
+      
+      // If it accidentally includes country code 91, strip it so it fits the 10-digit prefill
+      if (cleanPhone.length > 10 && cleanPhone.startsWith('91')) {
+        cleanPhone = cleanPhone.substring(2);
+      }
 
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
@@ -77,7 +96,7 @@ export default function Payment() {
           amount: parseFloat(amount),
           customerName: order.customer_name || user.fullName,
           customerEmail: order.customer_email || user.email,
-          customerPhone: realPhoneNumber 
+          customerPhone: cleanPhone 
         }
       });
 
@@ -124,7 +143,6 @@ export default function Payment() {
 
           setPaymentState('success');
           clearCart();
-          // 🔥 DELETED THE AUTO-REDIRECT! The user stays on this screen now.
           toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
 
         } catch (err) {
@@ -138,22 +156,19 @@ export default function Payment() {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
         amount: Math.round(parseFloat(amount) * 100), 
         currency: "INR",
-        name: "GrabTheByte",
+        name: "GrabTheByte", 
         description: `Order #${order.order_number}`,
         image: "/pwa-192x192.png", 
         order_id: currentRzpOrderId, 
         prefill: {
-          name: order.customer_name || user.fullName,
-          email: order.customer_email || user.email,
-          contact: realPhoneNumber 
+          name: order.customer_name || user.fullName || "Customer",
+          email: order.customer_email || user.email || "",
+          contact: cleanPhone 
         },
-        theme: {
-          color: "#E50914" 
-        }
+        theme: { color: "#E50914" }
       };
 
       if (Capacitor.isNativePlatform()) {
-        console.log("📱 Triggering Native Razorpay SDK...");
         window.RazorpayCheckout.open(
           options,
           (paymentResponse: any) => processSuccess(paymentResponse),
@@ -164,28 +179,30 @@ export default function Payment() {
           }
         );
       } else {
-        console.log("💻 Triggering Web Razorpay SDK...");
         const res = await loadRazorpayScript();
-        if (!res) throw new Error("Razorpay SDK failed to load. Are you online?");
+        if (!res) throw new Error("Razorpay SDK failed to load.");
 
         const webOptions = {
           ...options,
           handler: function (response: any) { processSuccess(response); },
           modal: {
             ondismiss: function() {
-              setPaymentState('failed');
-              setErrorMessage('Payment window was closed.');
-              paymentInitiated.current = false;
+              setPaymentState(currentState => {
+                if (currentState === 'verifying' || currentState === 'success') return currentState;
+                paymentInitiated.current = false;
+                setErrorMessage('Payment window was closed by the user.');
+                return 'failed';
+              });
             }
           }
         };
 
         const rzp = new window.Razorpay(webOptions);
+        
         rzp.on('payment.failed', function (response: any) {
-          setPaymentState('failed');
-          setErrorMessage(extractErrorMessage(response));
-          paymentInitiated.current = false;
+          console.warn("Payment attempt failed inside modal.");
         });
+        
         rzp.open();
       }
 
@@ -194,7 +211,7 @@ export default function Payment() {
       setErrorMessage(err instanceof Error ? err.message : 'Payment initiation failed');
       paymentInitiated.current = false;
     }
-  }, [orderId, amount, user, navigate, toast]);
+  }, [orderId, amount, user, navigate, toast, clearCart]);
 
   useEffect(() => {
     if (orderId && amount && user && paymentState === 'loading') {
@@ -204,7 +221,6 @@ export default function Payment() {
 
   const handleRetry = () => { paymentInitiated.current = false; setPaymentState('loading'); };
 
-  // 🚀 UPGRADED PREMIUM UI COMPONENTS WITH QR CODE & BUTTONS
   const renderContent = () => {
     switch (paymentState) {
       case "loading":
@@ -213,11 +229,7 @@ export default function Payment() {
       case "verifying":
         return (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-              className="relative w-20 h-20 mb-6"
-            >
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} className="relative w-20 h-20 mb-6">
               <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full"></div>
             </motion.div>
@@ -225,9 +237,7 @@ export default function Payment() {
               {paymentState === "verifying" ? "Verifying Payment" : "Processing"}
             </h2>
             <p className="text-sm text-muted-foreground max-w-[250px]">
-              {paymentState === "verifying" 
-                ? "Please wait while we confirm your transaction securely." 
-                : "Please do not close this window or press the back button."}
+              {paymentState === "verifying" ? "Please wait while we confirm your transaction securely." : "Please do not close this window or press the back button."}
             </p>
             {paymentState === "processing" && (
               <Button variant="ghost" size="sm" onClick={handleRetry} className="mt-6 gap-2 text-muted-foreground">
@@ -240,18 +250,8 @@ export default function Payment() {
       case "success":
         return (
           <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-            <motion.div 
-              initial={{ scale: 0.5, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-4 relative"
-            >
-              <motion.div 
-                initial={{ scale: 0 }} 
-                animate={{ scale: 1 }} 
-                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30"
-              >
+            <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 200, damping: 15 }} className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-4 relative">
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 200 }} className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
                 <CheckCircle2 className="w-7 h-7 text-white" strokeWidth={3} />
               </motion.div>
             </motion.div>
@@ -262,37 +262,17 @@ export default function Payment() {
               <p className="text-sm font-medium text-muted-foreground">Order ID: <span className="text-foreground font-bold">#{orderNumber}</span></p>
             </div>
 
-            {/* 🔥 LIVE QR CODE GENERATOR INCORPORATED HERE */}
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-white p-3.5 rounded-2xl shadow-sm border border-border/80 mb-3 inline-block"
-            >
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${orderId}`} 
-                alt="Order QR Code" 
-                className="w-36 h-36"
-              />
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-white p-3.5 rounded-2xl shadow-sm border border-border/80 mb-3 inline-block">
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${orderId}`} alt="Order QR Code" className="w-36 h-36" />
             </motion.div>
             
-            <p className="text-xs font-medium text-muted-foreground mb-8 max-w-[220px]">
-              Show this QR code at the canteen counter to collect your order.
-            </p>
+            <p className="text-xs font-medium text-muted-foreground mb-8 max-w-[220px]">Show this QR code at the canteen counter to collect your order.</p>
 
-            {/* 🔥 NEW ACTION BUTTONS */}
             <div className="w-full flex flex-col gap-3">
-              <Button 
-                onClick={() => navigate("/my-orders")} 
-                className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20"
-              >
+              <Button onClick={() => navigate("/my-orders", { replace: true })} className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20">
                 <Receipt size={18} className="mr-2" /> View Order Details
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => navigate("/menu")} 
-                className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50"
-              >
+              <Button variant="outline" onClick={() => navigate("/menu", { replace: true })} className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50">
                 <Home size={18} className="mr-2 text-muted-foreground" /> Back to Home
               </Button>
             </div>
@@ -303,11 +283,7 @@ export default function Payment() {
       case "error":
         return (
           <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mb-5"
-            >
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mb-5">
               <div className="w-14 h-14 bg-destructive rounded-full flex items-center justify-center shadow-lg shadow-destructive/30">
                 <XCircle className="w-7 h-7 text-white" strokeWidth={2.5} />
               </div>
@@ -315,22 +291,13 @@ export default function Payment() {
             <h2 className="text-xl font-bold text-foreground mb-2">
               {paymentState === "error" ? "Something went wrong" : "Payment Incomplete"}
             </h2>
-            <p className="text-sm text-muted-foreground mb-8 max-w-[260px] leading-relaxed">
-              {errorMessage}
-            </p>
+            <p className="text-sm text-muted-foreground mb-8 max-w-[260px] leading-relaxed">{errorMessage}</p>
             
             <div className="w-full flex flex-col gap-3">
-              <Button 
-                onClick={handleRetry} 
-                className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20"
-              >
+              <Button onClick={handleRetry} className="w-full h-12 rounded-xl text-base font-bold shadow-md shadow-primary/20">
                 <RefreshCw size={18} className="mr-2" /> Try Payment Again
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => navigate("/my-orders")} 
-                className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50"
-              >
+              <Button variant="outline" onClick={() => navigate("/my-orders", { replace: true })} className="w-full h-12 rounded-xl text-base font-semibold border-border/80 hover:bg-secondary/50">
                 View My Orders <ChevronRight size={18} className="ml-1 text-muted-foreground" />
               </Button>
             </div>
@@ -346,9 +313,7 @@ export default function Payment() {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h2 className="text-lg font-bold mb-2">Invalid Payment Link</h2>
           <p className="text-sm text-muted-foreground mb-6">We couldn't find the details for this order.</p>
-          <Button onClick={() => navigate("/menu")} className="w-full h-11 rounded-xl">
-            Return to Menu
-          </Button>
+          <Button onClick={() => navigate("/menu", { replace: true })} className="w-full h-11 rounded-xl">Return to Menu</Button>
         </div>
       </div>
     );
@@ -358,13 +323,7 @@ export default function Payment() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-10 bg-background/90 backdrop-blur-xl border-b border-border/40 px-4 py-3 safe-top">
         <div className="flex items-center gap-3 max-w-lg mx-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full bg-secondary/50"
-            onClick={() => navigate("/menu")}
-            disabled={paymentState === "initiating" || paymentState === "verifying"}
-          >
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-secondary/50" onClick={() => navigate("/menu", { replace: true })} disabled={paymentState === "initiating" || paymentState === "verifying"}>
             <ArrowLeft size={18} />
           </Button>
           <div>

@@ -31,7 +31,7 @@ export default function Menu() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
-    filteredItems,
+    items, // 🔥 RAW UNFILTERED DATA FROM DATABASE
     canteenClosed,
     nextOpenTime,
     isLoading,
@@ -49,25 +49,40 @@ export default function Menu() {
     await refetch();
   }, [refetch]);
 
-  // 1. Filter by search query
+  // 1. 🔥 THE CATEGORY BYPASS (Production Grade) 🔥
+  // We force everything to lowercase and trim spaces to ensure matches even on fresh installs
+  const safeFilteredItems = (items || []).filter((item) => {
+    if (selectedCategory === "all") return true;
+    
+    const dbCategory = String(item.category || "").toLowerCase().trim();
+    const targetCategory = String(selectedCategory || "").toLowerCase().trim();
+    
+    return dbCategory === targetCategory;
+  });
+
+  // 2. SEARCH LOGIC
   const baseItems = searchQuery
-    ? filteredItems.filter(
+    ? safeFilteredItems.filter(
         (item) =>
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : filteredItems;
+    : safeFilteredItems;
 
-  // 2. 🔥 THE BULLETPROOF SORTING LOGIC 🔥
+  // 3. 🔥 THE "NO-HIDE" SORTING LOGIC 🔥
+  // This ensures items show up as "Unavailable" even if the DB value is null/missing
   const searchedItems = [...baseItems].sort((a: any, b: any) => {
-    // Safely check both camelCase and snake_case to prevent undefined errors!
-    const aAvail = a.isAvailable !== undefined ? a.isAvailable : a.is_available;
-    const bAvail = b.isAvailable !== undefined ? b.isAvailable : b.is_available;
+    // We treat ONLY strict 'true' as available. 
+    // If the database sends 'null', 'undefined', or 'false', we force it to FALSE.
+    const aAvail = a.isAvailable === true || a.is_available === true;
+    const bAvail = b.isAvailable === true || b.is_available === true;
 
     if (aAvail === bAvail) {
-      return a.name.localeCompare(b.name); // If both have same status, sort alphabetically
+      return a.name.localeCompare(b.name); // Alpha sort
     }
-    return aAvail ? -1 : 1; // Available items go to the top, dead items sink to the bottom!
+    // Available (Green/Buyable) items float to the top
+    // Unavailable (Gray/Null) items sink to the bottom
+    return aAvail ? -1 : 1; 
   });
 
   return (
@@ -109,19 +124,19 @@ export default function Menu() {
           </div>
         </header>
 
-        {/* Main Content */}
+        {/* Main Content Area */}
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
             <PullToRefresh onRefresh={handlePullRefresh}>
             <div className="p-3 lg:p-5">
               <HeroBanner />
 
-              {/* Search */}
+              {/* Search Bar */}
               <div className="mb-5">
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
 
-              {/* Category Chips */}
+              {/* Category Selection */}
               {!canteenClosed && (
                 <CategoryChips
                   selectedCategory={selectedCategory}
@@ -129,7 +144,7 @@ export default function Menu() {
                 />
               )}
 
-              {/* Canteen Closed */}
+              {/* Canteen Closed Guard */}
               {!isLoading && canteenClosed && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -141,13 +156,12 @@ export default function Menu() {
                   </div>
                   <h2 className="font-display font-bold text-xl text-foreground mb-2">Canteen is Closed</h2>
                   <p className="text-sm text-muted-foreground max-w-xs">
-                    We're currently not serving.{" "}
                     {nextOpenTime ? `Next opening: ${nextOpenTime}.` : "Please check back later."}
                   </p>
                 </motion.div>
               )}
 
-              {/* Section Header */}
+              {/* Section Title & Counter */}
               {!canteenClosed && (
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-display text-lg lg:text-xl font-bold text-foreground">
@@ -165,13 +179,13 @@ export default function Menu() {
                 </div>
               )}
 
-              {/* Loading */}
+              {/* Loading Skeletons */}
               {isLoading && <MenuItemSkeletonGrid count={6} />}
 
-              {/* Error */}
+              {/* Error State */}
               {error && !isLoading && <ErrorState message={error} onRetry={refetch} />}
 
-              {/* Menu Grid */}
+              {/* THE MENU GRID */}
               {!isLoading && !error && !canteenClosed && searchedItems.length > 0 && (
                 <motion.div
                   variants={staggerContainer}
@@ -187,14 +201,14 @@ export default function Menu() {
                 </motion.div>
               )}
 
-              {/* Empty State */}
+              {/* Empty State Guard */}
               {!isLoading && !error && !canteenClosed && searchedItems.length === 0 && (
                 <EmptyState
                   icon={UtensilsCrossed}
                   title={searchQuery ? "No results found" : "No items available"}
                   description={
                     searchQuery
-                      ? `No items match "${searchQuery}". Try a different search term.`
+                      ? `No items match "${searchQuery}".`
                       : "No items available in this category right now."
                   }
                   action={{
@@ -210,7 +224,7 @@ export default function Menu() {
             </PullToRefresh>
           </main>
 
-          {/* Desktop Cart */}
+          {/* Side Cart (Desktop only) */}
           {totalItems > 0 && (
             <aside className="hidden lg:block w-[360px] bg-card border-l border-border h-full overflow-y-auto">
               <CartPanel />

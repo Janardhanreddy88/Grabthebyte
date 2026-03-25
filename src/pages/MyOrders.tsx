@@ -45,14 +45,22 @@ export default function MyOrders() {
   const expirePendingOrder = useCallback(async (id: string) => {
     if (processingExpiryIds.current.has(id)) return;
     processingExpiryIds.current.add(id);
-    try { await supabase.from('orders').update({ status: 'failed' as const, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 10 minutes expired' }).eq('id', id); toast.info('Order expired'); } catch { processingExpiryIds.current.delete(id); }
+    try { 
+      await supabase.from('orders').update({ status: 'failed' as const, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 10 minutes expired' }).eq('id', id); 
+      // 🔥 FIX: Removed the annoying toast.info('Order expired'); It now happens silently!
+    } catch { 
+      processingExpiryIds.current.delete(id); 
+    }
   }, []);
 
   useEffect(() => {
     if (isLoading || !orders.length) return;
     orders.forEach(o => { 
-      // Auto-cancel if it's pending OR failed but hasn't fully timed out yet.
-      if ((o.status === 'pending' || o.status === 'failed') && o.payment_status !== 'completed' && (currentTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS) {
+      // 🔥 FIX: Optimized so it doesn't constantly try to update already-failed orders
+      const needsUpdate = (o.status === 'pending' || o.payment_status === 'pending') && o.payment_status !== 'not_confirmed';
+      const isTimedOut = (currentTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
+
+      if (needsUpdate && isTimedOut) {
         expirePendingOrder(o.id); 
       }
     });
@@ -74,7 +82,10 @@ export default function MyOrders() {
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2.5">
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
-            <div><h1 className="text-sm font-black text-gray-900">My Orders</h1><p className="text-[11px] font-medium text-gray-500">Track your food</p></div>
+            <div>
+              <h1 className="text-sm font-black text-gray-900">My Orders</h1>
+              <p className="text-[11px] font-medium text-gray-500">Track your food</p>
+            </div>
           </div>
           <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-600" onClick={() => { setIsRefetching(true); fetchOrders(); }} disabled={isRefetching}>
             <RefreshCw size={18} className={cn(isRefetching && "animate-spin")} />
@@ -153,14 +164,12 @@ export default function MyOrders() {
                   </div>
                 )}
 
-                {/* 🔥 THE MAGIC FIX: If failed but NOT timed out, show the big Retry box! */}
                 {isFailed && (
                   <div 
                     className={cn("bg-red-50/50 rounded-2xl border border-red-100 shadow-sm transition-transform", timedOut ? "p-3.5 flex items-center justify-between cursor-pointer active:scale-[0.98]" : "p-4")} 
                     onClick={timedOut ? goToReceipt : undefined}
                   >
                     {timedOut ? (
-                      // Permantently Failed (Timeout reached)
                       <>
                         <div className="flex items-center gap-3">
                           <div className="bg-white p-2 rounded-xl border border-red-100 shadow-sm"><XCircle className="h-6 w-6 text-red-500" /></div>
@@ -169,7 +178,6 @@ export default function MyOrders() {
                         <ChevronRight className="h-5 w-5 text-red-400" />
                       </>
                     ) : (
-                      // 🔥 Bank Failed, BUT still under 10 minutes! Offer Retry!
                       <div className="flex items-start gap-3 w-full">
                         <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
                         <div className="w-full">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   LogOut, CheckCircle, XCircle, AlertCircle, RefreshCw,
   Bluetooth, BluetoothOff, Volume2, VolumeX, Loader2,
-  Search, Clock, History, X, Camera, SwitchCamera
+  Search, Clock, History, X, Camera, SwitchCamera,
+  QrCode, Store, User 
 } from 'lucide-react';
 import jsQR from 'jsqr';
 
@@ -63,10 +64,20 @@ type ResultType = 'success' | 'invalid' | 'expired' | 'used' | 'payment_pending'
 
 export default function KioskScanner() {
   const navigate = useNavigate();
+  const location = useLocation(); 
   const { toast } = useToast();
   const { verifyQrCode, verifyByCollectionToken } = useOrdersContext();
   const { logout } = useAuth();
   const { isPrinterConnected, isConnecting, connectPrinter, disconnectPrinter, printTicket } = usePrinter();
+
+  const isFromAdmin = location.state?.fromAdmin || false;
+
+  const [activeScreen, setActiveScreen] = useState<'home' | 'scanner'>(isFromAdmin ? 'scanner' : 'home');
+  const [profileData, setProfileData] = useState<{
+    full_name: string | null;
+    campus_name: string | null;
+    campus_code: string | null;
+  } | null>(null);
 
   // Camera State
   const [cameraActive, setCameraActive] = useState(false);
@@ -96,8 +107,45 @@ export default function KioskScanner() {
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef<boolean>(false);
   const facingModeRef = useRef(facingMode);
+  
+  const scanningPausedRef = useRef<boolean>(false); 
+  const lastProcessTimeRef = useRef<number>(0); 
+
+  // 🌟 Auto-Connect Tracker 🌟
+  const hasAttemptedAutoConnect = useRef<boolean>(false);
 
   useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select(`full_name, campuses:campus_id (name, code)`)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if (data) {
+        const campusData = data.campuses as { name: string; code: string } | null;
+        setProfileData({
+          full_name: data.full_name,
+          campus_name: campusData?.name || 'Unknown Campus',
+          campus_code: campusData?.code || 'N/A',
+        });
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  // 🌟 AGGRESSIVE AUTO-CONNECT TRIGGER 🌟
+  useEffect(() => {
+    if (activeScreen === 'home') {
+      hasAttemptedAutoConnect.current = false;
+    } else if (activeScreen === 'scanner' && !isPrinterConnected && !hasAttemptedAutoConnect.current) {
+      hasAttemptedAutoConnect.current = true;
+      connectPrinter(undefined, true); 
+    }
+  }, [activeScreen, isPrinterConnected, connectPrinter]);
 
   // ─── Camera Management ───
   const stopCamera = useCallback(() => {
@@ -123,15 +171,29 @@ export default function KioskScanner() {
         animationRef.current = requestAnimationFrame(scan);
         return;
       }
+
+      if (scanningPausedRef.current) {
+        animationRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastProcessTimeRef.current < 150) {
+        animationRef.current = requestAnimationFrame(scan);
+        return;
+      }
+      lastProcessTimeRef.current = now;
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
       const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
 
-      if (code?.data && !scanCooldownRef.current && code.data !== lastScannedRef.current) {
+      if (code?.data && code.data !== lastScannedRef.current) {
         lastScannedRef.current = code.data;
-        scanCooldownRef.current = true;
+        scanningPausedRef.current = true;
         handleScan(code.data);
       }
       animationRef.current = requestAnimationFrame(scan);
@@ -145,6 +207,8 @@ export default function KioskScanner() {
     setShowResult(false);
     setResultType(null);
     setScanning(false);
+    scanningPausedRef.current = false; 
+    lastScannedRef.current = ''; 
 
     const useFacing = mode || facingModeRef.current;
 
@@ -152,8 +216,8 @@ export default function KioskScanner() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: useFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 640 }, 
+          height: { ideal: 480 },
         },
       });
       streamRef.current = stream;
@@ -181,9 +245,13 @@ export default function KioskScanner() {
   }, [facingMode, startCamera]);
 
   useEffect(() => {
-    startCamera();
+    if (activeScreen === 'scanner') {
+      startCamera();
+    } else {
+      stopCamera();
+    }
     return () => stopCamera();
-  }, []);
+  }, [activeScreen, startCamera, stopCamera]);
 
   // ─── Core Scan Logic ───
   const handleScan = useCallback(async (qrData: string) => {
@@ -340,23 +408,18 @@ export default function KioskScanner() {
       if (soundEnabled) playErrorSound();
     } finally {
       setScanning(false);
-      setTimeout(() => {
-        scanCooldownRef.current = false;
-        lastScannedRef.current = '';
-      }, 3000);
     }
   }, [scanning, verifyQrCode, verifyByCollectionToken, soundEnabled, isPrinterConnected, printTicket]);
 
-  // ─── Manual Order Lookup ───
   const handleManualLookup = async () => {
     if (!manualOrderNumber.trim()) return;
     setIsVerifying(true);
+    scanningPausedRef.current = true; 
     await handleScan(manualOrderNumber.trim());
     setIsVerifying(false);
     setManualOrderNumber('');
   };
 
-  // ─── Reset & Restart ───
   const resetAndRestart = useCallback(() => {
     setShowResult(false);
     setResultType(null);
@@ -364,9 +427,9 @@ export default function KioskScanner() {
     setLastOrderDetails(null);
     lastScannedRef.current = '';
     scanCooldownRef.current = false;
+    scanningPausedRef.current = false; 
   }, []);
 
-  // Auto-dismiss ALL results after 3s (including success) and ready for next scan
   useEffect(() => {
     if (showResult && resultType) {
       const timer = setTimeout(() => {
@@ -376,7 +439,6 @@ export default function KioskScanner() {
     }
   }, [showResult, resultType, resetAndRestart]);
 
-  // ─── Result Config ───
   const getResultConfig = () => {
     switch (resultType) {
       case 'success':
@@ -395,6 +457,66 @@ export default function KioskScanner() {
 
   const resultConfig = getResultConfig();
   const ResultIcon = resultConfig.icon;
+
+  if (activeScreen === 'home') {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-white">
+        
+        <div className="absolute top-0 left-0 right-0 p-6 flex justify-end">
+          <Button 
+            variant="ghost" 
+            onClick={() => { logout(); navigate('/auth'); }} 
+            className="text-slate-400 hover:text-white hover:bg-red-500/20 rounded-full font-medium transition-all"
+          >
+            <LogOut className="w-4 h-4 mr-2" /> Sign Out
+          </Button>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2rem] w-full max-w-md shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+            <QrCode className="w-12 h-12 text-emerald-400" />
+          </div>
+          
+          <h1 className="text-3xl font-extrabold mb-1 tracking-tight text-white">Kiosk Terminal</h1>
+          <p className="text-slate-400 text-sm mb-8">Ready to process orders</p>
+
+          <div className="bg-slate-950/50 rounded-2xl p-5 w-full mb-8 space-y-4 border border-slate-800/50 text-left">
+             <div className="flex items-center gap-3">
+               <div className="bg-blue-500/20 p-2.5 rounded-xl">
+                 <User className="w-5 h-5 text-blue-400" />
+               </div>
+               <div>
+                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Terminal Account</p>
+                 <p className="font-semibold text-slate-200">
+                   {profileData ? profileData.full_name : <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+                 </p>
+               </div>
+             </div>
+             
+             <div className="flex items-center gap-3">
+               <div className="bg-emerald-500/20 p-2.5 rounded-xl">
+                 <Store className="w-5 h-5 text-emerald-400" />
+               </div>
+               <div>
+                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Linked Canteen</p>
+                 <p className="font-bold text-emerald-400">
+                   {profileData ? `${profileData.campus_name} (${profileData.campus_code})` : <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+                 </p>
+               </div>
+             </div>
+          </div>
+
+          <Button 
+            onClick={() => setActiveScreen('scanner')}
+            disabled={!profileData}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl h-14 text-lg font-bold shadow-[0_8px_30px_rgba(16,185,129,0.3)] transition-all hover:scale-[1.02] active:scale-95"
+          >
+            <Camera className="w-5 h-5 mr-2" /> Start Scanning
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
@@ -419,8 +541,7 @@ export default function KioskScanner() {
           </button>
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Switch Camera */}
+        <div className="flex items-center gap-1 z-50 transition-opacity duration-300">
           <Button
             variant="ghost" size="icon"
             onClick={switchCamera}
@@ -429,7 +550,6 @@ export default function KioskScanner() {
             <SwitchCamera className="w-5 h-5" />
           </Button>
 
-          {/* History Toggle */}
           <Button
             variant="ghost" size="icon"
             onClick={() => setShowHistory(!showHistory)}
@@ -443,7 +563,6 @@ export default function KioskScanner() {
             )}
           </Button>
 
-          {/* Manual Input Toggle */}
           <Button
             variant="ghost" size="icon"
             onClick={() => setShowManualInput(!showManualInput)}
@@ -452,7 +571,6 @@ export default function KioskScanner() {
             <Search className="w-5 h-5" />
           </Button>
 
-          {/* Sound Toggle */}
           <Button
             variant="ghost" size="icon"
             onClick={() => setSoundEnabled(!soundEnabled)}
@@ -461,13 +579,20 @@ export default function KioskScanner() {
             {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
           </Button>
 
-          {/* Logout */}
-          <Button
-            variant="ghost" size="icon"
-            onClick={() => { stopCamera(); logout(); navigate('/auth'); }}
-            className="text-white hover:bg-red-500/20"
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => {
+              stopCamera();
+              if (isFromAdmin) {
+                navigate(-1); 
+              } else {
+                setActiveScreen('home'); 
+              }
+            }} 
+            className="text-white hover:bg-slate-700/50 bg-black/20 rounded-full ml-2 border border-white/10"
           >
-            <LogOut className="w-5 h-5" />
+            <X className="w-5 h-5" />
           </Button>
         </div>
       </div>

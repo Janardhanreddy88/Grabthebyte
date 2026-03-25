@@ -75,11 +75,13 @@ export default function Auth() {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       setIsLoggingOut(false);
+      // 🌟 REPLACE: True (Already here, perfect!)
       if (!session) navigate('/auth', { replace: true });
     })();
     return () => { cancelled = true; };
   }, [searchParams, navigate]);
 
+  // 🌟 THE BOUNCER (Part 1): Initial load check
   useEffect(() => {
     if (isLoggingOut) return;
     const checkSession = async () => {
@@ -93,14 +95,17 @@ export default function Auth() {
             return;
           }
         }
-        if (roles?.role === 'admin') navigate('/admin');
-        else if (roles?.role === 'kiosk') navigate('/kiosk-scanner');
-        else navigate('/menu');
+        
+        // 🌟 FIXED: Added { replace: true } to all of these!
+        if (roles?.role === 'admin') navigate('/admin', { replace: true });
+        else if (roles?.role === 'kiosk') navigate('/kiosk-scanner', { replace: true });
+        else navigate('/menu', { replace: true });
       }
     };
     checkSession();
   }, [navigate, isLoggingOut, campus, toast]);
 
+  // 🌟 THE BOUNCER (Part 2): Live listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
@@ -111,6 +116,7 @@ export default function Auth() {
           ]);
           const userRole = rolesResult.data?.role;
           const userCampusId = rolesResult.data?.campus_id || profileResult.data?.campus_id;
+          
           if (userRole !== 'super_admin' && campus?.id) {
             if (userCampusId && userCampusId !== campus.id) {
               await supabase.auth.signOut();
@@ -118,8 +124,13 @@ export default function Auth() {
               return;
             }
           }
-          if (userRole === 'admin' || userRole === 'kiosk') navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner');
-          else navigate('/menu');
+          
+          // 🌟 FIXED: Added { replace: true } here too!
+          if (userRole === 'admin' || userRole === 'kiosk') {
+             navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner', { replace: true });
+          } else {
+             navigate('/menu', { replace: true });
+          }
         }, 0);
       }
     });
@@ -149,7 +160,14 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); clearErrors(); setRateLimitMessage(null);
     if (!validateLoginForm()) return;
-    if (!campus?.id) { toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); navigate('/select-campus'); return; }
+    
+    // 🌟 FIXED: Added replace: true
+    if (!campus?.id) { 
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
+      navigate('/select-campus', { replace: true }); 
+      return; 
+    }
+    
     const sanitizedEmail = sanitizeEmail(loginEmail);
     const rateLimit = checkLoginRateLimit(sanitizedEmail);
     if (!rateLimit.allowed) { setRateLimitMessage(rateLimit.message || 'Too many login attempts.'); return; }
@@ -166,7 +184,14 @@ export default function Auth() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault(); clearErrors();
     if (!validateSignupForm()) return;
-    if (!campus?.id) { toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); navigate('/select-campus'); return; }
+    
+    // 🌟 FIXED: Added replace: true
+    if (!campus?.id) { 
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
+      navigate('/select-campus', { replace: true }); 
+      return; 
+    }
+    
     setIsLoading(true);
     
     try {
@@ -214,7 +239,6 @@ export default function Auth() {
     }
   };
 
-  // 🔥 THE FIX: Using UPSERT to bypass race conditions
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -267,7 +291,8 @@ export default function Auth() {
           <h1 className="font-display text-xl font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to order your favorite food</p>
           {campus && (
-            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus')} className="mt-2 px-3 text-xs text-muted-foreground gap-1.5 rounded-lg">
+            // 🌟 ADDED REPLACE TRUE HERE JUST IN CASE
+            <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus', { replace: true })} className="mt-2 px-3 text-xs text-muted-foreground gap-1.5 rounded-lg">
               <RefreshCw size={12} /> Switch Campus
             </Button>
           )}
