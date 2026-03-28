@@ -73,8 +73,6 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           isAvailable: item.is_available === true, 
         };
       });
-        };
-      });
 
       setMenuItems(items);
       localStorage.setItem(cacheKey, JSON.stringify(items));
