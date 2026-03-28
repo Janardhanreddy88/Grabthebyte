@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MenuItem, TimePeriod } from '@/types/canteen';
+import { MenuItem } from '@/types/canteen';
 import { useMenu } from '@/context/MenuContext';
-import { categories } from '@/data/menuData'; 
 
 interface UseMenuItemsReturn {
-  items: MenuItem[]; // RAW DATA FOR OUR BYPASS
+  items: MenuItem[];
   filteredItems: MenuItem[];
   popularItems: MenuItem[];
-  categories: typeof categories;
-  currentPeriod: TimePeriod | null;
   canteenClosed: boolean;
   nextOpenTime: string | null;
   isLoading: boolean;
