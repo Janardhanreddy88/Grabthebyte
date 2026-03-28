@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { categories } from '@/data/menuData';
+import { useCategories } from '@/hooks/useCategories';
 import { motion } from 'framer-motion';
 
 interface CategoryChipsProps {
@@ -8,10 +8,18 @@ interface CategoryChipsProps {
 }
 
 export function CategoryChips({ selectedCategory, onSelectCategory }: CategoryChipsProps) {
+  const { data: dbCategories = [] } = useCategories();
+
+  // Build chips: "All Items" + DB categories
+  const chips = [
+    { id: 'all', name: 'All Items', icon: '🍽️' },
+    ...dbCategories.map(c => ({ id: c.name.toLowerCase().trim(), name: c.name, icon: c.icon })),
+  ];
+
   return (
     <div className="mb-4 -mx-3 px-3">
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {categories.map((category) => {
+        {chips.map((category) => {
           const isActive = selectedCategory === category.id;
           return (
             <motion.button
