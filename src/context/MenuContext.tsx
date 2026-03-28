@@ -73,7 +73,7 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           quantity: Number(item.stock_quantity || 0),
           // 🔥 MAGIC FIX: If it is anything OTHER than strictly true, force it to be FALSE!
           isAvailable: item.is_available === true, 
-          availableTimePeriods: [], 
+          availableTimePeriods: [],
         };
       });
 
