@@ -40,10 +40,8 @@ export function useMenuItems(): UseMenuItemsReturn {
     fetchItems();
   }, [fetchItems]);
 
-  // 2. Global Status Config
   const canteenClosed = false;
   const nextOpenTime = null;
-  const currentPeriod = null; 
 
   // 3. 🔥 THE HOOK FILTER (Safety Net) 🔥
   // Even though Menu.tsx does its own bypass, we keep this clean
