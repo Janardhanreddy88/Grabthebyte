@@ -178,7 +178,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             category: '',
             isVeg: true,
             isAvailable: true,
-            availableTimePeriods: [],
             quantity: item.quantity,
           })),
         };

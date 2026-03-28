@@ -85,7 +85,6 @@ export function useOrders(): UseOrdersReturn {
           category: '',
           isVeg: true,
           isAvailable: true,
-          availableTimePeriods: [],
           quantity: item.quantity,
         })),
         total: Number(order.total),

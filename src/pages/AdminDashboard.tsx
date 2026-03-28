@@ -31,11 +31,6 @@ import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 
-const ADMIN_CATEGORIES = [
-  { id: "breakfast", name: "Breakfast" },
-  { id: "lunch", name: "Lunch" },
-  { id: "snacks", name: "Snacks" },
-] as const;
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -204,7 +199,7 @@ export default function AdminDashboard() {
     .filter((item) => (item.quantity ?? 0) <= 10)
     .map((item) => ({
       id: item.id, name: item.name, quantity: item.quantity ?? 0,
-      category: ADMIN_CATEGORIES.find((c) => c.id === item.category)?.name || item.category,
+      category: item.category || 'other',
     }))
     .sort((a, b) => a.quantity - b.quantity);
 

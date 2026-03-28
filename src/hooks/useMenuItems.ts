@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MenuItem, TimePeriod } from '@/types/canteen';
+import { MenuItem } from '@/types/canteen';
 import { useMenu } from '@/context/MenuContext';
-import { categories } from '@/data/menuData'; 
 
 interface UseMenuItemsReturn {
-  items: MenuItem[]; // RAW DATA FOR OUR BYPASS
+  items: MenuItem[];
   filteredItems: MenuItem[];
   popularItems: MenuItem[];
-  categories: typeof categories;
-  currentPeriod: TimePeriod | null;
   canteenClosed: boolean;
   nextOpenTime: string | null;
   isLoading: boolean;
@@ -43,10 +40,8 @@ export function useMenuItems(): UseMenuItemsReturn {
     fetchItems();
   }, [fetchItems]);
 
-  // 2. Global Status Config
   const canteenClosed = false;
   const nextOpenTime = null;
-  const currentPeriod = null; 
 
   // 3. 🔥 THE HOOK FILTER (Safety Net) 🔥
   // Even though Menu.tsx does its own bypass, we keep this clean
@@ -67,11 +62,9 @@ export function useMenuItems(): UseMenuItemsReturn {
   });
 
   return {
-    items: menuItems || [], // 👈 This is what Menu.tsx uses for the bypass!
+    items: menuItems || [],
     filteredItems,
     popularItems,
-    categories,
-    currentPeriod,
     canteenClosed,
     nextOpenTime,
     // 🌟 THE LOADING SHIELD: Prevents "No Items" flash while database is thinking
