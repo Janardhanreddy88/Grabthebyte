@@ -34,15 +34,6 @@ export interface Order {
   customerEmail?: string;
 }
 
-export interface TimePeriod {
-  id: string;
-  name: string;
-  startHour: number;
-  startMinute: number;
-  endHour: number;
-  endMinute: number;
-  icon: string;
-}
 
 export interface Category {
   id: string;

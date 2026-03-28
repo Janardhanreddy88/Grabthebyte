@@ -62,11 +62,9 @@ export function useMenuItems(): UseMenuItemsReturn {
   });
 
   return {
-    items: menuItems || [], // 👈 This is what Menu.tsx uses for the bypass!
+    items: menuItems || [],
     filteredItems,
     popularItems,
-    categories,
-    currentPeriod,
     canteenClosed,
     nextOpenTime,
     // 🌟 THE LOADING SHIELD: Prevents "No Items" flash while database is thinking
