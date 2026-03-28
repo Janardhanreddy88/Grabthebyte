@@ -66,14 +66,13 @@ export function MenuProvider({ children }: { children: ReactNode }) {
           description: item.description || '',
           price: Number(item.price),
           image: item.image_url || '/placeholder.svg',
-          // Force category to lowercase so it perfectly matches your chips!
           category: item.category ? String(item.category).toLowerCase().trim() : 'uncategorized',
           isVeg: Boolean(item.is_veg),
           isPopular: Boolean(item.is_popular),
           quantity: Number(item.stock_quantity || 0),
-          // 🔥 MAGIC FIX: If it is anything OTHER than strictly true, force it to be FALSE!
           isAvailable: item.is_available === true, 
-          availableTimePeriods: [],
+        };
+      });
         };
       });
 
