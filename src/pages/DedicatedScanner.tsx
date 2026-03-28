@@ -524,7 +524,7 @@ export default function KioskScanner() {
       <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent">
         <div className="flex items-center gap-3">
           <button
-            onClick={isPrinterConnected ? disconnectPrinter : connectPrinter}
+            onClick={() => isPrinterConnected ? disconnectPrinter() : connectPrinter()}
             disabled={isConnecting}
             className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/20 active:scale-95 transition-transform"
           >

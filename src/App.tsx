@@ -82,21 +82,20 @@ function HardwareBackButtonHandler() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-      // If on a main root page, close the app!
+    let listener: { remove: () => void } | null = null;
+
+    CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       if (location.pathname === '/menu' || location.pathname === '/auth' || location.pathname === '/admin' || location.pathname === '/') {
         CapacitorApp.exitApp();
-      } 
-      // Otherwise, go back normally
-      else if (canGoBack) {
+      } else if (canGoBack) {
         navigate(-1);
       } else {
         CapacitorApp.exitApp();
       }
-    });
+    }).then(handle => { listener = handle; });
 
     return () => {
-      backButtonListener.remove();
+      listener?.remove();
     };
   }, [location, navigate]);
 
