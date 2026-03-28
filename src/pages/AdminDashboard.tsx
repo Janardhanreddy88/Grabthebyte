@@ -199,7 +199,7 @@ export default function AdminDashboard() {
     .filter((item) => (item.quantity ?? 0) <= 10)
     .map((item) => ({
       id: item.id, name: item.name, quantity: item.quantity ?? 0,
-      category: ADMIN_CATEGORIES.find((c) => c.id === item.category)?.name || item.category,
+      category: item.category || 'other',
     }))
     .sort((a, b) => a.quantity - b.quantity);
 
