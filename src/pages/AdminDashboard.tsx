@@ -31,11 +31,6 @@ import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 
-const ADMIN_CATEGORIES = [
-  { id: "breakfast", name: "Breakfast" },
-  { id: "lunch", name: "Lunch" },
-  { id: "snacks", name: "Snacks" },
-] as const;
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
