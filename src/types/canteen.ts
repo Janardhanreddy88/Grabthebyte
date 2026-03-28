@@ -8,7 +8,6 @@ export interface MenuItem {
   isVeg: boolean;
   isPopular?: boolean;
   isAvailable: boolean;
-  availableTimePeriods: string[];
 }
 
 export interface CartItem extends MenuItem {
