@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
+import { useState } from 'react';
 
 interface CategoryStats {
   category: string;
@@ -21,6 +22,22 @@ interface HourlyData {
   revenue: number;
 }
 
+interface CategoryOrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface CategoryOrder {
+  id: string;
+  orderNumber: string;
+  total: number;
+  status: string;
+  createdAt: string;
+  customerName: string;
+  items: CategoryOrderItem[];
+}
+
 interface TodayAnalytics {
   totalOrders: number;
   totalRevenue: number;
@@ -35,6 +52,7 @@ interface TodayAnalytics {
   activeOrders: number;
   collectedOrders: number;
   dateString: string;
+  categoryOrders: Record<string, CategoryOrder[]>;
 }
 
 const formatHour = (hour: number) => {
@@ -45,12 +63,12 @@ const formatHour = (hour: number) => {
 
 export function useTodayAnalytics() {
   const { campus } = useCampus();
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
-  return useQuery({
-    queryKey: ['today-analytics', campus?.id],
+  const query = useQuery({
+    queryKey: ['today-analytics', campus?.id, selectedDate.toDateString()],
     queryFn: async (): Promise<TodayAnalytics> => {
-      const now = new Date();
-      const dateString = now.toLocaleDateString('en-IN', { 
+      const dateString = selectedDate.toLocaleDateString('en-IN', { 
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
       });
 
@@ -59,26 +77,26 @@ export function useTodayAnalytics() {
         categoryBreakdown: [], topItems: [], hourlyData: [],
         peakHour: '-', completionRate: 0, pendingOrders: 0,
         confirmedOrders: 0, activeOrders: 0, collectedOrders: 0, dateString,
+        categoryOrders: {},
       });
 
       if (!campus?.id) return createDefaultData();
 
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      const dayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      const dayEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 59);
 
       const { data: orders, error } = await supabase
         .from('orders')
         .select(`
-          id, total, created_at, status,
+          id, total, created_at, status, order_number, customer_name,
           order_items (name, quantity, price, menu_item_id)
         `)
         .eq('campus_id', campus.id)
-        .gte('created_at', todayStart.toISOString())
-        .lte('created_at', todayEnd.toISOString());
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
 
-      if (error) { console.error('Error fetching today analytics:', error); return createDefaultData(); }
+      if (error) { console.error('Error fetching analytics:', error); return createDefaultData(); }
 
-      // Fetch menu items to get categories
       const { data: menuItems } = await supabase
         .from('menu_items')
         .select('id, category')
@@ -106,6 +124,7 @@ export function useTodayAnalytics() {
       const hourCounts: Record<number, { orders: number; revenue: number }> = {};
       for (let h = 7; h <= 22; h++) hourCounts[h] = { orders: 0, revenue: 0 };
       const itemCounts: Record<string, { quantity: number; revenue: number }> = {};
+      const categoryOrders: Record<string, CategoryOrder[]> = {};
 
       paidOrders.forEach(order => {
         const orderDate = new Date(order.created_at);
@@ -116,8 +135,13 @@ export function useTodayAnalytics() {
         }
 
         const items = order.order_items as Array<{ name: string; quantity: number; price: number; menu_item_id: string | null }> || [];
+        const orderCategories = new Set<string>();
+
         items.forEach(item => {
           const cat = (item.menu_item_id && categoryMap[item.menu_item_id]) || 'other';
+          const catKey = cat.charAt(0).toUpperCase() + cat.slice(1);
+          orderCategories.add(catKey);
+
           if (!catStats[cat]) catStats[cat] = { orders: new Set(), revenue: 0, itemCount: 0 };
           catStats[cat].orders.add(order.id);
           catStats[cat].revenue += item.price * item.quantity;
@@ -126,6 +150,24 @@ export function useTodayAnalytics() {
           if (!itemCounts[item.name]) itemCounts[item.name] = { quantity: 0, revenue: 0 };
           itemCounts[item.name].quantity += item.quantity;
           itemCounts[item.name].revenue += item.price * item.quantity;
+        });
+
+        // Add this order to each category it belongs to
+        orderCategories.forEach(catKey => {
+          if (!categoryOrders[catKey]) categoryOrders[catKey] = [];
+          const catItems = items.filter(item => {
+            const cat = (item.menu_item_id && categoryMap[item.menu_item_id]) || 'other';
+            return (cat.charAt(0).toUpperCase() + cat.slice(1)) === catKey;
+          });
+          categoryOrders[catKey].push({
+            id: order.id,
+            orderNumber: order.order_number,
+            total: Number(order.total),
+            status: order.status,
+            createdAt: order.created_at,
+            customerName: order.customer_name || 'Guest',
+            items: catItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          });
         });
       });
 
@@ -159,10 +201,13 @@ export function useTodayAnalytics() {
         topItems, hourlyData, peakHour: peakHourCount > 0 ? formatHour(peakHourVal) : '-',
         completionRate, pendingOrders, confirmedOrders, activeOrders: confirmedOrders,
         collectedOrders: collectedOrdersList.length, dateString,
+        categoryOrders,
       };
     },
     enabled: !!campus?.id,
     refetchInterval: 30000,
     staleTime: 10000,
   });
+
+  return { ...query, selectedDate, setSelectedDate };
 }
