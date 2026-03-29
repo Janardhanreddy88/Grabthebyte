@@ -38,11 +38,31 @@ interface AdminAnalyticsTabProps {
 
 export function AdminAnalyticsTab({
   todayStats, todayLoading,
+  todaySelectedDate, todaySetSelectedDate,
   weeklyStats, weeklyLoading,
   monthlyStats, monthlyLoading,
   monthlySelectedMonth, monthlySetSelectedMonth, monthlyMonthOptions,
   lowStockItems, onRestockClick,
 }: AdminAnalyticsTabProps) {
+  const isToday = todaySelectedDate.toDateString() === new Date().toDateString();
+
+  const goToPreviousDay = () => {
+    const prev = new Date(todaySelectedDate);
+    prev.setDate(prev.getDate() - 1);
+    todaySetSelectedDate(prev);
+  };
+
+  const goToNextDay = () => {
+    const next = new Date(todaySelectedDate);
+    next.setDate(next.getDate() + 1);
+    if (next <= new Date()) {
+      todaySetSelectedDate(next);
+    }
+  };
+
+  const goToToday = () => {
+    todaySetSelectedDate(new Date());
+  };
   return (
     <div className="space-y-6">
       {/* Today's Report */}
