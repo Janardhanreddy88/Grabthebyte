@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { CheckCircle2, Home, Receipt, Loader2, MapPin, XCircle, Clock, ShoppingBag, ArrowLeft, Ban } from 'lucide-react';
+import { CheckCircle2, Home, Receipt, Loader2, MapPin, XCircle, Clock, ShoppingBag, ArrowLeft, Ban, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Separator } from '@/components/ui/separator';
@@ -63,7 +63,6 @@ export default function OrderDetails() {
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // 🔥 TIMEOUT LOGIC SYNCED WITH MY ORDERS PAGE
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
 
@@ -71,75 +70,32 @@ export default function OrderDetails() {
   const normalizedPayment = order.payment_status?.toLowerCase() || 'pending';
   const reasonLower = order.rejection_reason?.toLowerCase() || '';
 
-  // 1. Did we actually get their money?
   const isPaid = normalizedPayment === 'completed' || normalizedPayment === 'confirmed' || normalizedPayment === 'paid' || normalizedPayment === 'success';
 
-  // 2. Is it Uncollected Food?
   const isUncollectedFood = 
     normalizedStatus === 'expired' || 
     reasonLower.includes('not collected') || 
     (normalizedStatus === 'failed' && isPaid);
 
-  // 3. Is it a permanent payment failure? (Syncs perfectly with MyOrders now!)
   const isPaymentFailed = !isPaid && !isUncollectedFood && (
     normalizedStatus === 'failed' || 
     normalizedPayment === 'failed' || 
     normalizedPayment === 'not_confirmed' || 
-    (normalizedStatus === 'pending' && isTimedOut) // <-- The Magic Timeout Check!
+    (normalizedStatus === 'pending' && isTimedOut)
   );
 
   const getStatusConfig = () => {
-    // Check uncollected food first
     if (isUncollectedFood) {
-      return { 
-        bg: 'from-[#4B5563] to-[#6B7280]', 
-        icon: <Ban className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-        title: 'Order Expired', 
-        subtitle: order.rejection_reason || 'Food was not collected in time'
-      };
+      return { bg: 'from-[#4B5563] to-[#6B7280]', icon: <Ban className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Expired', subtitle: order.rejection_reason || 'Food was not collected in time' };
     }
-
-    // Check payment failure (including timeouts!)
     if (isPaymentFailed) {
-      return { 
-        bg: 'from-[#DC2626] to-[#EF4444]', 
-        icon: <XCircle className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-        title: 'Payment Failed', 
-        subtitle: order.rejection_reason || (isTimedOut ? 'Timeout reached.' : 'Transaction could not be completed')
-      };
+      return { bg: 'from-[#DC2626] to-[#EF4444]', icon: <XCircle className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Payment Failed', subtitle: order.rejection_reason || (isTimedOut ? 'Timeout reached.' : 'Transaction could not be completed') };
     }
-    
-    // Check standard active statuses
     switch (normalizedStatus) {
-      case 'confirmed':
-        return { 
-          bg: 'from-[#059669] to-[#10B981]', 
-          icon: <CheckCircle2 className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-          title: 'Ready for Pickup', 
-          subtitle: 'Show this QR at the counter'
-        };
-      case 'collected':
-        return { 
-          bg: 'from-[#2563EB] to-[#3B82F6]', 
-          icon: <ShoppingBag className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-          title: 'Order Collected', 
-          subtitle: 'Hope you enjoyed your meal!'
-        };
-      case 'pending': 
-        // This will ONLY hit if it's pending AND under 10 minutes!
-        return { 
-          bg: 'from-[#D97706] to-[#F59E0B]', 
-          icon: <Clock className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-          title: 'Payment Pending', 
-          subtitle: 'Awaiting payment confirmation'
-        };
-      default:
-        return { 
-          bg: 'from-gray-700 to-gray-500', 
-          icon: <Receipt className="w-8 h-8 text-white" strokeWidth={2.5} />, 
-          title: 'Order Details', 
-          subtitle: `Status: ${order.status}`
-        };
+      case 'confirmed': return { bg: 'from-[#059669] to-[#10B981]', icon: <CheckCircle2 className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Ready for Pickup', subtitle: 'Show this QR at the counter' };
+      case 'collected': return { bg: 'from-[#2563EB] to-[#3B82F6]', icon: <ShoppingBag className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Collected', subtitle: 'Hope you enjoyed your meal!' };
+      case 'pending': return { bg: 'from-[#D97706] to-[#F59E0B]', icon: <Clock className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Payment Pending', subtitle: 'Awaiting payment confirmation' };
+      default: return { bg: 'from-gray-700 to-gray-500', icon: <Receipt className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Details', subtitle: `Status: ${order.status}` };
     }
   };
 
@@ -261,6 +217,29 @@ export default function OrderDetails() {
                   <p className="text-sm font-bold text-gray-800">{order.campus.name} Canteen</p>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* 🟢 NEW: RETRY PAYMENT BUTTONS */}
+          {isPaymentFailed && (
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
+              <Button 
+                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <RefreshCw size={18} className="mr-2" /> Retry Payment
+              </Button>
+            </motion.div>
+          )}
+
+          {normalizedStatus === 'pending' && !isTimedOut && !isPaid && (
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
+              <Button 
+                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Receipt size={18} className="mr-2" /> Complete Payment Now
+              </Button>
             </motion.div>
           )}
 
