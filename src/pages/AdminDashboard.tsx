@@ -177,7 +177,7 @@ export default function AdminDashboard() {
   const { data: stats } = useOrderStats();
   const { data: monthlyStats, isLoading: monthlyLoading, selectedMonth: monthlySelectedMonth, setSelectedMonth: monthlySetSelectedMonth, monthOptions: monthlyMonthOptions } = useMonthlyAnalytics();
   const { data: weeklyStats, isLoading: weeklyLoading } = useWeeklyAnalytics();
-  const { data: todayStats, isLoading: todayLoading } = useTodayAnalytics();
+  const { data: todayStats, isLoading: todayLoading, selectedDate: todaySelectedDate, setSelectedDate: todaySetSelectedDate } = useTodayAnalytics();
   const createMenuItem = useCreateMenuItem();
   const updateMenuItem = useUpdateMenuItem();
   const deleteMenuItem = useDeleteMenuItem();
@@ -300,6 +300,8 @@ export default function AdminDashboard() {
             <AdminAnalyticsTab
               todayStats={todayStats}
               todayLoading={todayLoading}
+              todaySelectedDate={todaySelectedDate}
+              todaySetSelectedDate={todaySetSelectedDate}
               weeklyStats={weeklyStats}
               weeklyLoading={weeklyLoading}
               monthlyStats={monthlyStats}

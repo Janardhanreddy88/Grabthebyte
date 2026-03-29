@@ -2,9 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import {
   Clock, TrendingUp, TrendingDown, Minus, ShoppingBag, IndianRupee, Package, Users,
-  ChevronDown, Calendar, PieChart, Loader2, UtensilsCrossed, Hash,
+  ChevronDown, ChevronLeft, ChevronRight, Calendar, PieChart, Loader2, UtensilsCrossed, Hash,
 } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -22,6 +23,8 @@ const PIE_COLORS = [
 interface AdminAnalyticsTabProps {
   todayStats: any;
   todayLoading: boolean;
+  todaySelectedDate: Date;
+  todaySetSelectedDate: (d: Date) => void;
   weeklyStats: any;
   weeklyLoading: boolean;
   monthlyStats: any;
@@ -35,22 +38,61 @@ interface AdminAnalyticsTabProps {
 
 export function AdminAnalyticsTab({
   todayStats, todayLoading,
+  todaySelectedDate, todaySetSelectedDate,
   weeklyStats, weeklyLoading,
   monthlyStats, monthlyLoading,
   monthlySelectedMonth, monthlySetSelectedMonth, monthlyMonthOptions,
   lowStockItems, onRestockClick,
 }: AdminAnalyticsTabProps) {
+  const isToday = todaySelectedDate.toDateString() === new Date().toDateString();
+
+  const goToPreviousDay = () => {
+    const prev = new Date(todaySelectedDate);
+    prev.setDate(prev.getDate() - 1);
+    todaySetSelectedDate(prev);
+  };
+
+  const goToNextDay = () => {
+    const next = new Date(todaySelectedDate);
+    next.setDate(next.getDate() + 1);
+    if (next <= new Date()) {
+      todaySetSelectedDate(next);
+    }
+  };
+
+  const goToToday = () => {
+    todaySetSelectedDate(new Date());
+  };
   return (
     <div className="space-y-6">
       {/* Today's Report */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-primary" />
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">{isToday ? "Today's Report" : 'Daily Report'}</h3>
+              <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold">Today's Report</h3>
-            <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={goToPreviousDay}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {!isToday && (
+              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs font-semibold" onClick={goToToday}>
+                Today
+              </Button>
+            )}
+            <Button
+              variant="outline" size="icon" className="h-8 w-8 rounded-lg"
+              onClick={goToNextDay}
+              disabled={isToday}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -89,7 +131,7 @@ export function AdminAnalyticsTab({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CategoryBreakdown data={todayStats?.categoryBreakdown || []} />
+                  <CategoryBreakdown data={todayStats?.categoryBreakdown || []} categoryOrders={todayStats?.categoryOrders} />
                 </CardContent>
               </Card>
 
