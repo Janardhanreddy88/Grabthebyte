@@ -2,9 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import {
   Clock, TrendingUp, TrendingDown, Minus, ShoppingBag, IndianRupee, Package, Users,
-  ChevronDown, Calendar, PieChart, Loader2, UtensilsCrossed, Hash,
+  ChevronDown, ChevronLeft, ChevronRight, Calendar, PieChart, Loader2, UtensilsCrossed, Hash,
 } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
