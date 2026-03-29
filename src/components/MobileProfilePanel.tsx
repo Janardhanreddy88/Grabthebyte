@@ -404,7 +404,27 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
               </button>
             </div>
 
+            <Separator />
 
+            {/* 🟢 --- HELP & SUPPORT SECTION (NEW) --- 🟢 */}
+            <div className="p-4">
+              <h4 className="font-semibold text-sm text-muted-foreground mb-3">HELP & SUPPORT</h4>
+
+              <Link
+                to="/support"
+                onClick={onClose}
+                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
+              >
+                <div className="flex items-center gap-3 text-foreground">
+                  <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full flex items-center justify-center">
+                    <HelpCircle size={18} className="text-green-600 dark:text-green-400" />
+                  </div>
+                  <span className="font-medium">Contact Support</span>
+                </div>
+                <ChevronRight size={18} className="text-muted-foreground" />
+              </Link>
+            </div>
+            
             <Separator />
 
             {/* Policies Section */}
