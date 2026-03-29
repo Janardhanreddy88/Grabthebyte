@@ -131,7 +131,7 @@ export function AdminAnalyticsTab({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CategoryBreakdown data={todayStats?.categoryBreakdown || []} />
+                  <CategoryBreakdown data={todayStats?.categoryBreakdown || []} categoryOrders={todayStats?.categoryOrders} />
                 </CardContent>
               </Card>
 

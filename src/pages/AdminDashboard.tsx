@@ -300,6 +300,8 @@ export default function AdminDashboard() {
             <AdminAnalyticsTab
               todayStats={todayStats}
               todayLoading={todayLoading}
+              todaySelectedDate={todaySelectedDate}
+              todaySetSelectedDate={todaySetSelectedDate}
               weeklyStats={weeklyStats}
               weeklyLoading={weeklyLoading}
               monthlyStats={monthlyStats}
