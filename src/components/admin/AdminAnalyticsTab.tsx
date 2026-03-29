@@ -23,6 +23,8 @@ const PIE_COLORS = [
 interface AdminAnalyticsTabProps {
   todayStats: any;
   todayLoading: boolean;
+  todaySelectedDate: Date;
+  todaySetSelectedDate: (d: Date) => void;
   weeklyStats: any;
   weeklyLoading: boolean;
   monthlyStats: any;
