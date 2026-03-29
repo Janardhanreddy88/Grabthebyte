@@ -67,13 +67,32 @@ export function AdminAnalyticsTab({
     <div className="space-y-6">
       {/* Today's Report */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-primary" />
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">{isToday ? "Today's Report" : 'Daily Report'}</h3>
+              <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold">Today's Report</h3>
-            <p className="text-sm text-muted-foreground">{todayStats?.dateString}</p>
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={goToPreviousDay}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {!isToday && (
+              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs font-semibold" onClick={goToToday}>
+                Today
+              </Button>
+            )}
+            <Button
+              variant="outline" size="icon" className="h-8 w-8 rounded-lg"
+              onClick={goToNextDay}
+              disabled={isToday}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
