@@ -125,8 +125,9 @@ export default function Auth() {
             }
           }
           
-          // 🌟 FIXED: Added { replace: true } here too!
-          if (userRole === 'admin' || userRole === 'kiosk') {
+          if (userRole === 'super_admin') {
+             navigate('/super-admin', { replace: true });
+          } else if (userRole === 'admin' || userRole === 'kiosk') {
              navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner', { replace: true });
           } else {
              navigate('/menu', { replace: true });
