@@ -69,10 +69,10 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
   if (isLoading) {
     return (
       <Card className={cn("relative overflow-hidden", variantStyles[variant])}>
-        <CardContent className="p-5">
+        <CardContent className="p-3 sm:p-5">
           <div className="flex items-start justify-between">
-            <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-32" /><Skeleton className="h-3 w-20" /></div>
-            <Skeleton className="h-12 w-12 rounded-xl" />
+            <div className="space-y-2"><Skeleton className="h-3 w-16 sm:h-4 sm:w-24" /><Skeleton className="h-6 w-20 sm:h-8 sm:w-32" /></div>
+            <Skeleton className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl" />
           </div>
         </CardContent>
       </Card>
@@ -81,15 +81,15 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
 
   return (
     <Card className={cn("relative overflow-hidden transition-all hover:shadow-md", variantStyles[variant])}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold tracking-tight">{value}</p>
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{title}</p>
+            <p className="text-lg sm:text-2xl font-bold tracking-tight">{value}</p>
             {(subtitle || trendValue) && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {trendValue && (
-                  <span className={cn("flex items-center text-xs font-medium",
+                  <span className={cn("flex items-center text-[10px] sm:text-xs font-medium",
                     trend === 'up' && "text-green-600 dark:text-green-400",
                     trend === 'down' && "text-destructive"
                   )}>
@@ -98,12 +98,12 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
                     {trendValue}
                   </span>
                 )}
-                {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
+                {subtitle && <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline">{subtitle}</span>}
               </div>
             )}
           </div>
-          <div className={cn("p-3 rounded-xl", iconStyles[variant])}>
-            <Icon className="h-6 w-6" />
+          <div className={cn("p-2 sm:p-3 rounded-lg sm:rounded-xl shrink-0", iconStyles[variant])}>
+            <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
           </div>
         </div>
       </CardContent>
