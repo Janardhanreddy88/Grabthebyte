@@ -63,31 +63,83 @@ Deno.serve(async (req) => {
   try {
     const RAZORPAY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     const SB_URL = Deno.env.get("SUPABASE_URL");
+    const SB_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SB_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!RAZORPAY_SECRET || !SB_URL || !SB_KEY) throw new Error("Missing env vars.");
+    if (!RAZORPAY_SECRET || !SB_URL || !SB_KEY || !SB_ANON_KEY) {
+      throw new Error("Missing env vars.");
+    }
 
-    const supabase = createClient(SB_URL, SB_KEY);
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 1: JWT AUTHENTICATION
+    // =====================================================================
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing Auth Header" }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    const authClient = createClient(SB_URL, SB_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Invalid or Expired Token" }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+    // =====================================================================
+
     const payload: PaymentPayload = await req.json();
-
     console.log("[INCOMING PAYLOAD]:", JSON.stringify(payload));
 
     if (!payload.orderId || !payload.razorpay_order_id || !payload.razorpay_payment_id) {
-      return new Response(JSON.stringify({ error: "Malformed payload." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Malformed payload." }), { 
+        status: 400, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
-    const { data: order, error: orderError } = await supabase
+    // Use Admin client for backend DB operations
+    const supabaseAdmin = createClient(SB_URL, SB_KEY);
+
+    // Fetch order, including user_id for Ownership check
+    const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, status, payment_status, order_number, campus_id")
+      .select("id, status, payment_status, order_number, campus_id, user_id")
       .eq("id", payload.orderId)
       .maybeSingle();
 
-    if (orderError || !order) return new Response(JSON.stringify({ error: "Order not found." }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (orderError || !order) {
+      return new Response(JSON.stringify({ error: "Order not found." }), { 
+        status: 404, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 2: OWNERSHIP VERIFICATION
+    // =====================================================================
+    if (order.user_id !== user.id) {
+      console.warn(`[SECURITY ALERT] User ${user.id} tried to verify Order ${payload.orderId} owned by ${order.user_id}`);
+      return new Response(JSON.stringify({ error: "Unauthorized: You do not own this order" }), { 
+        status: 403, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+    // =====================================================================
 
     // If already marked as completed (by webhook or retry), just return success
     if (order.payment_status === "completed") {
       await sendAdminNotification(order.campus_id, order.order_number);
-      return new Response(JSON.stringify({ success: true, status: "completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, status: "completed" }), { 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
     let isPaymentValid = false;
@@ -115,13 +167,15 @@ Deno.serve(async (req) => {
     }
 
     if (!isPaymentValid) {
-      return new Response(JSON.stringify({ success: false, message: "Payment verification failed." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: false, message: "Payment verification failed." }), { 
+        status: 400, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
     // 🌟 FIX: Removed the .eq("payment_status", "pending") lock here!
-    // This function now has supreme authority to mark ANY verified order as completed,
-    // even if a webhook previously marked it as failed.
-    const { error: updateError } = await supabase
+    // This function now has supreme authority to mark ANY verified order as completed.
+    const { error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
         status: "confirmed",
@@ -137,10 +191,15 @@ Deno.serve(async (req) => {
     // Dispatch Push Notification to Canteen Staff
     await sendAdminNotification(order.campus_id, order.order_number);
 
-    return new Response(JSON.stringify({ success: true, status: "completed", orderId: order.id, orderNumber: order.order_number }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, status: "completed", orderId: order.id, orderNumber: order.order_number }), { 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
 
   } catch (error: unknown) {
     console.error("[Fatal Error] Unhandled exception:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Internal server error" }), { 
+      status: 500, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
   }
 });

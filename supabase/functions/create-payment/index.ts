@@ -23,38 +23,93 @@ Deno.serve(async (req) => {
     const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID");
     const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
       throw new Error("Razorpay credentials not configured in Supabase Vault");
     }
 
-    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SECRET_KEY) {
       throw new Error("Supabase credentials not configured");
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 1: JWT AUTHENTICATION
+    // =====================================================================
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing Auth Header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
+    // Create a client purely to verify the user's token
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Invalid or Expired Token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 2: RATE LIMITING (Max 5 attempts per minute)
+    // =====================================================================
+    const ONE_MINUTE_AGO = new Date(Date.now() - 60000).toISOString();
+    const { count, error: rateError } = await authClient
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', ONE_MINUTE_AGO);
+
+    if (count && count >= 5) {
+      return new Response(JSON.stringify({ error: "Too many payment requests. Please wait a minute." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Parse the request body
     const { orderId, amount, customerName, customerEmail, customerPhone }: CreatePaymentRequest = await req.json();
 
     if (!orderId || !amount || !customerEmail) {
-      return new Response(JSON.stringify({ error: "Missing required fields: orderId, amount, customerEmail" }), {
+      return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify order exists and is pending
-    const { data: order, error: orderError } = await supabase
+    // Use the Service Role client to bypass RLS for backend operations
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+
+    // Verify order exists, is pending, AND grab the user_id to verify ownership
+    const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, status, payment_status, order_number")
+      .select("id, status, payment_status, order_number, user_id")
       .eq("id", orderId)
       .maybeSingle();
 
     if (orderError || !order) {
-      console.error("Order lookup error:", orderError);
       return new Response(JSON.stringify({ error: "Order not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 3: OWNERSHIP VERIFICATION
+    // =====================================================================
+    if (order.user_id !== user.id) {
+      console.warn(`User ${user.id} attempted to pay for Order ${orderId} belonging to ${order.user_id}`);
+      return new Response(JSON.stringify({ error: "Unauthorized: You do not own this order" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -99,7 +154,7 @@ Deno.serve(async (req) => {
     }
 
     // Update order with the brand new Razorpay order ID
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
         razorpay_order_id: razorpayData.id,
