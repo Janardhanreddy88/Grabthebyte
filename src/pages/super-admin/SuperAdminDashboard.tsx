@@ -279,40 +279,40 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10"><Users className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-blue-500/10"><Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 dark:text-blue-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Users</p>
-              <p className="text-lg font-bold">{extraLoading ? <Skeleton className="h-6 w-10" /> : userStats?.total_users || 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Users</p>
+              <p className="text-base sm:text-lg font-bold">{extraLoading ? <Skeleton className="h-5 w-8" /> : userStats?.total_users || 0}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/10"><Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-purple-500/10"><Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Campuses</p>
-              <p className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-10" /> : campuses.length}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Campuses</p>
+              <p className="text-base sm:text-lg font-bold">{isLoading ? <Skeleton className="h-5 w-8" /> : campuses.length}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10"><ShoppingBag className="h-4 w-4 text-green-600 dark:text-green-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-green-500/10"><ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 dark:text-green-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Today's Orders</p>
-              <p className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-10" /> : dashboardStats?.total_orders_today || 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Today</p>
+              <p className="text-base sm:text-lg font-bold">{isLoading ? <Skeleton className="h-5 w-8" /> : dashboardStats?.total_orders_today || 0}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Commission Rate</p>
-              <p className="text-lg font-bold">{platformSettings?.global_commission_rate || 10}%</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Commission</p>
+              <p className="text-base sm:text-lg font-bold">{platformSettings?.global_commission_rate || 10}%</p>
             </div>
           </div>
         </Card>
