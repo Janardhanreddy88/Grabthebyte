@@ -69,10 +69,10 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
   if (isLoading) {
     return (
       <Card className={cn("relative overflow-hidden", variantStyles[variant])}>
-        <CardContent className="p-5">
+        <CardContent className="p-3 sm:p-5">
           <div className="flex items-start justify-between">
-            <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-32" /><Skeleton className="h-3 w-20" /></div>
-            <Skeleton className="h-12 w-12 rounded-xl" />
+            <div className="space-y-2"><Skeleton className="h-3 w-16 sm:h-4 sm:w-24" /><Skeleton className="h-6 w-20 sm:h-8 sm:w-32" /></div>
+            <Skeleton className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl" />
           </div>
         </CardContent>
       </Card>
@@ -81,15 +81,15 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
 
   return (
     <Card className={cn("relative overflow-hidden transition-all hover:shadow-md", variantStyles[variant])}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold tracking-tight">{value}</p>
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{title}</p>
+            <p className="text-lg sm:text-2xl font-bold tracking-tight">{value}</p>
             {(subtitle || trendValue) && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {trendValue && (
-                  <span className={cn("flex items-center text-xs font-medium",
+                  <span className={cn("flex items-center text-[10px] sm:text-xs font-medium",
                     trend === 'up' && "text-green-600 dark:text-green-400",
                     trend === 'down' && "text-destructive"
                   )}>
@@ -98,12 +98,12 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
                     {trendValue}
                   </span>
                 )}
-                {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
+                {subtitle && <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline">{subtitle}</span>}
               </div>
             )}
           </div>
-          <div className={cn("p-3 rounded-xl", iconStyles[variant])}>
-            <Icon className="h-6 w-6" />
+          <div className={cn("p-2 sm:p-3 rounded-lg sm:rounded-xl shrink-0", iconStyles[variant])}>
+            <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
           </div>
         </div>
       </CardContent>
@@ -244,98 +244,97 @@ export function SuperAdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to GrabTheByte Command Center</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">GrabTheByte Command Center</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={cn("gap-1.5 py-1.5 px-3",
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className={cn("gap-1.5 py-1 px-2.5 text-xs",
             platformSettings?.manual_verification_enabled 
               ? "border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-500/10"
               : "border-green-500/50 text-green-600 dark:text-green-400 bg-green-500/10"
           )}>
-            <Activity className="h-3.5 w-3.5" />
-            {platformSettings?.manual_verification_enabled ? "Manual Verification" : "Automated Gateway"}
+            <Activity className="h-3 w-3" />
+            {platformSettings?.manual_verification_enabled ? "Manual" : "Auto Gateway"}
           </Badge>
-          <Button variant="outline" size="sm" onClick={() => refreshData()}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => refreshData()}>
+            <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Total GMV" value={formatCurrency(dashboardStats?.total_gmv || 0)}
-          subtitle="Gross Merchandise Value" icon={IndianRupee} variant="primary" isLoading={isLoading} />
+          subtitle="Gross Value" icon={IndianRupee} variant="primary" isLoading={isLoading} />
         <StatCard title="Net Revenue" value={formatCurrency(dashboardStats?.net_revenue || 0)}
-          subtitle="Platform Commission" icon={TrendingUp} variant="success" isLoading={isLoading} />
+          subtitle="Commission" icon={TrendingUp} variant="success" isLoading={isLoading} />
         <StatCard title="Pending Payouts" value={formatCurrency(dashboardStats?.pending_payouts || 0)}
           subtitle="Due to vendors" icon={Wallet} variant="warning" isLoading={isLoading} />
         <StatCard title="Active Orders" value={dashboardStats?.active_orders || 0}
-          subtitle="Currently preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
+          subtitle="Preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
       </div>
 
       {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10"><Users className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-blue-500/10"><Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 dark:text-blue-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Users</p>
-              <p className="text-lg font-bold">{extraLoading ? <Skeleton className="h-6 w-10" /> : userStats?.total_users || 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Users</p>
+              <p className="text-base sm:text-lg font-bold">{extraLoading ? <Skeleton className="h-5 w-8" /> : userStats?.total_users || 0}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/10"><Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-purple-500/10"><Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Campuses</p>
-              <p className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-10" /> : campuses.length}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Campuses</p>
+              <p className="text-base sm:text-lg font-bold">{isLoading ? <Skeleton className="h-5 w-8" /> : campuses.length}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10"><ShoppingBag className="h-4 w-4 text-green-600 dark:text-green-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-green-500/10"><ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 dark:text-green-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Today's Orders</p>
-              <p className="text-lg font-bold">{isLoading ? <Skeleton className="h-6 w-10" /> : dashboardStats?.total_orders_today || 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Today</p>
+              <p className="text-base sm:text-lg font-bold">{isLoading ? <Skeleton className="h-5 w-8" /> : dashboardStats?.total_orders_today || 0}</p>
             </div>
           </div>
         </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">Commission Rate</p>
-              <p className="text-lg font-bold">{platformSettings?.global_commission_rate || 10}%</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Commission</p>
+              <p className="text-base sm:text-lg font-bold">{platformSettings?.global_commission_rate || 10}%</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Weekly Revenue Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Revenue (Last 7 Days)</CardTitle>
-            <CardDescription>Daily revenue trend</CardDescription>
+          <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-sm sm:text-lg">Revenue (7 Days)</CardTitle>
+            <CardDescription className="text-xs">Daily revenue trend</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              <div className="h-40 sm:h-52 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="h-52">
+              <div className="h-40 sm:h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="day" className="text-xs" />
-                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-xs" />
+                    <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={35} />
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
                     <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                   </LineChart>
@@ -345,22 +344,21 @@ export function SuperAdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Orders Chart */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Orders (Last 7 Days)</CardTitle>
-            <CardDescription>Daily order volume</CardDescription>
+          <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-sm sm:text-lg">Orders (7 Days)</CardTitle>
+            <CardDescription className="text-xs">Daily order volume</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              <div className="h-40 sm:h-52 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="h-52">
+              <div className="h-40 sm:h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="day" className="text-xs" />
-                    <YAxis className="text-xs" />
+                    <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
+                    <YAxis className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={25} />
                     <Tooltip />
                     <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -372,41 +370,41 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Recent Orders */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between px-3 sm:px-6 pt-3 sm:pt-6">
             <div>
-              <CardTitle className="text-lg">Recent Orders</CardTitle>
-              <CardDescription>Latest orders across all campuses</CardDescription>
+              <CardTitle className="text-sm sm:text-lg">Recent Orders</CardTitle>
+              <CardDescription className="text-xs">Latest across all campuses</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/super-admin/orders">View All <ArrowRight className="h-4 w-4 ml-1" /></Link>
+            <Button asChild variant="ghost" size="sm" className="h-8 text-xs">
+              <Link to="/super-admin/orders">View All <ArrowRight className="h-3 w-3 ml-1" /></Link>
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              <div className="space-y-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : recentOrders.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No orders yet</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No orders yet</p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {recentOrders.map(order => (
-                  <div key={order.id} className="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
+                  <div key={order.id} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       {getStatusIcon(order.status)}
-                      <div>
-                        <p className="text-sm font-medium">{order.order_number}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-medium truncate">{order.order_number}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                           {order.customer_name || 'Guest'} · {format(new Date(order.created_at), 'MMM d, h:mm a')}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className={cn("text-xs capitalize", getStatusColor(order.status))}>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <Badge variant="outline" className={cn("text-[10px] sm:text-xs capitalize px-1.5 py-0.5", getStatusColor(order.status))}>
                         {order.status}
                       </Badge>
-                      <span className="text-sm font-semibold min-w-[60px] text-right">{formatCurrency(order.total)}</span>
+                      <span className="text-xs sm:text-sm font-semibold min-w-[50px] text-right">{formatCurrency(order.total)}</span>
                     </div>
                   </div>
                 ))}

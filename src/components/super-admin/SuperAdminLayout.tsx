@@ -179,12 +179,12 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30 safe-top">
-          <div className="flex items-center gap-4">
+        <header className="h-14 lg:h-16 bg-card border-b border-border flex items-center justify-between px-3 lg:px-6 sticky top-0 z-30 safe-top">
+          <div className="flex items-center gap-2 lg:gap-4">
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="lg:hidden h-9 w-9"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="h-5 w-5" />
@@ -198,7 +198,7 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                 campusId: value === 'all' ? null : value,
               }))}
             >
-              <SelectTrigger className="w-[200px] h-9">
+              <SelectTrigger className="w-[140px] sm:w-[200px] h-9 text-xs sm:text-sm">
                 <SelectValue placeholder="All Campuses" />
               </SelectTrigger>
               <SelectContent>
@@ -212,15 +212,15 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
             </Select>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Bell className="h-4 w-4" />
             </Button>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto pb-6">
           {children}
         </main>
       </div>

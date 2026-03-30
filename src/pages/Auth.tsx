@@ -96,8 +96,8 @@ export default function Auth() {
           }
         }
         
-        // 🌟 FIXED: Added { replace: true } to all of these!
-        if (roles?.role === 'admin') navigate('/admin', { replace: true });
+        if (roles?.role === 'super_admin') navigate('/super-admin', { replace: true });
+        else if (roles?.role === 'admin') navigate('/admin', { replace: true });
         else if (roles?.role === 'kiosk') navigate('/kiosk-scanner', { replace: true });
         else navigate('/menu', { replace: true });
       }
@@ -125,8 +125,9 @@ export default function Auth() {
             }
           }
           
-          // 🌟 FIXED: Added { replace: true } here too!
-          if (userRole === 'admin' || userRole === 'kiosk') {
+          if (userRole === 'super_admin') {
+             navigate('/super-admin', { replace: true });
+          } else if (userRole === 'admin' || userRole === 'kiosk') {
              navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner', { replace: true });
           } else {
              navigate('/menu', { replace: true });
