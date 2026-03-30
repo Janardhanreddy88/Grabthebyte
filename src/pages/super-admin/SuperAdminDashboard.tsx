@@ -244,24 +244,24 @@ export function SuperAdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to GrabTheByte Command Center</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">GrabTheByte Command Center</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={cn("gap-1.5 py-1.5 px-3",
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className={cn("gap-1.5 py-1 px-2.5 text-xs",
             platformSettings?.manual_verification_enabled 
               ? "border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-500/10"
               : "border-green-500/50 text-green-600 dark:text-green-400 bg-green-500/10"
           )}>
-            <Activity className="h-3.5 w-3.5" />
-            {platformSettings?.manual_verification_enabled ? "Manual Verification" : "Automated Gateway"}
+            <Activity className="h-3 w-3" />
+            {platformSettings?.manual_verification_enabled ? "Manual" : "Auto Gateway"}
           </Badge>
-          <Button variant="outline" size="sm" onClick={() => refreshData()}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => refreshData()}>
+            <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
