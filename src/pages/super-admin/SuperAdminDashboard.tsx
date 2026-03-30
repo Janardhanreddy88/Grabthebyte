@@ -370,41 +370,41 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Recent Orders */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between px-3 sm:px-6 pt-3 sm:pt-6">
             <div>
-              <CardTitle className="text-lg">Recent Orders</CardTitle>
-              <CardDescription>Latest orders across all campuses</CardDescription>
+              <CardTitle className="text-sm sm:text-lg">Recent Orders</CardTitle>
+              <CardDescription className="text-xs">Latest across all campuses</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/super-admin/orders">View All <ArrowRight className="h-4 w-4 ml-1" /></Link>
+            <Button asChild variant="ghost" size="sm" className="h-8 text-xs">
+              <Link to="/super-admin/orders">View All <ArrowRight className="h-3 w-3 ml-1" /></Link>
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              <div className="space-y-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : recentOrders.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No orders yet</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No orders yet</p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {recentOrders.map(order => (
-                  <div key={order.id} className="flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
+                  <div key={order.id} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       {getStatusIcon(order.status)}
-                      <div>
-                        <p className="text-sm font-medium">{order.order_number}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-medium truncate">{order.order_number}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                           {order.customer_name || 'Guest'} · {format(new Date(order.created_at), 'MMM d, h:mm a')}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className={cn("text-xs capitalize", getStatusColor(order.status))}>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <Badge variant="outline" className={cn("text-[10px] sm:text-xs capitalize px-1.5 py-0.5", getStatusColor(order.status))}>
                         {order.status}
                       </Badge>
-                      <span className="text-sm font-semibold min-w-[60px] text-right">{formatCurrency(order.total)}</span>
+                      <span className="text-xs sm:text-sm font-semibold min-w-[50px] text-right">{formatCurrency(order.total)}</span>
                     </div>
                   </div>
                 ))}
