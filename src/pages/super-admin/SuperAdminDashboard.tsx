@@ -267,15 +267,15 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Total GMV" value={formatCurrency(dashboardStats?.total_gmv || 0)}
-          subtitle="Gross Merchandise Value" icon={IndianRupee} variant="primary" isLoading={isLoading} />
+          subtitle="Gross Value" icon={IndianRupee} variant="primary" isLoading={isLoading} />
         <StatCard title="Net Revenue" value={formatCurrency(dashboardStats?.net_revenue || 0)}
-          subtitle="Platform Commission" icon={TrendingUp} variant="success" isLoading={isLoading} />
+          subtitle="Commission" icon={TrendingUp} variant="success" isLoading={isLoading} />
         <StatCard title="Pending Payouts" value={formatCurrency(dashboardStats?.pending_payouts || 0)}
           subtitle="Due to vendors" icon={Wallet} variant="warning" isLoading={isLoading} />
         <StatCard title="Active Orders" value={dashboardStats?.active_orders || 0}
-          subtitle="Currently preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
+          subtitle="Preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
       </div>
 
       {/* Quick Stats Row */}
