@@ -220,7 +220,7 @@ export function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto pb-6">
           {children}
         </main>
       </div>
