@@ -319,23 +319,22 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Weekly Revenue Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Revenue (Last 7 Days)</CardTitle>
-            <CardDescription>Daily revenue trend</CardDescription>
+          <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-sm sm:text-lg">Revenue (7 Days)</CardTitle>
+            <CardDescription className="text-xs">Daily revenue trend</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              <div className="h-40 sm:h-52 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="h-52">
+              <div className="h-40 sm:h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="day" className="text-xs" />
-                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-xs" />
+                    <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={35} />
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
                     <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                   </LineChart>
@@ -345,22 +344,21 @@ export function SuperAdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Orders Chart */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Orders (Last 7 Days)</CardTitle>
-            <CardDescription>Daily order volume</CardDescription>
+          <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+            <CardTitle className="text-sm sm:text-lg">Orders (7 Days)</CardTitle>
+            <CardDescription className="text-xs">Daily order volume</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
-              <div className="h-52 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              <div className="h-40 sm:h-52 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="h-52">
+              <div className="h-40 sm:h-52">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="day" className="text-xs" />
-                    <YAxis className="text-xs" />
+                    <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
+                    <YAxis className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={25} />
                     <Tooltip />
                     <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
