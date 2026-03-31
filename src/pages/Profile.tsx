@@ -77,7 +77,8 @@ export default function Profile() {
       <header className="sticky top-0 z-50 bg-card/90 backdrop-blur-md border-b border-border safe-top">
         <div className="flex items-center gap-2.5 px-3 py-2.5 max-w-lg mx-auto">
           <button onClick={() => navigate('/menu')} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center"><ArrowLeft size={16} /></button>
-          <h1 className="text-sm font-bold">Edit Profile</h1>
+          <h1 className="text-sm font-bold flex-1">Edit Profile</h1>
+          <button onClick={() => navigate('/settings')} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center"><Settings size={16} /></button>
         </div>
       </header>
 
