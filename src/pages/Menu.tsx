@@ -115,6 +115,13 @@ export default function Menu() {
               <ThemeToggle />
               <motion.button
                 whileTap={{ scale: 0.9 }}
+                onClick={() => navigate("/settings")}
+                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
+              >
+                <Settings size={18} />
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={() => setIsProfileOpen(true)}
                 className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
