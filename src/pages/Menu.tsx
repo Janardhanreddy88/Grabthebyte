@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, User } from "lucide-react";
+import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, User, Settings } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -113,6 +113,13 @@ export default function Menu() {
                 </Button>
               )}
               <ThemeToggle />
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => navigate("/settings")}
+                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
+              >
+                <Settings size={18} />
+              </motion.button>
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setIsProfileOpen(true)}
