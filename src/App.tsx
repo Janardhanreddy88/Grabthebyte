@@ -144,7 +144,8 @@ const App = () => (
                                   <Route path="/terms" element={<TermsAndConditions />} />
                                   <Route path="/privacy" element={<PrivacyPolicy />} />
                                   <Route path="/refund-policy" element={<RefundPolicy />} />
-                                  <Route path="/support" element={<HelpSupport />} /> {/* 🌟 ADDED HELP & SUPPORT ROUTE HERE */}
+                                  <Route path="/support" element={<HelpSupport />} />
+                                  <Route path="/settings" element={<CampusGate><Settings /></CampusGate>} />
                                   
                                   <Route path="/my-orders" element={<CampusGate><MyOrders /></CampusGate>} />
                                   <Route path="/order/:orderId" element={<CampusGate><OrderDetails /></CampusGate>} />
