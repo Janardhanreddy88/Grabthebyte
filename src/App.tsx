@@ -48,6 +48,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 // 🌟 NEW HELP & SUPPORT PAGE LAZY IMPORT 🌟
 const HelpSupport = lazy(() => import("./pages/HelpSupport"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 // Super Admin Pages
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard").then(m => ({ default: m.SuperAdminDashboard })));
