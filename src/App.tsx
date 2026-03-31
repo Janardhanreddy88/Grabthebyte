@@ -48,6 +48,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 // 🌟 NEW HELP & SUPPORT PAGE LAZY IMPORT 🌟
 const HelpSupport = lazy(() => import("./pages/HelpSupport"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 // Super Admin Pages
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard").then(m => ({ default: m.SuperAdminDashboard })));
@@ -143,7 +144,8 @@ const App = () => (
                                   <Route path="/terms" element={<TermsAndConditions />} />
                                   <Route path="/privacy" element={<PrivacyPolicy />} />
                                   <Route path="/refund-policy" element={<RefundPolicy />} />
-                                  <Route path="/support" element={<HelpSupport />} /> {/* 🌟 ADDED HELP & SUPPORT ROUTE HERE */}
+                                  <Route path="/support" element={<HelpSupport />} />
+                                  <Route path="/settings" element={<CampusGate><Settings /></CampusGate>} />
                                   
                                   <Route path="/my-orders" element={<CampusGate><MyOrders /></CampusGate>} />
                                   <Route path="/order/:orderId" element={<CampusGate><OrderDetails /></CampusGate>} />
