@@ -18,7 +18,7 @@ import { ProtectedRoute, AdminRoute, KioskRoute, SuperAdminRoute } from "@/compo
 import { CampusGate } from "@/components/CampusGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
-import { SessionExpiryHandler } from "@/components/SessionExpiryHandler";
+
 
 import { Loader2 } from "lucide-react";
 import { App as CapacitorApp } from '@capacitor/app';
