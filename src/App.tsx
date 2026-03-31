@@ -123,7 +123,7 @@ const App = () => (
                             
                             <BrowserRouter>
                               <HardwareBackButtonHandler /> 
-                              <SessionExpiryHandler warningThresholdMinutes={5} />
+                              
                               <Suspense fallback={<PageLoader />}>
                                 <Routes>
                                   {/* Public routes */}
