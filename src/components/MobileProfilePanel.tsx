@@ -1,26 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   X,
-  ChevronRight,
-  LogOut,
-  KeyRound,
-  HelpCircle,
   Package,
   Clock,
-  Pencil,
   Loader2,
-  FileText,
-  Shield,
-  RefreshCcw,
+  Settings,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,27 +28,22 @@ interface MobileProfilePanelProps {
   onSignOut?: () => void;
 }
 
-export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfilePanelProps) {
+export function MobileProfilePanel({ isOpen, onClose }: MobileProfilePanelProps) {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { user: authUser } = useAuth();
 
-  // Get user data from auth context
   const userName = authUser?.fullName || "Guest User";
   const userEmail = authUser?.email || "guest@example.com";
 
-  // Real orders from database
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch orders when panel opens
   useEffect(() => {
     if (isOpen && authUser?.id) {
       fetchOrders();
     }
   }, [isOpen, authUser?.id]);
 
-  // Real-time subscription for order updates
   useEffect(() => {
     if (!authUser?.id) return;
 
@@ -74,7 +58,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
           filter: `user_id=eq.${authUser.id}`,
         },
         (payload) => {
-          // Update the order in state when status changes
           setOrders((prevOrders) =>
             prevOrders.map((order) => (order.id === payload.new.id ? { ...order, status: payload.new.status } : order)),
           );
@@ -92,7 +75,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
 
     setIsLoading(true);
     try {
-      // Fetch orders with their items
       const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
         .select("id, order_number, created_at, total, status")
@@ -102,11 +84,9 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
 
       if (ordersError) throw ordersError;
 
-      // Fetch order items for each order
       const ordersWithItems = await Promise.all(
         (ordersData || []).map(async (order) => {
           const { data: itemsData } = await supabase.from("order_items").select("name").eq("order_id", order.id);
-
           return {
             ...order,
             items: itemsData?.map((item) => item.name) || [],
@@ -122,7 +102,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
     }
   };
 
-  // Get display status based on order status
   const getStatusDisplay = (order: Order) => {
     switch (order.status) {
       case "confirmed":
@@ -137,19 +116,6 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
     }
   };
 
-  // Dialog states
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const [forgotMode, setForgotMode] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-
-  // Form states
-  const [passwordForm, setPasswordForm] = useState({ old: "", new: "", confirm: "" });
-
-  // Get initials from name
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -159,438 +125,135 @@ export function MobileProfilePanel({ isOpen, onClose, onSignOut }: MobileProfile
       .slice(0, 2);
   };
 
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-
-  const handleChangePassword = async () => {
-    if (passwordForm.new !== passwordForm.confirm) {
-      toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
-      return;
-    }
-    if (passwordForm.new.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
-      return;
-    }
-
-    setIsChangingPassword(true);
-    try {
-      // Verify current password by re-authenticating
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: passwordForm.old,
-      });
-
-      if (signInError) {
-        toast({ title: "Error", description: "Current password is incorrect.", variant: "destructive" });
-        return;
-      }
-
-      // Update to new password
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
-
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        return;
-      }
-
-      setChangePasswordOpen(false);
-      setPasswordForm({ old: "", new: "", confirm: "" });
-      toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
-    } catch {
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsChangingPassword(false);
-    }
-  };
-
-  const handleSendOtp = async () => {
-    setIsSendingOtp(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(userEmail.trim());
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        return;
-      }
-      setOtpSent(true);
-      toast({ title: "Code Sent!", description: `6-digit code sent to ${userEmail}` });
-    } catch {
-      toast({ title: "Error", description: "Failed to send code.", variant: "destructive" });
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) return;
-    setIsVerifyingOtp(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({ email: userEmail.trim(), token: otp, type: 'recovery' });
-      if (error) {
-        toast({ title: "Invalid Code", description: "The code is incorrect or expired.", variant: "destructive" });
-        return;
-      }
-      setOtpVerified(true);
-      toast({ title: "Verified!", description: "Now set your new password." });
-    } catch {
-      toast({ title: "Error", description: "Verification failed.", variant: "destructive" });
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
-
-  const handleForgotPasswordUpdate = async () => {
-    if (passwordForm.new !== passwordForm.confirm) {
-      toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
-      return;
-    }
-    if (passwordForm.new.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
-      return;
-    }
-    setIsChangingPassword(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        return;
-      }
-      resetChangePasswordDialog();
-      toast({ title: "Password Updated!", description: "Your password has been changed successfully." });
-    } catch {
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsChangingPassword(false);
-    }
-  };
-
-  const resetChangePasswordDialog = () => {
-    setChangePasswordOpen(false);
-    setForgotMode(false);
-    setOtpSent(false);
-    setOtpVerified(false);
-    setOtp('');
-    setPasswordForm({ old: "", new: "", confirm: "" });
-  };
-
   return (
-    <>
-      <Sheet open={isOpen} onOpenChange={onClose}>
-        <SheetContent side="left" className="w-[85%] max-w-md p-0 flex flex-col overflow-hidden">
-          <SheetHeader className="p-4 text-left shrink-0">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-xl">My Account</SheetTitle>
-              <button
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </SheetHeader>
-
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto">
-            <Separator />
-
-            {/* User Header - Clickable to edit profile */}
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent side="left" className="w-[85%] max-w-md p-0 flex flex-col overflow-hidden">
+        <SheetHeader className="p-4 text-left shrink-0">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-xl">My Account</SheetTitle>
             <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <Separator />
+
+          {/* User Header - View only */}
+          <div className="w-full p-4 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold shrink-0">
+              {getInitials(userName)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-lg truncate">{userName}</h3>
+              <p className="text-sm text-muted-foreground truncate">{userEmail}</p>
+            </div>
+          </div>
+
+          {/* Manage Account button */}
+          <div className="px-4 pb-4">
+            <Button
+              variant="outline"
+              className="w-full gap-2 rounded-xl"
               onClick={() => {
                 onClose();
-                navigate("/profile");
+                navigate("/settings");
               }}
-              className="w-full p-4 flex items-center gap-4 hover:bg-muted/50 transition-colors text-left"
             >
-              <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold shrink-0">
-                {getInitials(userName)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-lg truncate">{userName}</h3>
-                <p className="text-sm text-muted-foreground truncate">{userEmail}</p>
-              </div>
-              <Pencil size={18} className="text-muted-foreground shrink-0" />
-            </button>
+              <Settings size={16} />
+              Manage Account & Settings
+            </Button>
+          </div>
 
-            <Separator />
+          <Separator />
 
-            {/* Order History Section */}
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Package size={18} className="text-muted-foreground" />
-                  <h4 className="font-semibold text-sm text-muted-foreground">MY ORDERS</h4>
-                </div>
-                <button
+          {/* Order History Section */}
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Package size={18} className="text-muted-foreground" />
+                <h4 className="font-semibold text-sm text-muted-foreground">MY ORDERS</h4>
+              </div>
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate("/my-orders");
+                }}
+                className="text-xs text-primary font-medium hover:underline"
+              >
+                View All
+              </button>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : orders.length > 0 ? (
+              <div className="space-y-3">
+                {orders.slice(0, 2).map((order) => {
+                  const statusDisplay = getStatusDisplay(order);
+                  return (
+                    <div key={order.id} className="bg-muted/50 rounded-xl p-3 border border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">{order.order_number}</span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full transition-all duration-300 ${statusDisplay.color}`}
+                        >
+                          {statusDisplay.label}
+                        </span>
+                      </div>
+                      <p className="font-medium text-sm">{order.items.join(", ") || "No items"}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock size={12} />
+                          <span>
+                            {new Date(order.created_at).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                        </div>
+                        <span className="font-bold text-primary">₹{order.total}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
                   onClick={() => {
                     onClose();
                     navigate("/my-orders");
                   }}
-                  className="text-xs text-primary font-medium hover:underline"
                 >
-                  View All
-                </button>
+                  <Package size={16} />
+                  View All Orders
+                </Button>
               </div>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : orders.length > 0 ? (
-                <div className="space-y-3">
-                  {orders.slice(0, 2).map((order) => {
-                    const statusDisplay = getStatusDisplay(order);
-                    return (
-                      <div key={order.id} className="bg-muted/50 rounded-xl p-3 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-medium text-muted-foreground">{order.order_number}</span>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full transition-all duration-300 ${statusDisplay.color}`}
-                          >
-                            {statusDisplay.label}
-                          </span>
-                        </div>
-                        <p className="font-medium text-sm">{order.items.join(", ") || "No items"}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock size={12} />
-                            <span>
-                              {new Date(order.created_at).toLocaleDateString("en-IN", {
-                                day: "numeric",
-                                month: "short",
-                              })}
-                            </span>
-                          </div>
-                          <span className="font-bold text-primary">₹{order.total}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  <Button
-                    variant="outline"
-                    className="w-full gap-2"
-                    onClick={() => {
-                      onClose();
-                      navigate("/my-orders");
-                    }}
-                  >
-                    <Package size={16} />
-                    View All Orders
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
-                    <Package className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-muted-foreground text-sm">No orders yet</p>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Security Section */}
-            <div className="p-4">
-              <h4 className="font-semibold text-sm text-muted-foreground mb-3">SECURITY</h4>
-
-              <button
-                onClick={() => setChangePasswordOpen(true)}
-                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <KeyRound size={18} className="text-muted-foreground" />
-                  <span>Change Password</span>
-                </div>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </button>
-            </div>
-
-            <Separator />
-
-            {/* 🟢 --- HELP & SUPPORT SECTION (NEW) --- 🟢 */}
-            <div className="p-4">
-              <h4 className="font-semibold text-sm text-muted-foreground mb-3">HELP & SUPPORT</h4>
-
-              <Link
-                to="/support"
-                onClick={onClose}
-                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
-              >
-                <div className="flex items-center gap-3 text-foreground">
-                  <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full flex items-center justify-center">
-                    <HelpCircle size={18} className="text-green-600 dark:text-green-400" />
-                  </div>
-                  <span className="font-medium">Contact Support</span>
-                </div>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </Link>
-            </div>
-            
-            <Separator />
-
-            {/* Policies Section */}
-            <div className="p-4">
-              <h4 className="font-semibold text-sm text-muted-foreground mb-3">POLICIES</h4>
-
-              <Link
-                to="/terms"
-                onClick={onClose}
-                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <FileText size={18} className="text-muted-foreground" />
-                  <span>Terms & Conditions</span>
-                </div>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </Link>
-
-              <Link
-                to="/privacy"
-                onClick={onClose}
-                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Shield size={18} className="text-muted-foreground" />
-                  <span>Privacy Policy</span>
-                </div>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </Link>
-
-              <Link
-                to="/refund-policy"
-                onClick={onClose}
-                className="w-full flex items-center justify-between py-3 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <RefreshCcw size={18} className="text-muted-foreground" />
-                  <span>Refund & Cancellation</span>
-                </div>
-                <ChevronRight size={18} className="text-muted-foreground" />
-              </Link>
-            </div>
-
-            {/* Copyright Footer */}
-            <div className="p-4 pt-2">
-              <p className="text-xs text-muted-foreground text-center">
-                © {new Date().getFullYear()} GrabTheByte. All rights reserved.
-              </p>
-            </div>
-          </div>
-
-          {/* Sign Out Button */}
-          <div className="p-4 border-t border-border bg-card shrink-0">
-            <Button
-              variant="outline"
-              className="w-full h-12 rounded-xl gap-2 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-              onClick={onSignOut}
-            >
-              <LogOut size={18} />
-              Sign Out
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Change Password Dialog */}
-      <Dialog open={changePasswordOpen} onOpenChange={(open) => { if (!open) resetChangePasswordDialog(); else setChangePasswordOpen(true); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{forgotMode ? (otpVerified ? 'Set New Password' : 'Forgot Password') : 'Change Password'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {!forgotMode ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="old-password">Current Password</Label>
-                  <Input
-                    id="old-password"
-                    type="password"
-                    value={passwordForm.old}
-                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, old: e.target.value }))}
-                    placeholder="Enter current password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setForgotMode(true)}
-                    className="text-xs text-primary hover:underline font-medium"
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <Input id="new-password" type="password" value={passwordForm.new}
-                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
-                    placeholder="Enter new password" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
-                  <Input id="confirm-password" type="password" value={passwordForm.confirm}
-                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
-                    placeholder="Confirm new password" />
-                </div>
-              </>
-            ) : !otpVerified ? (
-              <>
-                {!otpSent ? (
-                  <div className="space-y-3 text-center">
-                    <p className="text-sm text-muted-foreground">We'll send a 6-digit verification code to <strong>{userEmail}</strong></p>
-                    <Button onClick={handleSendOtp} disabled={isSendingOtp} className="w-full">
-                      {isSendingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending...</> : 'Send Verification Code'}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground text-center">Enter the 6-digit code sent to <strong>{userEmail}</strong></p>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="Enter 6-digit code"
-                      className="text-center text-lg tracking-[0.5em] font-mono"
-                    />
-                    <Button onClick={handleVerifyOtp} disabled={isVerifyingOtp || otp.length !== 6} className="w-full">
-                      {isVerifyingOtp ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verifying...</> : 'Verify Code'}
-                    </Button>
-                    <button type="button" onClick={handleSendOtp} disabled={isSendingOtp}
-                      className="text-xs text-muted-foreground hover:text-primary font-medium w-full text-center">
-                      Didn't receive? Resend code
-                    </button>
-                  </div>
-                )}
-              </>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="new-password-forgot">New Password</Label>
-                  <Input id="new-password-forgot" type="password" value={passwordForm.new}
-                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, new: e.target.value }))}
-                    placeholder="Enter new password" />
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                  <Package className="w-6 h-6 text-muted-foreground" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password-forgot">Confirm New Password</Label>
-                  <Input id="confirm-password-forgot" type="password" value={passwordForm.confirm}
-                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm: e.target.value }))}
-                    placeholder="Confirm new password" />
-                </div>
-              </>
+                <p className="text-muted-foreground text-sm">No orders yet</p>
+              </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={resetChangePasswordDialog}>Cancel</Button>
-            {!forgotMode ? (
-              <Button onClick={handleChangePassword} disabled={isChangingPassword}>
-                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
-              </Button>
-            ) : otpVerified ? (
-              <Button onClick={handleForgotPasswordUpdate} disabled={isChangingPassword}>
-                {isChangingPassword ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Updating...</> : 'Update Password'}
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          {/* Copyright Footer */}
+          <div className="p-4 pt-2">
+            <p className="text-xs text-muted-foreground text-center">
+              © {new Date().getFullYear()} GrabTheByte. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
