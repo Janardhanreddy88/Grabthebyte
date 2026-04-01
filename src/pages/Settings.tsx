@@ -69,6 +69,7 @@ export default function Settings() {
   const [campusCode, setCampusCode] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
 
   // Change password state
   const [showPasswordSection, setShowPasswordSection] = useState(false);
