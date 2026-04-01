@@ -59,7 +59,7 @@ function SectionHeader({ title }: { title: string }) {
 export default function Settings() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, logout, changePassword } = useAuth();
+  const { user, isLoading: authLoading, logout, changePassword } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
 
   // Profile state
@@ -80,32 +80,77 @@ export default function Settings() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    let isMounted = true;
+
+    const getStoredCampusLabel = () => {
+      try {
+        return localStorage.getItem('campus_code') || localStorage.getItem('campus_name') || '';
+      } catch {
+        return '';
+      }
+    };
+
+    if (authLoading) {
+      setProfileLoading(true);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (!user) {
+      if (isMounted) {
+        setFullName('');
+        setProfileEmail('');
+        setProfilePhone('');
+        setCampusCode(getStoredCampusLabel());
+        setProfileLoading(false);
+      }
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadProfile = async () => {
       setProfileLoading(true);
+
       try {
-        // Set immediate values from auth context
+        // Show available values immediately
         setFullName(user.fullName || '');
         setProfileEmail(user.email || '');
         setProfilePhone(user.phone || '');
+        setCampusCode(getStoredCampusLabel());
 
-        // Try to enrich from profiles table
-        const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
-        if (profile) {
-          if (profile.full_name) setFullName(profile.full_name);
-          if (profile.phone) setProfilePhone(profile.phone);
-        }
+        const [{ data: profile }, { data: roleData }] = await Promise.all([
+          supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle(),
+          supabase.from('user_roles').select('campus_id').eq('user_id', user.id).maybeSingle(),
+        ]);
 
-        // Resolve campus name from profile or auth context
-        const campusId = profile?.campus_id || user.campusId;
+        if (!isMounted) return;
+
+        if (profile?.full_name) setFullName(profile.full_name);
+        if (profile?.phone) setProfilePhone(profile.phone);
+
+        const campusId = profile?.campus_id || roleData?.campus_id || user.campusId;
         if (campusId) {
           const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', campusId).maybeSingle();
-          if (cd) setCampusCode(cd.code || cd.name || '');
+          if (!isMounted) return;
+          if (cd) setCampusCode(cd.code || cd.name || getStoredCampusLabel());
         }
-      } catch {} finally { setProfileLoading(false); }
+      } catch {
+        if (isMounted) {
+          setCampusCode((current) => current || getStoredCampusLabel());
+        }
+      } finally {
+        if (isMounted) setProfileLoading(false);
+      }
     };
-    loadProfile();
-  }, [user]);
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, authLoading]);
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -241,6 +286,10 @@ export default function Settings() {
     { value: 'system', icon: Monitor, label: 'System' },
   ];
 
+  const showProfileForm = !!user && !authLoading;
+  const profileDisplayName = fullName || user?.fullName || 'No name set';
+  const profileDisplayEmail = profileEmail || user?.email || '';
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
@@ -260,16 +309,19 @@ export default function Settings() {
         <div className="px-4 py-3 space-y-4">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-base font-bold shrink-0">
-              {profileLoading ? '…' : getInitials(fullName)}
+              {showProfileForm ? getInitials(profileDisplayName) : '…'}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{profileLoading ? 'Loading…' : (fullName || 'No name set')}</p>
-              <p className="text-xs text-muted-foreground truncate">{profileEmail}</p>
+              <p className="text-sm font-semibold truncate">{showProfileForm ? profileDisplayName : 'Loading…'}</p>
+              <p className="text-xs text-muted-foreground truncate">{profileDisplayEmail}</p>
             </div>
           </div>
 
-          {!profileLoading && (
+          {showProfileForm && (
             <>
+              {profileLoading && (
+                <p className="text-xs text-muted-foreground">Syncing profile details…</p>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="s-name" className="text-xs font-semibold text-muted-foreground">Full Name</Label>
                 <div className="relative">
@@ -288,7 +340,7 @@ export default function Settings() {
                 <Label className="text-xs font-semibold text-muted-foreground">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input value={profileEmail} disabled className="pl-10 text-sm rounded-xl bg-muted/50 text-muted-foreground cursor-not-allowed" />
+                  <Input value={profileDisplayEmail} disabled className="pl-10 text-sm rounded-xl bg-muted/50 text-muted-foreground cursor-not-allowed" />
                 </div>
               </div>
               <div className="space-y-1.5">
