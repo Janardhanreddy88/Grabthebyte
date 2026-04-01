@@ -80,16 +80,26 @@ export default function Settings() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) return; // Don't run until user is available
+    if (!user) return;
     const loadProfile = async () => {
       setProfileLoading(true);
       try {
-        const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
-        setFullName(profile?.full_name || user.fullName || '');
+        // Set immediate values from auth context
+        setFullName(user.fullName || '');
         setProfileEmail(user.email || '');
-        setProfilePhone(profile?.phone || user.phone || '');
-        if (profile?.campus_id) {
-          const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', profile.campus_id).maybeSingle();
+        setProfilePhone(user.phone || '');
+
+        // Try to enrich from profiles table
+        const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
+        if (profile) {
+          if (profile.full_name) setFullName(profile.full_name);
+          if (profile.phone) setProfilePhone(profile.phone);
+        }
+
+        // Resolve campus name from profile or auth context
+        const campusId = profile?.campus_id || user.campusId;
+        if (campusId) {
+          const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', campusId).maybeSingle();
           if (cd) setCampusCode(cd.code || cd.name || '');
         }
       } catch {} finally { setProfileLoading(false); }
