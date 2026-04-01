@@ -1,0 +1,5 @@
+INSERT INTO public.daily_specials (campus_id, title, description, discount_text, badge_text, image_url, menu_item_id, is_active, sort_order, starts_at)
+VALUES
+  ('86460363-0706-4602-a811-26d76a9c2515', 'Combo Meal Deal', 'Aloo Paratha + Butter Scotch', '₹20 OFF', 'Hot Deal', 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=400&h=300&fit=crop', '15238a72-077c-4b9a-a8f0-f8ed7b090f42', true, 1, now()),
+  ('86460363-0706-4602-a811-26d76a9c2515', 'Biryani Blast', 'Chicken biryani special today', 'SAVE ₹30', 'Chef Pick', 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=400&h=300&fit=crop', '762b0321-71d6-4d04-8cf3-48a023d8fa0f', true, 2, now()),
+  ('86460363-0706-4602-a811-26d76a9c2515', 'Fried Rice Combo', 'Chicken Fried Rice fan favorite', 'LIMITED', 'Popular', 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&h=300&fit=crop', 'aefe62c3-7895-4f52-9cd7-559f7990ef4c', true, 3, now());
