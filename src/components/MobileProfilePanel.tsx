@@ -130,7 +130,7 @@ export function MobileProfilePanel({ isOpen, onClose }: MobileProfilePanelProps)
       <SheetContent side="left" className="w-[85%] max-w-md p-0 flex flex-col overflow-hidden">
         <SheetHeader className="p-4 text-left shrink-0">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl">My Account</SheetTitle>
+            <SheetTitle className="text-xl">My Orders</SheetTitle>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
@@ -141,34 +141,6 @@ export function MobileProfilePanel({ isOpen, onClose }: MobileProfilePanelProps)
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto">
-          <Separator />
-
-          {/* User Header - View only */}
-          <div className="w-full p-4 flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold shrink-0">
-              {getInitials(userName)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-lg truncate">{userName}</h3>
-              <p className="text-sm text-muted-foreground truncate">{userEmail}</p>
-            </div>
-          </div>
-
-          {/* Manage Account button */}
-          <div className="px-4 pb-4">
-            <Button
-              variant="outline"
-              className="w-full gap-2 rounded-xl"
-              onClick={() => {
-                onClose();
-                navigate("/settings");
-              }}
-            >
-              <Settings size={16} />
-              Manage Account & Settings
-            </Button>
-          </div>
-
           <Separator />
 
           {/* Order History Section */}
