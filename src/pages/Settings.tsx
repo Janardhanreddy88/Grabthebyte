@@ -308,18 +308,28 @@ export default function Settings() {
         {/* ─── PROFILE ─── */}
         <SectionHeader title="Profile" />
         <div className="px-4 py-3 space-y-4">
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-base font-bold shrink-0">
               {showProfileForm ? getInitials(profileDisplayName) : '…'}
             </div>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{showProfileForm ? profileDisplayName : 'Loading…'}</p>
               <p className="text-xs text-muted-foreground truncate">{profileDisplayEmail}</p>
             </div>
+            {showProfileForm && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl text-xs shrink-0"
+                onClick={() => setProfileEditOpen(!profileEditOpen)}
+              >
+                {profileEditOpen ? 'Close' : 'Edit'}
+              </Button>
+            )}
           </div>
 
-          {showProfileForm && (
-            <>
+          {showProfileForm && profileEditOpen && (
+            <div className="space-y-4 pt-2 animate-in slide-in-from-top-2 duration-200">
               {profileLoading && (
                 <p className="text-xs text-muted-foreground">Syncing profile details…</p>
               )}
@@ -354,7 +364,7 @@ export default function Settings() {
               <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full rounded-xl text-sm font-semibold gap-2" size="sm">
                 {savingProfile ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Profile</>}
               </Button>
-            </>
+            </div>
           )}
         </div>
         <SectionHeader title="Notifications" />
