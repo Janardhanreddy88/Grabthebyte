@@ -138,6 +138,7 @@ export default function Menu() {
             <PullToRefresh onRefresh={handlePullRefresh}>
             <div className="p-3 lg:p-5">
               <HeroBanner />
+              <DailySpecials />
 
               {/* Search Bar */}
               <div className="mb-5">
