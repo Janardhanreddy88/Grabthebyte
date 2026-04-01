@@ -7,7 +7,7 @@ import { MenuItemCard } from "@/components/MenuItemCard";
 import { CartPanel } from "@/components/CartPanel";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MobileCart } from "@/components/MobileCart";
-import { MobileProfilePanel } from "@/components/MobileProfilePanel";
+
 import { MenuItemSkeletonGrid } from "@/components/skeletons/MenuItemSkeleton";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
@@ -27,7 +27,7 @@ export default function Menu() {
   const { user } = useAuth();
   const { totalItems } = useCart();
   const { campus } = useCampus();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
@@ -122,7 +122,7 @@ export default function Menu() {
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.9 }}
-                onClick={() => setIsProfileOpen(true)}
+                onClick={() => navigate("/my-orders")}
                 className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
                 <Package size={18} />
@@ -240,7 +240,7 @@ export default function Menu() {
           )}
         </div>
 
-        <MobileProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} onSignOut={handleSignOut} />
+        
         <MobileCart />
       </div>
     </PageTransition>
