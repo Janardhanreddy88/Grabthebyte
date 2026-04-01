@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, User, Settings } from "lucide-react";
+import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, Package, Settings } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -125,7 +125,7 @@ export default function Menu() {
                 onClick={() => setIsProfileOpen(true)}
                 className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
-                <User size={18} />
+                <Package size={18} />
               </motion.button>
             </div>
           </div>
