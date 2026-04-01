@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, BellOff, Palette, Moon, Sun, Monitor,
+  ArrowLeft, Bell, BellOff, Moon, Sun, Monitor,
   Lock, KeyRound, Trash2, ShoppingBag, FileText, Shield,
   ChevronRight, LogOut, Loader2, Info, HelpCircle, RotateCcw,
-  Eye, EyeOff
+  Eye, EyeOff, User, Mail, Phone, Building2, Save
 } from 'lucide-react';
 import OneSignalNative from 'onesignal-cordova-plugin';
 import { Capacitor } from '@capacitor/core';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
