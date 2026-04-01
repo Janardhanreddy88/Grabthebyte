@@ -122,7 +122,7 @@ export default function Menu() {
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.9 }}
-                onClick={() => setIsProfileOpen(true)}
+                onClick={() => navigate("/my-orders")}
                 className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
                 <Package size={18} />
