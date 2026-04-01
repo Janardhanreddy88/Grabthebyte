@@ -90,7 +90,7 @@ export default function Menu() {
       <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Header */}
         <header className="sticky top-0 z-40 glass border-b border-border/40 flex-none safe-top">
-          <div className="flex items-center justify-between px-3 lg:px-5 h-13">
+          <div className="flex items-center justify-between px-4 lg:px-6 h-14 lg:h-16">
             <div className="flex items-center gap-3">
               <Logo size="sm" />
               {campus && (
