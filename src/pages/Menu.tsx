@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, User, Settings } from "lucide-react";
+import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, Package, Settings } from "lucide-react";
 
 export default function Menu() {
   const navigate = useNavigate();
