@@ -112,7 +112,7 @@ export default function Menu() {
                   <span className="hidden sm:inline">Admin</span>
                 </Button>
               )}
-              <ThemeToggle />
+              
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/settings")}
