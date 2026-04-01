@@ -316,18 +316,36 @@ export default function Settings() {
             onClick={handleClearCache}
           />
 
-          <AlertDialog>
+          <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
             <AlertDialogTrigger asChild>
               <div>
                 <SettingRow
                   icon={Trash2}
                   label="Delete Account"
                   description="Permanently remove your account and data"
-                  onClick={handleDeleteAccount}
+                  onClick={() => setDeleteConfirmOpen(true)}
                   destructive
                 />
               </div>
             </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action is <strong>permanent and irreversible</strong>. All your data, orders, and profile will be deleted immediately. You will be logged out.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingAccount}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deletingAccount ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Deleting...</> : 'Yes, delete my account'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
           </AlertDialog>
         </div>
 
