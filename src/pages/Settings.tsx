@@ -6,6 +6,8 @@ import {
   ChevronRight, LogOut, Loader2, Info, HelpCircle, RotateCcw,
   Eye, EyeOff
 } from 'lucide-react';
+import OneSignalNative from 'onesignal-cordova-plugin';
+import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -77,7 +79,25 @@ export default function Settings() {
   const handleToggleNotif = (key: string, value: boolean, setter: (v: boolean) => void) => {
     setter(value);
     try { localStorage.setItem(key, String(value)); } catch {}
-    toast({ title: value ? 'Enabled' : 'Disabled', description: `Notification preference updated.` });
+
+    // Sync preference to OneSignal as a tag
+    const tagKey = key === 'pref_order_updates' ? 'order_updates' : 'promotions';
+    const tagValue = value ? 'true' : 'false';
+    const isNative = Capacitor.isNativePlatform();
+
+    if (isNative) {
+      try {
+        OneSignalNative.User.addTags({ [tagKey]: tagValue });
+      } catch {}
+    } else if (typeof window !== 'undefined' && window.OneSignalDeferred) {
+      window.OneSignalDeferred.push(async (OneSignal: any) => {
+        try {
+          await OneSignal.User.addTags({ [tagKey]: tagValue });
+        } catch {}
+      });
+    }
+
+    toast({ title: value ? 'Enabled' : 'Disabled', description: 'Notification preference updated.' });
   };
 
   const handleChangePassword = async () => {
