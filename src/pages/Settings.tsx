@@ -67,6 +67,8 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Notification preferences (local state)
   const [orderUpdates, setOrderUpdates] = useState(() => {
@@ -127,8 +129,39 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = () => {
-    toast({ title: 'Contact Support', description: 'To delete your account, please email support@grabthebyte.com' });
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const { data: { session } } = await (await import('@/integrations/supabase/client')).supabase.auth.getSession();
+      if (!session) {
+        toast({ title: 'Error', description: 'You must be logged in.', variant: 'destructive' });
+        return;
+      }
+
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        toast({ title: 'Error', description: result.error || 'Failed to delete account.', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Account Deleted', description: 'Your account and data have been permanently removed.' });
+      await logout();
+      navigate('/auth');
+    } catch {
+      toast({ title: 'Error', description: 'Something went wrong. Please try again.', variant: 'destructive' });
+    } finally {
+      setDeletingAccount(false);
+      setDeleteConfirmOpen(false);
+    }
   };
 
   const handleClearCache = () => {
@@ -283,18 +316,36 @@ export default function Settings() {
             onClick={handleClearCache}
           />
 
-          <AlertDialog>
+          <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
             <AlertDialogTrigger asChild>
               <div>
                 <SettingRow
                   icon={Trash2}
                   label="Delete Account"
                   description="Permanently remove your account and data"
-                  onClick={handleDeleteAccount}
+                  onClick={() => setDeleteConfirmOpen(true)}
                   destructive
                 />
               </div>
             </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action is <strong>permanent and irreversible</strong>. All your data, orders, and profile will be deleted immediately. You will be logged out.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingAccount}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deletingAccount ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Deleting...</> : 'Yes, delete my account'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
           </AlertDialog>
         </div>
 
