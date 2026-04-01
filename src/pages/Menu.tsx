@@ -125,7 +125,7 @@ export default function Menu() {
                 onClick={() => setIsProfileOpen(true)}
                 className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-foreground"
               >
-                <User size={18} />
+                <Package size={18} />
               </motion.button>
             </div>
           </div>
