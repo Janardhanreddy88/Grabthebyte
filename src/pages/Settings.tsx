@@ -62,6 +62,14 @@ export default function Settings() {
   const { user, logout, changePassword } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
 
+  // Profile state
+  const [fullName, setFullName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [campusCode, setCampusCode] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+
   // Change password state
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -70,6 +78,39 @@ export default function Settings() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) { setProfileLoading(false); return; }
+      try {
+        const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
+        setFullName(profile?.full_name || (user as any).user_metadata?.full_name || '');
+        setProfileEmail(user.email || '');
+        setProfilePhone(profile?.phone || (user as any).user_metadata?.phone || '');
+        if (profile?.campus_id) {
+          const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', profile.campus_id).maybeSingle();
+          if (cd) setCampusCode(cd.code || cd.name || '');
+        }
+      } catch {} finally { setProfileLoading(false); }
+    };
+    loadProfile();
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    if (!fullName.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+    setSavingProfile(true);
+    try {
+      const { data: existing } = await supabase.from('profiles').select('campus_id').eq('user_id', user.id).maybeSingle();
+      if (!existing?.campus_id) { toast({ title: "Campus not set", variant: "destructive" }); return; }
+      await supabase.from('profiles').upsert({ user_id: user.id, campus_id: existing.campus_id, full_name: fullName.trim(), phone: profilePhone.trim(), updated_at: new Date().toISOString() } as any, { onConflict: 'user_id' });
+      await supabase.auth.updateUser({ data: { full_name: fullName.trim(), phone: profilePhone.trim() } });
+      toast({ title: "Profile Saved" });
+    } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+    finally { setSavingProfile(false); }
+  };
+
+  const getInitials = (n: string) => n ? n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
 
   // Notification preferences (local state)
   const [orderUpdates, setOrderUpdates] = useState(() => {
