@@ -6,6 +6,7 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { MenuItemCard } from "@/components/MenuItemCard";
 import { CartPanel } from "@/components/CartPanel";
 import { HeroBanner } from "@/components/HeroBanner";
+import { DailySpecials } from "@/components/DailySpecials";
 import { MobileCart } from "@/components/MobileCart";
 import { MobileProfilePanel } from "@/components/MobileProfilePanel";
 import { MenuItemSkeletonGrid } from "@/components/skeletons/MenuItemSkeleton";
@@ -137,6 +138,7 @@ export default function Menu() {
             <PullToRefresh onRefresh={handlePullRefresh}>
             <div className="p-3 lg:p-5">
               <HeroBanner />
+              <DailySpecials />
 
               {/* Search Bar */}
               <div className="mb-5">
