@@ -240,7 +240,7 @@ export default function Menu() {
           )}
         </div>
 
-        <MobileProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} onSignOut={handleSignOut} />
+        
         <MobileCart />
       </div>
     </PageTransition>
