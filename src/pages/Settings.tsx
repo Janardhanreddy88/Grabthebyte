@@ -73,12 +73,22 @@ export default function Settings() {
 
   // Change password state
   const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // Forgot password / OTP flow
+  const [forgotMode, setForgotMode] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -201,6 +211,48 @@ export default function Settings() {
     toast({ title: value ? 'Enabled' : 'Disabled', description: 'Notification preference updated.' });
   };
 
+  const handleSendOtp = async () => {
+    if (!user?.email) return;
+    setSendingOtp(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        setOtpSent(true);
+        toast({ title: 'OTP Sent', description: 'Check your email for the 6-digit code.' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to send OTP.', variant: 'destructive' });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length < 6 || !user?.email) return;
+    setVerifyingOtp(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: user.email,
+        token: otpCode,
+        type: 'recovery',
+      });
+      if (error) {
+        toast({ title: 'Invalid OTP', description: error.message, variant: 'destructive' });
+      } else {
+        setOtpVerified(true);
+        toast({ title: 'Verified', description: 'You can now set a new password.' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       toast({ title: 'Too Short', description: 'Password must be at least 6 characters.', variant: 'destructive' });
@@ -210,14 +262,30 @@ export default function Settings() {
       toast({ title: 'Mismatch', description: 'Passwords do not match.', variant: 'destructive' });
       return;
     }
+
+    // If not in forgot mode, verify current password first
+    if (!forgotMode) {
+      if (!currentPassword) {
+        toast({ title: 'Required', description: 'Enter your current password.', variant: 'destructive' });
+        return;
+      }
+      // Re-authenticate by signing in with current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: currentPassword,
+      });
+      if (signInError) {
+        toast({ title: 'Wrong Password', description: 'Current password is incorrect.', variant: 'destructive' });
+        return;
+      }
+    }
+
     setChangingPassword(true);
     try {
       const result = await changePassword('', newPassword);
       if (result.success) {
         toast({ title: 'Password Changed', description: 'Your password has been updated.' });
-        setShowPasswordSection(false);
-        setNewPassword('');
-        setConfirmPassword('');
+        resetPasswordState();
       } else {
         toast({ title: 'Error', description: result.error || 'Failed to change password.', variant: 'destructive' });
       }
@@ -226,6 +294,17 @@ export default function Settings() {
     } finally {
       setChangingPassword(false);
     }
+  };
+
+  const resetPasswordState = () => {
+    setShowPasswordSection(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotMode(false);
+    setOtpSent(false);
+    setOtpCode('');
+    setOtpVerified(false);
   };
 
   const handleDeleteAccount = async () => {
@@ -422,54 +501,129 @@ export default function Settings() {
             icon={KeyRound}
             label="Change Password"
             description="Update your account password"
-            onClick={() => setShowPasswordSection(!showPasswordSection)}
+            onClick={() => { setShowPasswordSection(!showPasswordSection); if (showPasswordSection) resetPasswordState(); }}
           />
 
           {showPasswordSection && (
             <div className="px-4 pb-3 space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="new-pw" className="text-xs font-semibold text-muted-foreground">New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="new-pw"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Min 6 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="pl-10 pr-10 text-sm rounded-xl"
-                  />
+
+              {/* Normal flow: Ask current password first */}
+              {!forgotMode && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="current-pw" className="text-xs font-semibold text-muted-foreground">Current Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="current-pw"
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        placeholder="Enter current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="pl-10 pr-10 text-sm rounded-xl"
+                      />
+                      <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setForgotMode(true)}
+                    className="text-xs text-primary font-medium hover:underline"
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    Forgot current password?
+                  </button>
+                </>
+              )}
+
+              {/* Forgot mode: OTP verification */}
+              {forgotMode && !otpVerified && (
+                <div className="space-y-3 p-3 rounded-xl bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground">We'll send a 6-digit code to <span className="font-semibold text-foreground">{user?.email}</span></p>
+                  {!otpSent ? (
+                    <Button onClick={handleSendOtp} disabled={sendingOtp} className="w-full rounded-xl text-sm font-semibold gap-2" size="sm">
+                      {sendingOtp ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</> : <><Mail className="w-4 h-4" /> Send OTP to Email</>}
+                    </Button>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="otp-code" className="text-xs font-semibold text-muted-foreground">Enter 6-digit OTP</Label>
+                        <Input
+                          id="otp-code"
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="000000"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className="text-sm rounded-xl text-center tracking-[0.5em] font-mono text-lg"
+                        />
+                      </div>
+                      <Button onClick={handleVerifyOtp} disabled={verifyingOtp || otpCode.length < 6} className="w-full rounded-xl text-sm font-semibold gap-2" size="sm">
+                        {verifyingOtp ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</> : 'Verify OTP'}
+                      </Button>
+                      <button type="button" onClick={handleSendOtp} disabled={sendingOtp} className="text-xs text-primary font-medium hover:underline w-full text-center">
+                        Resend OTP
+                      </button>
+                    </>
+                  )}
+                  <button type="button" onClick={() => { setForgotMode(false); setOtpSent(false); setOtpCode(''); }} className="text-xs text-muted-foreground hover:underline w-full text-center">
+                    ← Back to current password
                   </button>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm-pw" className="text-xs font-semibold text-muted-foreground">Confirm Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="confirm-pw"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Re-enter password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10 text-sm rounded-xl"
-                  />
+              )}
+
+              {forgotMode && otpVerified && (
+                <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-xs text-center font-medium">
+                  ✓ Identity verified. Set your new password below.
                 </div>
-              </div>
-              <Button
-                onClick={handleChangePassword}
-                disabled={changingPassword}
-                className="w-full rounded-xl text-sm font-semibold gap-2"
-                size="sm"
-              >
-                {changingPassword ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</> : 'Update Password'}
-              </Button>
+              )}
+
+              {/* New password fields — show if: normal mode OR (forgot mode + OTP verified) */}
+              {(!forgotMode || otpVerified) && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-pw" className="text-xs font-semibold text-muted-foreground">New Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="new-pw"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Min 6 characters"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="pl-10 pr-10 text-sm rounded-xl"
+                      />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirm-pw" className="text-xs font-semibold text-muted-foreground">Confirm Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="confirm-pw"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Re-enter password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="pl-10 text-sm rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={changingPassword}
+                    className="w-full rounded-xl text-sm font-semibold gap-2"
+                    size="sm"
+                  >
+                    {changingPassword ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</> : 'Update Password'}
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
