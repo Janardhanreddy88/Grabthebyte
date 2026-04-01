@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, BellOff, Palette, Moon, Sun, Monitor,
+  ArrowLeft, Bell, BellOff, Moon, Sun, Monitor,
   Lock, KeyRound, Trash2, ShoppingBag, FileText, Shield,
   ChevronRight, LogOut, Loader2, Info, HelpCircle, RotateCcw,
-  Eye, EyeOff
+  Eye, EyeOff, User, Mail, Phone, Building2, Save
 } from 'lucide-react';
 import OneSignalNative from 'onesignal-cordova-plugin';
 import { Capacitor } from '@capacitor/core';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +62,14 @@ export default function Settings() {
   const { user, logout, changePassword } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
 
+  // Profile state
+  const [fullName, setFullName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [campusCode, setCampusCode] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+
   // Change password state
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -69,6 +78,39 @@ export default function Settings() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) { setProfileLoading(false); return; }
+      try {
+        const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
+        setFullName(profile?.full_name || (user as any).user_metadata?.full_name || '');
+        setProfileEmail(user.email || '');
+        setProfilePhone(profile?.phone || (user as any).user_metadata?.phone || '');
+        if (profile?.campus_id) {
+          const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', profile.campus_id).maybeSingle();
+          if (cd) setCampusCode(cd.code || cd.name || '');
+        }
+      } catch {} finally { setProfileLoading(false); }
+    };
+    loadProfile();
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    if (!fullName.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+    setSavingProfile(true);
+    try {
+      const { data: existing } = await supabase.from('profiles').select('campus_id').eq('user_id', user.id).maybeSingle();
+      if (!existing?.campus_id) { toast({ title: "Campus not set", variant: "destructive" }); return; }
+      await supabase.from('profiles').upsert({ user_id: user.id, campus_id: existing.campus_id, full_name: fullName.trim(), phone: profilePhone.trim(), updated_at: new Date().toISOString() } as any, { onConflict: 'user_id' });
+      await supabase.auth.updateUser({ data: { full_name: fullName.trim(), phone: profilePhone.trim() } });
+      toast({ title: "Profile Saved" });
+    } catch (e: any) { toast({ title: "Failed", description: e.message, variant: "destructive" }); }
+    finally { setSavingProfile(false); }
+  };
+
+  const getInitials = (n: string) => n ? n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
 
   // Notification preferences (local state)
   const [orderUpdates, setOrderUpdates] = useState(() => {
@@ -202,7 +244,55 @@ export default function Settings() {
 
       <main className="max-w-lg mx-auto">
 
-        {/* ─── NOTIFICATIONS ─── */}
+        {/* ─── PROFILE ─── */}
+        <SectionHeader title="Profile" />
+        <div className="px-4 py-3 space-y-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-base font-bold shrink-0">
+              {profileLoading ? '…' : getInitials(fullName)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">{profileLoading ? 'Loading…' : (fullName || 'No name set')}</p>
+              <p className="text-xs text-muted-foreground truncate">{profileEmail}</p>
+            </div>
+          </div>
+
+          {!profileLoading && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="s-name" className="text-xs font-semibold text-muted-foreground">Full Name</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input id="s-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" className="pl-10 text-sm rounded-xl" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">Campus</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input value={campusCode} disabled className="pl-10 text-sm rounded-xl bg-muted/50 text-muted-foreground cursor-not-allowed" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input value={profileEmail} disabled className="pl-10 text-sm rounded-xl bg-muted/50 text-muted-foreground cursor-not-allowed" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s-phone" className="text-xs font-semibold text-muted-foreground">Phone</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input id="s-phone" type="tel" value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} placeholder="10-digit number" className="pl-10 text-sm rounded-xl" />
+                </div>
+              </div>
+              <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full rounded-xl text-sm font-semibold gap-2" size="sm">
+                {savingProfile ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Profile</>}
+              </Button>
+            </>
+          )}
+        </div>
         <SectionHeader title="Notifications" />
         <div className="px-1">
           <SettingRow
