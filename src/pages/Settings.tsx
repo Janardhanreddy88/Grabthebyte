@@ -211,6 +211,48 @@ export default function Settings() {
     toast({ title: value ? 'Enabled' : 'Disabled', description: 'Notification preference updated.' });
   };
 
+  const handleSendOtp = async () => {
+    if (!user?.email) return;
+    setSendingOtp(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        setOtpSent(true);
+        toast({ title: 'OTP Sent', description: 'Check your email for the 6-digit code.' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to send OTP.', variant: 'destructive' });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length < 6 || !user?.email) return;
+    setVerifyingOtp(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: user.email,
+        token: otpCode,
+        type: 'recovery',
+      });
+      if (error) {
+        toast({ title: 'Invalid OTP', description: error.message, variant: 'destructive' });
+      } else {
+        setOtpVerified(true);
+        toast({ title: 'Verified', description: 'You can now set a new password.' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       toast({ title: 'Too Short', description: 'Password must be at least 6 characters.', variant: 'destructive' });
@@ -220,14 +262,30 @@ export default function Settings() {
       toast({ title: 'Mismatch', description: 'Passwords do not match.', variant: 'destructive' });
       return;
     }
+
+    // If not in forgot mode, verify current password first
+    if (!forgotMode) {
+      if (!currentPassword) {
+        toast({ title: 'Required', description: 'Enter your current password.', variant: 'destructive' });
+        return;
+      }
+      // Re-authenticate by signing in with current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: currentPassword,
+      });
+      if (signInError) {
+        toast({ title: 'Wrong Password', description: 'Current password is incorrect.', variant: 'destructive' });
+        return;
+      }
+    }
+
     setChangingPassword(true);
     try {
       const result = await changePassword('', newPassword);
       if (result.success) {
         toast({ title: 'Password Changed', description: 'Your password has been updated.' });
-        setShowPasswordSection(false);
-        setNewPassword('');
-        setConfirmPassword('');
+        resetPasswordState();
       } else {
         toast({ title: 'Error', description: result.error || 'Failed to change password.', variant: 'destructive' });
       }
@@ -236,6 +294,17 @@ export default function Settings() {
     } finally {
       setChangingPassword(false);
     }
+  };
+
+  const resetPasswordState = () => {
+    setShowPasswordSection(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotMode(false);
+    setOtpSent(false);
+    setOtpCode('');
+    setOtpVerified(false);
   };
 
   const handleDeleteAccount = async () => {
