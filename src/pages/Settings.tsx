@@ -80,13 +80,14 @@ export default function Settings() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
+    if (!user) return; // Don't run until user is available
     const loadProfile = async () => {
-      if (!user) { setProfileLoading(false); return; }
+      setProfileLoading(true);
       try {
         const { data: profile } = await supabase.from('profiles').select('full_name, phone, campus_id').eq('user_id', user.id).maybeSingle();
-        setFullName(profile?.full_name || (user as any).user_metadata?.full_name || '');
+        setFullName(profile?.full_name || user.fullName || '');
         setProfileEmail(user.email || '');
-        setProfilePhone(profile?.phone || (user as any).user_metadata?.phone || '');
+        setProfilePhone(profile?.phone || user.phone || '');
         if (profile?.campus_id) {
           const { data: cd } = await supabase.from('campus_public_info').select('code, name').eq('id', profile.campus_id).maybeSingle();
           if (cd) setCampusCode(cd.code || cd.name || '');
