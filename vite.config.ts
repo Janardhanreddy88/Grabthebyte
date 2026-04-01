@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    allowedHosts: [
+      "overpainful-unserved-pa.ngrok-free.dev"
+    ],
   },
   plugins: [
     react(),
