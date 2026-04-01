@@ -7,7 +7,7 @@ import { MenuItemCard } from "@/components/MenuItemCard";
 import { CartPanel } from "@/components/CartPanel";
 import { HeroBanner } from "@/components/HeroBanner";
 import { MobileCart } from "@/components/MobileCart";
-import { MobileProfilePanel } from "@/components/MobileProfilePanel";
+
 import { MenuItemSkeletonGrid } from "@/components/skeletons/MenuItemSkeleton";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
