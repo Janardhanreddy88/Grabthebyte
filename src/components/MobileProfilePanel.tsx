@@ -31,8 +31,6 @@ export function MobileProfilePanel({ isOpen, onClose }: MobileProfilePanelProps)
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
 
-  const userName = authUser?.fullName || "Guest User";
-  const userEmail = authUser?.email || "guest@example.com";
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
