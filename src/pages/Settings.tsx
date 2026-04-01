@@ -129,8 +129,39 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = () => {
-    toast({ title: 'Contact Support', description: 'To delete your account, please email support@grabthebyte.com' });
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const { data: { session } } = await (await import('@/integrations/supabase/client')).supabase.auth.getSession();
+      if (!session) {
+        toast({ title: 'Error', description: 'You must be logged in.', variant: 'destructive' });
+        return;
+      }
+
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        toast({ title: 'Error', description: result.error || 'Failed to delete account.', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Account Deleted', description: 'Your account and data have been permanently removed.' });
+      await logout();
+      navigate('/auth');
+    } catch {
+      toast({ title: 'Error', description: 'Something went wrong. Please try again.', variant: 'destructive' });
+    } finally {
+      setDeletingAccount(false);
+      setDeleteConfirmOpen(false);
+    }
   };
 
   const handleClearCache = () => {
