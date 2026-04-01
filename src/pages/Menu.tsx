@@ -27,7 +27,7 @@ export default function Menu() {
   const { user } = useAuth();
   const { totalItems } = useCart();
   const { campus } = useCampus();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
