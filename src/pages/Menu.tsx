@@ -135,12 +135,11 @@ export default function Menu() {
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
             <PullToRefresh onRefresh={handlePullRefresh}>
-            <div className="p-3 lg:p-5">
+            <div className="p-3 lg:p-6 space-y-5 lg:space-y-6">
               <HeroBanner />
-              
 
               {/* Search Bar */}
-              <div className="mb-5">
+              <div>
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search for dishes..." />
               </div>
 
