@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2, AlertCircle, RefreshCw, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,18 @@ declare global {
 
 type PaymentState = 'loading' | 'initiating' | 'processing' | 'verifying';
 
-const loadRazorpayScript = () => {
+/** Ensures the Razorpay checkout script is ready (uses preloaded cache) */
+const ensureRazorpayScript = (): Promise<boolean> => {
+  if (window.Razorpay) return Promise.resolve(true);
   return new Promise((resolve) => {
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      // If already loaded but Razorpay not on window yet, give it a tick
+      if ((existing as HTMLScriptElement).getAttribute('data-loaded')) resolve(!!window.Razorpay);
+      return;
+    }
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.onload = () => resolve(true);
@@ -30,6 +40,7 @@ const loadRazorpayScript = () => {
 
 export default function Payment() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -38,10 +49,13 @@ export default function Payment() {
   const orderId = searchParams.get('order_id');
   const amount = searchParams.get('amount');
 
+  // Customer data passed from Checkout via navigation state
+  const navState = location.state as { customerName?: string; customerEmail?: string; customerPhone?: string } | null;
+
   const [paymentState, setPaymentState] = useState<PaymentState>("loading");
   const [orderNumber, setOrderNumber] = useState("");
   const paymentInitiated = useRef(false);
-  const isSuccessRef = useRef(false); // Tracks if payment succeeded to prevent dismiss redirect errors
+  const isSuccessRef = useRef(false);
 
   const extractErrorMessage = (errorResponse: any) => {
     if (typeof errorResponse === 'string') return errorResponse;
@@ -57,24 +71,49 @@ export default function Payment() {
     setPaymentState('initiating');
 
     try {
-      const { data: order } = await supabase.from('orders').select('order_number, customer_name, customer_email, customer_phone').eq('id', orderId).maybeSingle();
-      if (!order) throw new Error('Order not found');
-      setOrderNumber(order.order_number);
-
-      const { data: profile } = await supabase.from('profiles').select('phone').eq('user_id', user.id).maybeSingle();
-
-      const rawPhoneNumber = order?.customer_phone || profile?.phone || user?.phone || (user as any)?.user_metadata?.phone || ""; 
-      let cleanPhone = String(rawPhoneNumber).replace(/\D/g, ''); 
+      // Use navigation state for customer info, only fall back to DB if missing
+      const customerName = navState?.customerName || user.fullName || "Customer";
+      const customerEmail = navState?.customerEmail || user.email || "";
+      let rawPhone = navState?.customerPhone || user.phone || (user as any)?.user_metadata?.phone || "";
+      let cleanPhone = String(rawPhone).replace(/\D/g, '');
       if (cleanPhone.length > 10 && cleanPhone.startsWith('91')) cleanPhone = cleanPhone.substring(2);
 
-      const { data, error } = await supabase.functions.invoke('create-payment', {
-        body: { orderId, amount: parseFloat(amount), customerName: order.customer_name || user.fullName, customerEmail: order.customer_email || user.email, customerPhone: cleanPhone }
-      });
+      // 🚀 OPTIMIZATION: Run edge function + script load + order number fetch in PARALLEL
+      const [paymentResult, scriptLoaded, orderData] = await Promise.all([
+        // 1. Create Razorpay session via Edge Function
+        supabase.functions.invoke('create-payment', {
+          body: { orderId, amount: parseFloat(amount), customerName, customerEmail, customerPhone: cleanPhone }
+        }),
+        // 2. Ensure Razorpay SDK is ready (likely already cached from preload)
+        Capacitor.isNativePlatform() ? Promise.resolve(true) : ensureRazorpayScript(),
+        // 3. Fetch order number for display (lightweight query)
+        supabase.from('orders').select('order_number').eq('id', orderId).maybeSingle(),
+      ]);
 
-      if (error || !data?.razorpayOrderId) throw new Error(data?.error || 'Failed to create Razorpay session');
-      
-      const currentRzpOrderId = data.razorpayOrderId;
+      // Set order number for header display
+      if (orderData.data?.order_number) {
+        setOrderNumber(orderData.data.order_number);
+      }
+
+      // 🛡️ ROBUST ERROR HANDLING: Check edge function result
+      if (paymentResult.error) {
+        const errMsg = paymentResult.error?.message || 'Failed to create payment session. Please try again.';
+        throw new Error(errMsg);
+      }
+
+      if (!paymentResult.data?.razorpayOrderId) {
+        const serverError = paymentResult.data?.error || 'Razorpay session could not be created. Please try again.';
+        throw new Error(serverError);
+      }
+
+      // Check Razorpay script loaded (web only)
+      if (!Capacitor.isNativePlatform() && !scriptLoaded) {
+        throw new Error("Payment gateway failed to load. Check your internet connection and try again.");
+      }
+
+      const currentRzpOrderId = paymentResult.data.razorpayOrderId;
       const currentKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      const displayOrderNumber = orderData.data?.order_number || '';
 
       setPaymentState('processing');
 
@@ -95,7 +134,6 @@ export default function Payment() {
 
           if (verifyError || !isSuccess) throw new Error('Payment verification failed on server');
 
-          // 🟢 SUCCESS ROUTING
           clearCart();
           toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
           navigate(`/order/${orderId}`, { replace: true });
@@ -107,14 +145,14 @@ export default function Payment() {
       };
 
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID, 
-        amount: Math.round(parseFloat(amount) * 100), 
+        key: currentKeyId,
+        amount: Math.round(parseFloat(amount) * 100),
         currency: "INR",
-        name: "GrabTheByte", 
-        description: `Order #${order.order_number}`,
-        image: "/pwa-192x192.png", 
-        order_id: currentRzpOrderId, 
-        prefill: { name: order.customer_name || user.fullName || "Customer", email: order.customer_email || user.email || "", contact: cleanPhone },
+        name: "GrabTheByte",
+        description: `Order #${displayOrderNumber}`,
+        image: "/pwa-192x192.png",
+        order_id: currentRzpOrderId,
+        prefill: { name: customerName, email: customerEmail, contact: cleanPhone },
         theme: { color: "#E50914" }
       };
 
@@ -123,23 +161,18 @@ export default function Payment() {
           options,
           (paymentResponse: any) => processSuccess(paymentResponse),
           (errorResponse: any) => {
-            // 🔴 NATIVE FAIL ROUTING
             paymentInitiated.current = false;
             toast({ title: "Payment Failed", description: extractErrorMessage(errorResponse), variant: "destructive" });
             navigate(`/order/${orderId}`, { replace: true });
           }
         );
       } else {
-        const res = await loadRazorpayScript();
-        if (!res) throw new Error("Razorpay SDK failed to load.");
-
         const webOptions = {
           ...options,
           handler: function (response: any) { processSuccess(response); },
           modal: {
             ondismiss: function() {
               if (!isSuccessRef.current) {
-                // 🔴 WEB DISMISS ROUTING
                 paymentInitiated.current = false;
                 toast({ title: "Payment Cancelled", description: "You closed the payment window.", variant: "destructive" });
                 navigate(`/order/${orderId}`, { replace: true });
@@ -154,10 +187,10 @@ export default function Payment() {
       }
 
     } catch (err) {
-      toast({ title: "Initiation Failed", description: err instanceof Error ? err.message : 'Payment initiation failed', variant: "destructive" });
+      toast({ title: "Payment Failed", description: err instanceof Error ? err.message : 'Payment initiation failed. Please try again.', variant: "destructive" });
       navigate(`/order/${orderId}`, { replace: true });
     }
-  }, [orderId, amount, user, navigate, toast, clearCart]);
+  }, [orderId, amount, user, navState, navigate, toast, clearCart]);
 
   useEffect(() => {
     if (orderId && amount && user && paymentState === 'loading') {

@@ -136,7 +136,13 @@ export default function Checkout() {
       });      
 
       if (order) { 
-        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`); 
+        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`, {
+          state: {
+            customerName: user.fullName,
+            customerEmail: user.email,
+            customerPhone: user.phone || (user as any)?.user_metadata?.phone || "",
+          }
+        });
       } else { 
         toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
       }

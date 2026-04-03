@@ -53,6 +53,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
+    <!-- Preload Razorpay SDK so it's cached before the Payment page -->
+    <link rel="preload" href="https://checkout.razorpay.com/v1/checkout.js" as="script" />
+
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
       window.OneSignalDeferred = window.OneSignalDeferred || [];
