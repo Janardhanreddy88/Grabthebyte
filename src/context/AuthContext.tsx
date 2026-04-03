@@ -106,30 +106,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [fetchUserAccess]
   );
 
-  const validateSession = useCallback(async () => {
-    if (!session) return;
-    
-    // 🚀 OFFLINE EVICTION PROTECTOR: Do NOT kick the user if there's no internet!
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return; 
-
-    try {
-      const { data, error } = await supabase.auth.getUser();
-      
-      // Ignore network-related failures
-      if (error?.message?.includes('Failed to fetch') || error?.message?.includes('Network Error')) return;
-
-      if (error || !data.user) {
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-      }
-    } catch (err: any) {
-      if (err?.message?.includes('Failed to fetch') || err?.message?.includes('Network Error')) return;
-      await supabase.auth.signOut();
-      setSession(null);
-      setUser(null);
-    }
-  }, [session]);
 
   useEffect(() => {
     let mounted = true;
@@ -154,12 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [setFromSession]);
 
-  useEffect(() => {
-    if (!session) return;
-    validateSession();
-    const interval = setInterval(validateSession, 300000);
-    return () => clearInterval(interval);
-  }, [session, validateSession]);
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
