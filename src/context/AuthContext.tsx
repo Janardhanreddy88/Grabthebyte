@@ -130,12 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [setFromSession]);
 
-  useEffect(() => {
-    if (!session) return;
-    validateSession();
-    const interval = setInterval(validateSession, 300000);
-    return () => clearInterval(interval);
-  }, [session, validateSession]);
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
