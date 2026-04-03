@@ -179,32 +179,20 @@ export default function Settings() {
 
   const getInitials = (n: string) => n ? n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
 
-  // Notification preferences (local state)
-  const [orderUpdates, setOrderUpdates] = useState(() => {
-    try { return localStorage.getItem('pref_order_updates') !== 'false'; } catch { return true; }
-  });
-  const [promotions, setPromotions] = useState(() => {
-    try { return localStorage.getItem('pref_promotions') !== 'false'; } catch { return true; }
+  // Notification preference (single toggle)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    try { return localStorage.getItem('pref_notifications') !== 'false'; } catch { return true; }
   });
 
-  const handleToggleNotif = (key: string, value: boolean, setter: (v: boolean) => void) => {
-    setter(value);
-    try { localStorage.setItem(key, String(value)); } catch {}
+  const handleToggleNotifications = (enabled: boolean) => {
+    setNotificationsEnabled(enabled);
+    try { localStorage.setItem('pref_notifications', String(enabled)); } catch {}
 
-    // Determine the other toggle's current state
-    const otherEnabled = key === 'pref_order_updates' ? promotions : orderUpdates;
-    // If BOTH are now off, opt out of push entirely; if at least one is on, opt in
-    const anyEnabled = value || otherEnabled;
-
-    const tagKey = key === 'pref_order_updates' ? 'order_updates' : 'promotions';
-    const tagValue = value ? 'true' : 'false';
     const isNative = Capacitor.isNativePlatform();
 
     if (isNative) {
       try {
-        OneSignalNative.User.addTags({ [tagKey]: tagValue });
-        // Opt out/in of push subscription based on combined preference
-        if (anyEnabled) {
+        if (enabled) {
           OneSignalNative.User.pushSubscription.optIn();
         } else {
           OneSignalNative.User.pushSubscription.optOut();
@@ -213,8 +201,7 @@ export default function Settings() {
     } else if (typeof window !== 'undefined' && window.OneSignalDeferred) {
       window.OneSignalDeferred.push(async (OneSignal: any) => {
         try {
-          await OneSignal.User.addTags({ [tagKey]: tagValue });
-          if (anyEnabled) {
+          if (enabled) {
             await OneSignal.User.PushSubscription.optIn();
           } else {
             await OneSignal.User.PushSubscription.optOut();
@@ -223,7 +210,7 @@ export default function Settings() {
       });
     }
 
-    toast({ title: value ? 'Enabled' : 'Disabled', description: anyEnabled ? 'Notification preference updated.' : 'All notifications disabled.' });
+    toast({ title: enabled ? 'Notifications Enabled' : 'Notifications Disabled', description: enabled ? 'You will receive push notifications.' : 'You will not receive any push notifications.' });
   };
 
   const handleSendOtp = async () => {
