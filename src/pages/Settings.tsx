@@ -451,24 +451,13 @@ export default function Settings() {
         <SectionHeader title="Notifications" />
         <div className="px-1">
           <SettingRow
-            icon={Bell}
-            label="Order Updates"
-            description="Get notified about order status changes"
+            icon={notificationsEnabled ? Bell : BellOff}
+            label="Allow Notifications"
+            description="Receive push notifications from this app"
             trailing={
               <Switch
-                checked={orderUpdates}
-                onCheckedChange={(v) => handleToggleNotif('pref_order_updates', v, setOrderUpdates)}
-              />
-            }
-          />
-          <SettingRow
-            icon={BellOff}
-            label="Promotions & Offers"
-            description="Receive deals and discount alerts"
-            trailing={
-              <Switch
-                checked={promotions}
-                onCheckedChange={(v) => handleToggleNotif('pref_promotions', v, setPromotions)}
+                checked={notificationsEnabled}
+                onCheckedChange={handleToggleNotifications}
               />
             }
           />
