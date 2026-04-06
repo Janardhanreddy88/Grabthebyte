@@ -166,9 +166,9 @@ export function Analytics() {
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total Revenue', value: formatCurrency(totalRevenue), icon: DollarSign, bg: 'bg-green-500/10', color: 'text-green-600' },
-          { label: 'Total Orders', value: totalOrders.toString(), icon: ShoppingCart, bg: 'bg-blue-500/10', color: 'text-blue-600' },
-          { label: 'Platform Earnings', value: formatCurrency(totalCommission), icon: TrendingUp, bg: 'bg-purple-500/10', color: 'text-purple-600' },
+          { label: 'Total Order Value (GMV)', value: formatCurrency(totalRevenue), icon: DollarSign, bg: 'bg-green-500/10', color: 'text-green-600' },
+          { label: 'Confirmed Orders', value: totalOrders.toString(), icon: ShoppingCart, bg: 'bg-blue-500/10', color: 'text-blue-600' },
+          { label: 'Platform Commission', value: formatCurrency(totalCommission), icon: TrendingUp, bg: 'bg-purple-500/10', color: 'text-purple-600' },
           { label: 'Avg Order Value', value: formatCurrency(avgOrderValue), icon: BarChart3, bg: 'bg-orange-500/10', color: 'text-orange-600' },
         ].map(kpi => (
           <Card key={kpi.label}>
