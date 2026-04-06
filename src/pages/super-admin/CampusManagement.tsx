@@ -34,6 +34,7 @@ import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { Campus } from '@/types/superAdmin';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CampusOnboardingWizard } from '@/components/super-admin/CampusOnboardingWizard';
 
 export function CampusManagement() {
   const { refreshData } = useSuperAdmin();
