@@ -59,6 +59,7 @@ const SuperAdminSettings = lazy(() => import("./pages/super-admin/SuperAdminSett
 const UserManagement = lazy(() => import("./pages/super-admin/UserManagement").then(m => ({ default: m.UserManagement })));
 const AuditLogs = lazy(() => import("./pages/super-admin/AuditLogs").then(m => ({ default: m.AuditLogs })));
 const Analytics = lazy(() => import("./pages/super-admin/Analytics").then(m => ({ default: m.Analytics })));
+const Operations = lazy(() => import("./pages/super-admin/Operations").then(m => ({ default: m.Operations })));
 import { SuperAdminLayout } from "@/components/super-admin/SuperAdminLayout";
 
 const queryClient = new QueryClient({
