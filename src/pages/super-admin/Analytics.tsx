@@ -97,7 +97,7 @@ export function Analytics() {
           campusMap.set(o.campus_id, {
             orders: existing.orders + 1,
             revenue: existing.revenue + (o.total || 0),
-            commission: existing.commission + (o.commission_amount || o.total * 0.1 || 0),
+            commission: existing.commission + (o.commission_amount ?? o.total * 0.1 ?? 0),
           });
         });
 
