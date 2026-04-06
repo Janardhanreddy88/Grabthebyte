@@ -38,6 +38,17 @@ export function SuperAdminSettings() {
     settlement_period: platformSettings?.settlement_period ?? 'daily',
   });
 
+  // Sync local state when platform settings load/change
+  useEffect(() => {
+    if (platformSettings) {
+      setLocalSettings({
+        manual_verification_enabled: platformSettings.manual_verification_enabled ?? true,
+        global_commission_rate: platformSettings.global_commission_rate ?? 10,
+        settlement_period: platformSettings.settlement_period ?? 'daily',
+      });
+    }
+  }, [platformSettings]);
+
   const handleSave = async () => {
     setIsSaving(true);
     
