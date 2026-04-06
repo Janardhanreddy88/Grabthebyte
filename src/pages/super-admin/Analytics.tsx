@@ -60,7 +60,7 @@ export function Analytics() {
       const { data: ordersData, error } = await query;
       if (error) throw error;
 
-      const validOrders = (ordersData || []).filter(o => o.status !== 'failed');
+      const validOrders = (ordersData || []).filter(o => o.status === 'confirmed' || o.status === 'collected');
 
       // Group by date
       const dailyMap = new Map<string, { orders: number; revenue: number; commission: number }>();
