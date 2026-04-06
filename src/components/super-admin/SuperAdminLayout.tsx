@@ -12,7 +12,8 @@ import {
   ChevronDown,
   Users,
   History,
-  BarChart3
+  BarChart3,
+  Shield
 } from 'lucide-react';
 import { NotificationBell } from '@/components/super-admin/NotificationBell';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ const navItems = [
   { path: '/super-admin/users', icon: Users, label: 'Users' },
   
   { path: '/super-admin/analytics', icon: BarChart3, label: 'Analytics' },
+  { path: '/super-admin/operations', icon: Shield, label: 'Operations' },
   { path: '/super-admin/audit-logs', icon: History, label: 'Audit Logs' },
   { path: '/super-admin/settings', icon: Settings, label: 'Settings' },
 ];

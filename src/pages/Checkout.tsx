@@ -8,7 +8,8 @@ import {
   Minus,
   Plus,
   ArrowRight,
-  WifiOff // 🚀 Added for Offline UX
+  WifiOff,
+  AlertOctagon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,6 +25,7 @@ import { useOrders } from "@/hooks/useOrders";
 import { EmptyState } from "@/components/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { ImageWithFallback } from "@/components/ImageWithFallback";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -35,12 +37,38 @@ export default function Checkout() {
 
   const [isCheckingStock, setIsCheckingStock] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
-  
-  // 🚀 THE NETWORK GUARDIAN
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [ordersPaused, setOrdersPaused] = useState(false);
+  const [pauseReason, setPauseReason] = useState('');
 
   const lastSubmitRef = useRef<number>(0);
   const SUBMIT_COOLDOWN_MS = 2000;
+
+  // Check kill switch
+  useEffect(() => {
+    const checkPause = async () => {
+      const { data } = await supabase
+        .from('platform_settings')
+        .select('orders_paused, orders_paused_reason')
+        .single();
+      if (data) {
+        setOrdersPaused(data.orders_paused ?? false);
+        setPauseReason(data.orders_paused_reason ?? '');
+      }
+    };
+    checkPause();
+
+    // Real-time kill switch listener
+    const ch = supabase
+      .channel('checkout-kill-switch')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'platform_settings' }, (payload) => {
+        const d = payload.new as any;
+        setOrdersPaused(d.orders_paused ?? false);
+        setPauseReason(d.orders_paused_reason ?? '');
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   // Real-time network listener
   useEffect(() => {
@@ -81,7 +109,10 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
-    // 🚀 SHIELD 1: Prevent offline submissions
+    if (ordersPaused) {
+      toast({ title: "Orders Paused", description: pauseReason || "Kitchen is overwhelmed. Try again shortly.", variant: "destructive" });
+      return;
+    }
     if (isOffline) {
       toast({ title: "No Connection", description: "Internet required to place order.", variant: "destructive" });
       return;
@@ -179,6 +210,16 @@ export default function Checkout() {
       <main className="flex-1 overflow-y-auto">
         <PullToRefresh onRefresh={async () => window.location.reload()}>
         <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
+          {/* Kill Switch Banner */}
+          {ordersPaused && (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive">
+              <AlertOctagon size={20} className="shrink-0" />
+              <div>
+                <p className="font-bold text-sm">Kitchen is currently overwhelmed</p>
+                <p className="text-xs opacity-80">{pauseReason || 'Pausing orders temporarily. Please try again in a few minutes.'}</p>
+              </div>
+            </div>
+          )}
           <AnimatePresence>
             {stockError && (
               <motion.div
@@ -301,13 +342,17 @@ export default function Checkout() {
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
             <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
           </div>
-          <motion.div className="flex-[1.5]" whileTap={!isOffline ? { scale: 0.98 } : {}}>
+          <motion.div className="flex-[1.5]" whileTap={!isOffline && !ordersPaused ? { scale: 0.98 } : {}}>
             <Button
-              className={`w-full h-10 rounded-xl text-sm font-bold shadow-lg ${isOffline ? 'bg-muted text-muted-foreground' : 'shadow-primary/20'}`}
+              className={`w-full h-10 rounded-xl text-sm font-bold shadow-lg ${(isOffline || ordersPaused) ? 'bg-muted text-muted-foreground' : 'shadow-primary/20'}`}
               onClick={handlePlaceOrder}
-              disabled={isLoading || isOffline}
+              disabled={isLoading || isOffline || ordersPaused}
             >
-              {isOffline ? (
+              {ordersPaused ? (
+                <span className="flex items-center gap-2">
+                  <AlertOctagon size={16} /> Orders Paused
+                </span>
+              ) : isOffline ? (
                 <span className="flex items-center gap-2">
                   <WifiOff size={16} /> Offline: Connect to Pay
                 </span>
