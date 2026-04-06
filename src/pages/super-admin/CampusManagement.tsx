@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Building2, 
-  Plus,
-  Edit,
-  Trash2,
-  RefreshCw,
-  Search,
-  MapPin,
-  Phone,
-  Mail,
-  User,
-  CreditCard,
-  Percent
+import {
+  Building2, Plus, Edit, Trash2, RefreshCw, Search,
+  MapPin, Phone, Mail, User, CreditCard, Percent, Sparkles
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,12 +34,14 @@ import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { Campus } from '@/types/superAdmin';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CampusOnboardingWizard } from '@/components/super-admin/CampusOnboardingWizard';
 
 export function CampusManagement() {
   const { refreshData } = useSuperAdmin();
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
   
   // Campus Dialog
   const [showCampusDialog, setShowCampusDialog] = useState(false);
@@ -237,9 +229,13 @@ export function CampusManagement() {
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             Refresh
           </Button>
+          <Button variant="outline" onClick={() => setShowWizard(true)}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Onboard Campus
+          </Button>
           <Button onClick={() => { resetCampusForm(); setShowCampusDialog(true); }}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Campus
+            Quick Add
           </Button>
         </div>
       </div>
@@ -534,6 +530,13 @@ export function CampusManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Campus Onboarding Wizard */}
+      <CampusOnboardingWizard
+        open={showWizard}
+        onOpenChange={setShowWizard}
+        onSuccess={() => { fetchCampuses(); refreshData(); }}
+      />
     </div>
   );
 }

@@ -1,42 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  ShoppingBag, 
-  RefreshCw,
-  Search,
-  Eye,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Package,
-  Calendar
+  ShoppingBag, RefreshCw, Search, Eye, Clock, CheckCircle,
+  XCircle, Package, Calendar, Download, MoreHorizontal
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { toast } from 'sonner';
@@ -48,16 +32,18 @@ interface Order {
   order_number: string;
   customer_name: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
   total: number;
   status: string;
+  payment_status: string | null;
+  payment_method: string | null;
+  razorpay_payment_id: string | null;
+  commission_amount: number | null;
+  notes: string | null;
   created_at: string;
+  updated_at: string;
   campus?: { name: string; code: string };
-  order_items?: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
+  order_items?: Array<{ id: string; name: string; quantity: number; price: number }>;
 }
 
 export function SuperAdminOrders() {
@@ -68,6 +54,7 @@ export function SuperAdminOrders() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('today');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async () => {
     setIsLoading(true);
@@ -75,253 +62,172 @@ export function SuperAdminOrders() {
     let query = supabase
       .from('orders')
       .select(`
-        id,
-        order_number,
-        customer_name,
-        customer_email,
-        total,
-        status,
-        created_at,
+        id, order_number, customer_name, customer_email, customer_phone,
+        total, status, payment_status, payment_method, razorpay_payment_id,
+        commission_amount, notes, created_at, updated_at,
         campus:campuses(name, code),
         order_items(id, name, quantity, price)
       `)
       .order('created_at', { ascending: false });
 
-    // --- APPLY DATE FILTERS ---
-    if (dateFilter === 'today') {
-      const today = startOfToday();
-      query = query.gte('created_at', today.toISOString());
-    } else if (dateFilter === 'yesterday') {
-      const start = startOfYesterday();
-      const end = endOfYesterday();
-      query = query.gte('created_at', start.toISOString())
-                   .lte('created_at', end.toISOString());
+    if (dateFilter === 'today') query = query.gte('created_at', startOfToday().toISOString());
+    else if (dateFilter === 'yesterday') {
+      query = query.gte('created_at', startOfYesterday().toISOString()).lte('created_at', endOfYesterday().toISOString());
     }
-
-    // --- CAMPUS FILTER ---
-    if (filters.campusId) {
-      query = query.eq('campus_id', filters.campusId);
-    }
-    
-    if (statusFilter !== 'all') {
-      query = query.eq('status', statusFilter as any);
-    }
-
-    query = query.limit(dateFilter === 'all' ? 100 : 500);
+    if (filters.campusId) query = query.eq('campus_id', filters.campusId);
+    if (statusFilter !== 'all') query = query.eq('status', statusFilter as any);
+    query = query.limit(dateFilter === 'all' ? 200 : 500);
 
     const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching orders:', error);
-      toast.error('Failed to load orders');
-    } else {
-      setOrders((data || []) as Order[]);
-    }
-    
+    if (error) { toast.error('Failed to load orders'); } 
+    else { setOrders((data || []) as Order[]); }
     setIsLoading(false);
   }, [filters.campusId, statusFilter, dateFilter]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  // Real-time subscription
   useEffect(() => {
-    const channel = supabase
-      .channel('all-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-        },
-        () => {
-          fetchOrders();
-        }
-      )
+    const channel = supabase.channel('all-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [fetchOrders]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Clock; label: string }> = {
       pending: { variant: 'secondary', icon: Clock, label: 'Pending' },
-      confirmed: { variant: 'default', icon: CheckCircle, label: 'Approved' },
+      confirmed: { variant: 'default', icon: CheckCircle, label: 'Confirmed' },
       collected: { variant: 'outline', icon: Package, label: 'Collected' },
-      cancelled: { variant: 'destructive', icon: XCircle, label: 'Failed' },
+      failed: { variant: 'destructive', icon: XCircle, label: 'Failed' },
+      expired: { variant: 'destructive', icon: XCircle, label: 'Expired' },
     };
     const config = configs[status] || configs.pending;
     const Icon = config.icon;
-    return (
-      <Badge variant={config.variant} className="gap-1">
-        <Icon className="h-3 w-3" />
-        {config.label}
-      </Badge>
-    );
+    return <Badge variant={config.variant} className="gap-1"><Icon className="h-3 w-3" />{config.label}</Badge>;
   };
 
   const filteredOrders = orders.filter(order => {
     if (!searchQuery) return true;
-    const search = searchQuery.toLowerCase();
-    return (
-      order.order_number?.toLowerCase().includes(search) ||
-      order.customer_name?.toLowerCase().includes(search) ||
-      order.customer_email?.toLowerCase().includes(search)
-    );
+    const s = searchQuery.toLowerCase();
+    return order.order_number?.toLowerCase().includes(s) || order.customer_name?.toLowerCase().includes(s) || order.customer_email?.toLowerCase().includes(s);
   });
 
-  // --- UPDATED STATS CALCULATIONS ---
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredOrders.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+  };
+
+  const exportCSV = () => {
+    const exportOrders = selectedIds.size > 0 ? filteredOrders.filter(o => selectedIds.has(o.id)) : filteredOrders;
+    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Amount', 'Status', 'Payment', 'Date'];
+    const rows = exportOrders.map(o => [
+      o.order_number, o.customer_name || '', o.customer_email || '',
+      o.campus?.code || '', o.total, o.status, o.payment_status || '',
+      format(new Date(o.created_at), 'yyyy-MM-dd HH:mm')
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `orders-${dateFilter}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success(`Exported ${exportOrders.length} orders`);
+  };
+
   const totalOrders = orders.length;
-  // const pendingOrders = orders.filter(o => o.status === 'pending').length; // Removed
   const confirmedOrders = orders.filter(o => o.status === 'confirmed').length;
-  const rejectedOrders = orders.filter(o => o.status === 'cancelled').length; // Added Rejected count
-  const completedOrders = orders.filter(o => o.status === 'collected').length;
+  const failedOrders = orders.filter(o => ['failed', 'expired'].includes(o.status)).length;
+  const collectedOrders = orders.filter(o => o.status === 'collected').length;
+  const totalRevenue = orders.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Orders Manager</h1>
           <p className="text-muted-foreground">
-             {dateFilter === 'today' ? "Showing today's live orders" : 
-              dateFilter === 'yesterday' ? "Showing orders from yesterday" : 
-              "Showing complete order history"}
+            {dateFilter === 'today' ? "Today's live orders" : dateFilter === 'yesterday' ? "Yesterday's orders" : "Complete history"}
+            {totalRevenue > 0 && ` · Revenue: ${formatCurrency(totalRevenue)}`}
           </p>
         </div>
-        <Button variant="outline" onClick={fetchOrders} disabled={isLoading}>
-          <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="h-4 w-4 mr-1" /> Export {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+          </Button>
+          <Button variant="outline" onClick={fetchOrders} disabled={isLoading}>
+            <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} /> Refresh
+          </Button>
+        </div>
       </div>
 
-      {/* Stats - REARRANGED: Total -> Approved -> Rejected -> Collected */}
+      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 1. Total */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">
-              {dateFilter === 'all' ? 'Total Orders' : dateFilter === 'yesterday' ? 'Orders Yesterday' : 'Orders Today'}
-            </div>
-            <div className="text-2xl font-bold">{totalOrders}</div>
-          </CardContent>
-        </Card>
-
-        {/* 2. Approved (Moved Left) */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Approved</div>
-            <div className="text-2xl font-bold text-blue-600">{confirmedOrders}</div>
-          </CardContent>
-        </Card>
-
-        {/* 3. Rejected (Replaced Pending & Moved Right) */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Rejected</div>
-            <div className="text-2xl font-bold text-destructive">{rejectedOrders}</div>
-          </CardContent>
-        </Card>
-
-        {/* 4. Collected */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Collected</div>
-            <div className="text-2xl font-bold text-green-600">{completedOrders}</div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Total</div><div className="text-2xl font-bold">{totalOrders}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Confirmed</div><div className="text-2xl font-bold text-blue-600">{confirmedOrders}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Failed/Expired</div><div className="text-2xl font-bold text-destructive">{failedOrders}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Collected</div><div className="text-2xl font-bold text-green-600">{collectedOrders}</div></CardContent></Card>
       </div>
 
-      {/* Orders Table */}
+      {/* Table */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <CardTitle>Order List</CardTitle>
-              <CardDescription>
-                Manage and track student orders
-              </CardDescription>
-            </div>
+            <CardTitle>Order List</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <Calendar className="w-4 h-4 mr-2 opacity-50" />
-                  <SelectValue placeholder="Date" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[130px]"><Calendar className="w-4 h-4 mr-2 opacity-50" /><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="all">All Time</SelectItem>
                 </SelectContent>
               </Select>
-
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="confirmed">Approved</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="collected">Collected</SelectItem>
-                  <SelectItem value="cancelled">Failed</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
-
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search orders..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+                <Input placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-6 space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-48" />
-                  </div>
-                  <Skeleton className="h-6 w-20" />
-                </div>
-              ))}
-            </div>
+            <div className="p-6 space-y-4">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : filteredOrders.length === 0 ? (
             <div className="p-12 text-center">
               <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg">No Orders Found</h3>
-              <p className="text-muted-foreground">
-                {dateFilter === 'today' 
-                  ? "No orders have been placed today yet." 
-                  : "No orders found for this filter."}
-              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order ID</TableHead>
+                    <TableHead className="w-10">
+                      <Checkbox checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0}
+                        onCheckedChange={toggleSelectAll} />
+                    </TableHead>
+                    <TableHead>Order</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Campus</TableHead>
                     <TableHead>Amount</TableHead>
@@ -332,34 +238,24 @@ export function SuperAdminOrders() {
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-mono font-medium">
-                        {order.order_number}
+                    <TableRow key={order.id} className={cn(selectedIds.has(order.id) && "bg-primary/5")}>
+                      <TableCell>
+                        <Checkbox checked={selectedIds.has(order.id)} onCheckedChange={() => toggleSelect(order.id)} />
                       </TableCell>
+                      <TableCell className="font-mono font-medium text-sm">{order.order_number}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{order.customer_name || 'Unknown'}</p>
+                          <p className="font-medium text-sm">{order.customer_name || 'Unknown'}</p>
                           <p className="text-xs text-muted-foreground">{order.customer_email}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{order.campus?.code || 'N/A'}</Badge>
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(order.total)}
-                      </TableCell>
+                      <TableCell><Badge variant="outline">{order.campus?.code || 'N/A'}</Badge></TableCell>
+                      <TableCell className="font-semibold">{formatCurrency(order.total)}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(order.created_at), 'MMM d, h:mm a')}
-                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{format(new Date(order.created_at), 'MMM d, h:mm a')}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedOrder(order)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedOrder(order)}>
+                          <Eye className="h-4 w-4 mr-1" /> View
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -375,10 +271,8 @@ export function SuperAdminOrders() {
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Order Details</DialogTitle>
-            <DialogDescription>
-              Order #{selectedOrder?.order_number}
-            </DialogDescription>
+            <DialogTitle>Order #{selectedOrder?.order_number}</DialogTitle>
+            <DialogDescription>Full order details</DialogDescription>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
@@ -387,17 +281,39 @@ export function SuperAdminOrders() {
                   <p className="text-sm text-muted-foreground">Customer</p>
                   <p className="font-medium">{selectedOrder.customer_name || 'Unknown'}</p>
                   <p className="text-sm text-muted-foreground">{selectedOrder.customer_email}</p>
+                  {selectedOrder.customer_phone && <p className="text-sm text-muted-foreground">{selectedOrder.customer_phone}</p>}
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Campus</p>
                   <p className="font-medium">{selectedOrder.campus?.name}</p>
+                  <p className="text-xs text-muted-foreground">{selectedOrder.campus?.code}</p>
                 </div>
               </div>
 
-              <div>
-                <p className="text-sm text-muted-foreground">Order Status</p>
-                {getStatusBadge(selectedOrder.status)}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Order Status</p>
+                  {getStatusBadge(selectedOrder.status)}
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment</p>
+                  <Badge variant="outline">{selectedOrder.payment_status || 'N/A'}</Badge>
+                </div>
               </div>
+
+              {selectedOrder.razorpay_payment_id && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Razorpay Payment ID</p>
+                  <p className="font-mono text-xs">{selectedOrder.razorpay_payment_id}</p>
+                </div>
+              )}
+
+              {selectedOrder.commission_amount && selectedOrder.commission_amount > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Commission</p>
+                  <p className="font-medium">{formatCurrency(selectedOrder.commission_amount)}</p>
+                </div>
+              )}
 
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Items</p>
@@ -415,11 +331,22 @@ export function SuperAdminOrders() {
                 </div>
               </div>
 
-              <div>
-                <p className="text-sm text-muted-foreground">Order Date</p>
-                <p className="font-medium">
-                  {format(new Date(selectedOrder.created_at), 'MMMM d, yyyy at h:mm a')}
-                </p>
+              {selectedOrder.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Notes</p>
+                  <p className="text-sm">{selectedOrder.notes}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Created</p>
+                  <p>{format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Last Updated</p>
+                  <p>{format(new Date(selectedOrder.updated_at), 'MMM d, yyyy h:mm a')}</p>
+                </div>
               </div>
             </div>
           )}

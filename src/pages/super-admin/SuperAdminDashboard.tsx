@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CampusHealthMonitor } from '@/components/super-admin/CampusHealthMonitor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -368,6 +369,9 @@ export function SuperAdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Campus Health Monitor */}
+      <CampusHealthMonitor />
 
       {/* Bottom Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
