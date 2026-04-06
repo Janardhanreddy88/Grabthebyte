@@ -41,6 +41,7 @@ export function CampusManagement() {
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
   
   // Campus Dialog
   const [showCampusDialog, setShowCampusDialog] = useState(false);
