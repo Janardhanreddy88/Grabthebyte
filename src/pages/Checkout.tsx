@@ -8,7 +8,8 @@ import {
   Minus,
   Plus,
   ArrowRight,
-  WifiOff // 🚀 Added for Offline UX
+  WifiOff,
+  AlertOctagon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
