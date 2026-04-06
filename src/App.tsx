@@ -164,6 +164,7 @@ const App = () => (
                                   <Route path="/super-admin/users" element={<SuperAdminRoute><SuperAdminLayout><UserManagement /></SuperAdminLayout></SuperAdminRoute>} />
                                   <Route path="/super-admin/audit-logs" element={<SuperAdminRoute><SuperAdminLayout><AuditLogs /></SuperAdminLayout></SuperAdminRoute>} />
                                   <Route path="/super-admin/analytics" element={<SuperAdminRoute><SuperAdminLayout><Analytics /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/operations" element={<SuperAdminRoute><SuperAdminLayout><Operations /></SuperAdminLayout></SuperAdminRoute>} />
                                   
                                   <Route path="*" element={<NotFound />} />
                                 </Routes>

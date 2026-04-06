@@ -502,7 +502,7 @@ function RefundLedgerPanel() {
       .select('id, order_number, customer_name, amount, reason, razorpay_payment_id, refund_status, created_at')
       .order('created_at', { ascending: false })
       .limit(50);
-    setEntries((data || []) as RefundEntry[]);
+    setEntries((data || []) as unknown as RefundEntry[]);
     setIsLoading(false);
   }, []);
 
