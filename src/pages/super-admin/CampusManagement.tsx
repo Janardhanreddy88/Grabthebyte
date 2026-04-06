@@ -530,6 +530,13 @@ export function CampusManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Campus Onboarding Wizard */}
+      <CampusOnboardingWizard
+        open={showWizard}
+        onOpenChange={setShowWizard}
+        onSuccess={() => { fetchCampuses(); refreshData(); }}
+      />
     </div>
   );
 }
