@@ -160,6 +160,40 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     } as Campus;
   }, []);
 
+  // Real-time subscription for campus changes (propagates Super Admin toggles)
+  useEffect(() => {
+    if (!campus?.id) return;
+
+    const channel = supabase
+      .channel('campus-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'campuses',
+          filter: `id=eq.${campus.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          const settings = {
+            ...defaultSettings,
+            ...(updated.settings as unknown as Partial<CampusSettings>),
+          };
+          setCampus({
+            ...updated,
+            settings,
+          } as Campus);
+          localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify({ ...updated, settings }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [campus?.id]);
+
   useEffect(() => {
     const initCampus = async () => {
       try {
@@ -190,7 +224,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
             return;
           }
-          // Note: We DO NOT remove the item on fail anymore.
         }
 
         const { data: { session } } = await supabase.auth.getSession();

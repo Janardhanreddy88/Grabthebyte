@@ -91,22 +91,30 @@ export function AuditLogs() {
 
       if (error) throw error;
 
-      // Fetch user info for each log
-      const logsWithUsers = await Promise.all(
-        (data || []).map(async (log) => {
-          const { data: profile } = await supabase
+      // Batch-fetch user profiles to avoid N+1 queries
+      const uniqueUserIds = [...new Set((data || []).map(log => log.user_id))];
+      const profileMap = new Map<string, { full_name: string | null; email: string | null }>();
+
+      if (uniqueUserIds.length > 0) {
+        // Fetch in batches of 50 to stay within query limits
+        for (let i = 0; i < uniqueUserIds.length; i += 50) {
+          const batch = uniqueUserIds.slice(i, i + 50);
+          const { data: profiles } = await supabase
             .from('profiles')
-            .select('full_name, email')
-            .eq('user_id', log.user_id)
-            .single();
+            .select('user_id, full_name, email')
+            .in('user_id', batch);
           
-          return {
-            ...log,
-            user_name: profile?.full_name,
-            user_email: profile?.email
-          };
-        })
-      );
+          (profiles || []).forEach(p => {
+            profileMap.set(p.user_id, { full_name: p.full_name, email: p.email });
+          });
+        }
+      }
+
+      const logsWithUsers = (data || []).map(log => ({
+        ...log,
+        user_name: profileMap.get(log.user_id)?.full_name,
+        user_email: profileMap.get(log.user_id)?.email,
+      }));
 
       setLogs(logsWithUsers);
     } catch (error) {

@@ -268,7 +268,7 @@ export function SuperAdminOrders() {
       </Card>
 
       {/* Order Detail Dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => { if (!open) setSelectedOrder(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Order #{selectedOrder?.order_number}</DialogTitle>

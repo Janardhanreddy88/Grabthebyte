@@ -147,12 +147,12 @@ export function Settlements() {
       const selectedCampus = campuses.find(c => c.id === newSettlement.campusId);
       if (!selectedCampus) throw new Error('Campus not found');
 
-      // Calculate totals from orders
+      // Calculate totals from orders — include both confirmed AND collected
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select('total, commission_amount')
         .eq('campus_id', newSettlement.campusId)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'collected'])
         .gte('created_at', newSettlement.periodStart)
         .lte('created_at', newSettlement.periodEnd);
 
