@@ -60,7 +60,7 @@ export function Analytics() {
       const { data: ordersData, error } = await query;
       if (error) throw error;
 
-      const validOrders = (ordersData || []).filter(o => o.status !== 'failed');
+      const validOrders = (ordersData || []).filter(o => o.status === 'confirmed' || o.status === 'collected');
 
       // Group by date
       const dailyMap = new Map<string, { orders: number; revenue: number; commission: number }>();
@@ -75,7 +75,7 @@ export function Analytics() {
         dailyMap.set(date, {
           orders: existing.orders + 1,
           revenue: existing.revenue + (order.total || 0),
-          commission: existing.commission + (order.commission_amount || order.total * 0.1 || 0)
+          commission: existing.commission + ((order.commission_amount != null && order.commission_amount > 0) ? order.commission_amount : order.total * 0.1)
         });
       });
 
@@ -97,7 +97,7 @@ export function Analytics() {
           campusMap.set(o.campus_id, {
             orders: existing.orders + 1,
             revenue: existing.revenue + (o.total || 0),
-            commission: existing.commission + (o.commission_amount || o.total * 0.1 || 0),
+            commission: existing.commission + ((o.commission_amount != null && o.commission_amount > 0) ? o.commission_amount : o.total * 0.1),
           });
         });
 
@@ -166,9 +166,9 @@ export function Analytics() {
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total Revenue', value: formatCurrency(totalRevenue), icon: DollarSign, bg: 'bg-green-500/10', color: 'text-green-600' },
-          { label: 'Total Orders', value: totalOrders.toString(), icon: ShoppingCart, bg: 'bg-blue-500/10', color: 'text-blue-600' },
-          { label: 'Platform Earnings', value: formatCurrency(totalCommission), icon: TrendingUp, bg: 'bg-purple-500/10', color: 'text-purple-600' },
+          { label: 'Total Order Value (GMV)', value: formatCurrency(totalRevenue), icon: DollarSign, bg: 'bg-green-500/10', color: 'text-green-600' },
+          { label: 'Confirmed Orders', value: totalOrders.toString(), icon: ShoppingCart, bg: 'bg-blue-500/10', color: 'text-blue-600' },
+          { label: 'Platform Commission', value: formatCurrency(totalCommission), icon: TrendingUp, bg: 'bg-purple-500/10', color: 'text-purple-600' },
           { label: 'Avg Order Value', value: formatCurrency(avgOrderValue), icon: BarChart3, bg: 'bg-orange-500/10', color: 'text-orange-600' },
         ].map(kpi => (
           <Card key={kpi.label}>

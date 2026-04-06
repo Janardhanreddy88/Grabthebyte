@@ -219,7 +219,7 @@ export function SuperAdminDashboard() {
           .from('orders')
           .select('total, created_at')
           .gte('created_at', weekStart.toISOString())
-          .neq('status', 'failed');
+          .in('status', ['confirmed', 'collected']);
         if (filters.campusId) weekQuery = weekQuery.eq('campus_id', filters.campusId);
 
         const { data: weekOrders } = await weekQuery;
@@ -295,12 +295,12 @@ export function SuperAdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard title="Total GMV" value={formatCurrency(dashboardStats?.total_gmv || 0)}
-          subtitle="Gross Value" icon={IndianRupee} variant="primary" isLoading={isLoading} />
-        <StatCard title="Net Revenue" value={formatCurrency(dashboardStats?.net_revenue || 0)}
-          subtitle="Commission" icon={TrendingUp} variant="success" isLoading={isLoading} />
-        <StatCard title="Pending Payouts" value={formatCurrency(dashboardStats?.pending_payouts || 0)}
-          subtitle="Due to vendors" icon={Wallet} variant="warning" isLoading={isLoading} />
+        <StatCard title="Total Order Value" value={formatCurrency(dashboardStats?.total_gmv || 0)}
+          subtitle="Confirmed + Collected" icon={IndianRupee} variant="primary" isLoading={isLoading} />
+        <StatCard title="Platform Commission" value={formatCurrency(dashboardStats?.net_revenue || 0)}
+          subtitle="Your earnings" icon={TrendingUp} variant="success" isLoading={isLoading} />
+        <StatCard title="Vendor Payable" value={formatCurrency(dashboardStats?.pending_payouts || 0)}
+          subtitle="Due to campuses" icon={Wallet} variant="warning" isLoading={isLoading} />
         <StatCard title="Active Orders" value={dashboardStats?.active_orders || 0}
           subtitle="Preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
       </div>
