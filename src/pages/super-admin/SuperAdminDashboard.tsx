@@ -166,24 +166,42 @@ export function SuperAdminDashboard() {
         const { data: ordersData } = await ordersQuery;
         setRecentOrders((ordersData as RecentOrder[]) || []);
 
-        // Top selling items (last 7 days)
+        // Top selling items — filter by campus if selected
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        let itemsQuery = supabase
-          .from('order_items')
-          .select('name, quantity, order_id');
-        const { data: itemsData } = await itemsQuery;
-        
-        if (itemsData) {
-          const itemCounts = new Map<string, number>();
-          itemsData.forEach(item => {
-            itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity);
-          });
-          const sorted = Array.from(itemCounts.entries())
-            .map(([name, count]) => ({ name, count }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 5);
-          setTopItems(sorted);
+
+        if (filters.campusId) {
+          // Get order IDs for this campus first, then fetch their items
+          const { data: campusOrders } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('campus_id', filters.campusId)
+            .gte('created_at', sevenDaysAgo.toISOString());
+          
+          const orderIds = (campusOrders || []).map(o => o.id);
+          if (orderIds.length > 0) {
+            const { data: itemsData } = await supabase
+              .from('order_items')
+              .select('name, quantity')
+              .in('order_id', orderIds.slice(0, 200));
+            
+            if (itemsData) {
+              const itemCounts = new Map<string, number>();
+              itemsData.forEach(item => itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity));
+              setTopItems(Array.from(itemCounts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5));
+            }
+          } else {
+            setTopItems([]);
+          }
+        } else {
+          const { data: itemsData } = await supabase
+            .from('order_items')
+            .select('name, quantity');
+          if (itemsData) {
+            const itemCounts = new Map<string, number>();
+            itemsData.forEach(item => itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity));
+            setTopItems(Array.from(itemCounts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5));
+          }
         }
 
         // User stats
@@ -192,29 +210,37 @@ export function SuperAdminDashboard() {
         });
         if (userStatsData) setUserStats(userStatsData as unknown as UserStats);
 
-        // Weekly revenue data (last 7 days)
+        // Weekly revenue — single query instead of 7 sequential queries
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+
+        let weekQuery = supabase
+          .from('orders')
+          .select('total, created_at')
+          .gte('created_at', weekStart.toISOString())
+          .neq('status', 'failed');
+        if (filters.campusId) weekQuery = weekQuery.eq('campus_id', filters.campusId);
+
+        const { data: weekOrders } = await weekQuery;
+
+        const dayMap = new Map<string, { revenue: number; orders: number }>();
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(); d.setDate(d.getDate() - i);
+          dayMap.set(format(d, 'yyyy-MM-dd'), { revenue: 0, orders: 0 });
+        }
+        (weekOrders || []).forEach(o => {
+          const key = format(new Date(o.created_at), 'yyyy-MM-dd');
+          const entry = dayMap.get(key);
+          if (entry) { entry.revenue += o.total || 0; entry.orders += 1; }
+        });
+
         const weekData: WeeklyData[] = [];
         for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = new Date(date); dayEnd.setHours(23, 59, 59, 999);
-          
-          let dayQuery = supabase
-            .from('orders')
-            .select('total')
-            .gte('created_at', dayStart.toISOString())
-            .lte('created_at', dayEnd.toISOString())
-            .neq('status', 'failed');
-          if (filters.campusId) dayQuery = dayQuery.eq('campus_id', filters.campusId);
-          
-          const { data: dayData } = await dayQuery;
-          const revenue = (dayData || []).reduce((sum, o) => sum + (o.total || 0), 0);
-          weekData.push({
-            day: format(date, 'EEE'),
-            revenue,
-            orders: dayData?.length || 0,
-          });
+          const d = new Date(); d.setDate(d.getDate() - i);
+          const key = format(d, 'yyyy-MM-dd');
+          const entry = dayMap.get(key) || { revenue: 0, orders: 0 };
+          weekData.push({ day: format(d, 'EEE'), revenue: entry.revenue, orders: entry.orders });
         }
         setWeeklyData(weekData);
       } catch (err) {
