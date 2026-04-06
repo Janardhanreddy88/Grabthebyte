@@ -37,12 +37,38 @@ export default function Checkout() {
 
   const [isCheckingStock, setIsCheckingStock] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
-  
-  // 🚀 THE NETWORK GUARDIAN
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [ordersPaused, setOrdersPaused] = useState(false);
+  const [pauseReason, setPauseReason] = useState('');
 
   const lastSubmitRef = useRef<number>(0);
   const SUBMIT_COOLDOWN_MS = 2000;
+
+  // Check kill switch
+  useEffect(() => {
+    const checkPause = async () => {
+      const { data } = await supabase
+        .from('platform_settings')
+        .select('orders_paused, orders_paused_reason')
+        .single();
+      if (data) {
+        setOrdersPaused(data.orders_paused ?? false);
+        setPauseReason(data.orders_paused_reason ?? '');
+      }
+    };
+    checkPause();
+
+    // Real-time kill switch listener
+    const ch = supabase
+      .channel('checkout-kill-switch')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'platform_settings' }, (payload) => {
+        const d = payload.new as any;
+        setOrdersPaused(d.orders_paused ?? false);
+        setPauseReason(d.orders_paused_reason ?? '');
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   // Real-time network listener
   useEffect(() => {
