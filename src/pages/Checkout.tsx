@@ -345,7 +345,11 @@ export default function Checkout() {
               onClick={handlePlaceOrder}
               disabled={isLoading || isOffline || ordersPaused}
             >
-              {isOffline ? (
+              {ordersPaused ? (
+                <span className="flex items-center gap-2">
+                  <AlertOctagon size={16} /> Orders Paused
+                </span>
+              ) : isOffline ? (
                 <span className="flex items-center gap-2">
                   <WifiOff size={16} /> Offline: Connect to Pay
                 </span>
