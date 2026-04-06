@@ -10,12 +10,11 @@ import {
   Menu,
   X,
   ChevronDown,
-  Bell,
-  
   Users,
   History,
   BarChart3
 } from 'lucide-react';
+import { NotificationBell } from '@/components/super-admin/NotificationBell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
