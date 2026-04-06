@@ -240,9 +240,23 @@ function ActiveOrdersPanel() {
     // Optimistic
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
 
+    // Build update payload — Force Accept must also set payment_status + commission
+    const updatePayload: Record<string, any> = {
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (newStatus === 'confirmed' && order.status === 'pending') {
+      // Force Accept: mark payment as completed so kiosk scanner works
+      updatePayload.payment_status = 'completed';
+      // Calculate commission so settlement math is correct
+      const commissionRate = 0.10; // fallback, campus rate applied server-side
+      updatePayload.commission_amount = Math.round(order.total * commissionRate * 100) / 100;
+    }
+
     const { error } = await supabase
       .from('orders')
-      .update({ status: newStatus as any, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', order.id);
 
     if (error) {
