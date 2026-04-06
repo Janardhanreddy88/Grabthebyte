@@ -477,6 +477,57 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_alerts: {
+        Row: {
+          campus_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          metadata: Json | null
+          severity: string
+          title: string
+          type: string
+        }
+        Insert: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          metadata?: Json | null
+          severity?: string
+          title: string
+          type: string
+        }
+        Update: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          metadata?: Json | null
+          severity?: string
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_alerts_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_alerts_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_settings: {
         Row: {
           created_at: string | null
@@ -755,6 +806,7 @@ export type Database = {
       }
       expire_uncollected_orders_5h: { Args: never; Returns: undefined }
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
+      get_campus_health: { Args: never; Returns: Json }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_super_admin_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_user_campus_id: { Args: { _user_id: string }; Returns: string }
