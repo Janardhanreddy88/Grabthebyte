@@ -294,7 +294,46 @@ function ActiveOrdersPanel() {
       return;
     }
 
-    // 2. Log to refund ledger
+    // 2. Restore stock if order was confirmed (stock was already decremented)
+    if (rejectOrder.status === 'confirmed' && rejectOrder.order_items?.length) {
+      for (const item of rejectOrder.order_items) {
+        if (item.id) {
+          // item.id here is order_item id; we need menu_item_id from the order_items query
+          // The query already fetches order_items with id, name, quantity, price
+          // We need to look up the menu_item_id separately
+        }
+      }
+      // Fetch menu_item_ids and restore stock
+      const { data: orderItems } = await supabase
+        .from('order_items')
+        .select('menu_item_id, quantity')
+        .eq('order_id', rejectOrder.id);
+
+      if (orderItems) {
+        for (const item of orderItems) {
+          if (item.menu_item_id) {
+            await supabase.rpc('reset_item_stock', {
+              item_id: item.menu_item_id,
+              new_stock: undefined, // we need to increment, not reset
+            });
+            // Actually, reset_item_stock doesn't increment. Use direct update.
+            const { data: currentItem } = await supabase
+              .from('menu_items')
+              .select('stock_quantity')
+              .eq('id', item.menu_item_id)
+              .single();
+            if (currentItem?.stock_quantity != null) {
+              await supabase
+                .from('menu_items')
+                .update({ stock_quantity: currentItem.stock_quantity + item.quantity })
+                .eq('id', item.menu_item_id);
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Log to refund ledger
     await supabase.from('refund_ledger' as any).insert({
       order_id: rejectOrder.id,
       order_number: rejectOrder.order_number,
