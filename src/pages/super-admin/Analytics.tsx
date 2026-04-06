@@ -75,7 +75,7 @@ export function Analytics() {
         dailyMap.set(date, {
           orders: existing.orders + 1,
           revenue: existing.revenue + (order.total || 0),
-          commission: existing.commission + (order.commission_amount ?? order.total * 0.1 ?? 0)
+          commission: existing.commission + ((order.commission_amount != null && order.commission_amount > 0) ? order.commission_amount : order.total * 0.1)
         });
       });
 
