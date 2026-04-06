@@ -109,7 +109,10 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
-    // 🚀 SHIELD 1: Prevent offline submissions
+    if (ordersPaused) {
+      toast({ title: "Orders Paused", description: pauseReason || "Kitchen is overwhelmed. Try again shortly.", variant: "destructive" });
+      return;
+    }
     if (isOffline) {
       toast({ title: "No Connection", description: "Internet required to place order.", variant: "destructive" });
       return;
