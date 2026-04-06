@@ -219,7 +219,7 @@ export function SuperAdminDashboard() {
           .from('orders')
           .select('total, created_at')
           .gte('created_at', weekStart.toISOString())
-          .neq('status', 'failed');
+          .in('status', ['confirmed', 'collected']);
         if (filters.campusId) weekQuery = weekQuery.eq('campus_id', filters.campusId);
 
         const { data: weekOrders } = await weekQuery;
