@@ -207,6 +207,16 @@ export default function Checkout() {
       <main className="flex-1 overflow-y-auto">
         <PullToRefresh onRefresh={async () => window.location.reload()}>
         <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
+          {/* Kill Switch Banner */}
+          {ordersPaused && (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive">
+              <AlertOctagon size={20} className="shrink-0" />
+              <div>
+                <p className="font-bold text-sm">Kitchen is currently overwhelmed</p>
+                <p className="text-xs opacity-80">{pauseReason || 'Pausing orders temporarily. Please try again in a few minutes.'}</p>
+              </div>
+            </div>
+          )}
           <AnimatePresence>
             {stockError && (
               <motion.div
