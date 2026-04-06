@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Building2, 
-  Plus,
-  Edit,
-  Trash2,
-  RefreshCw,
-  Search,
-  MapPin,
-  Phone,
-  Mail,
-  User,
-  CreditCard,
-  Percent
+import {
+  Building2, Plus, Edit, Trash2, RefreshCw, Search,
+  MapPin, Phone, Mail, User, CreditCard, Percent, Sparkles
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
