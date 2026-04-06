@@ -339,11 +339,11 @@ export default function Checkout() {
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
             <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
           </div>
-          <motion.div className="flex-[1.5]" whileTap={!isOffline ? { scale: 0.98 } : {}}>
+          <motion.div className="flex-[1.5]" whileTap={!isOffline && !ordersPaused ? { scale: 0.98 } : {}}>
             <Button
-              className={`w-full h-10 rounded-xl text-sm font-bold shadow-lg ${isOffline ? 'bg-muted text-muted-foreground' : 'shadow-primary/20'}`}
+              className={`w-full h-10 rounded-xl text-sm font-bold shadow-lg ${(isOffline || ordersPaused) ? 'bg-muted text-muted-foreground' : 'shadow-primary/20'}`}
               onClick={handlePlaceOrder}
-              disabled={isLoading || isOffline}
+              disabled={isLoading || isOffline || ordersPaused}
             >
               {isOffline ? (
                 <span className="flex items-center gap-2">
