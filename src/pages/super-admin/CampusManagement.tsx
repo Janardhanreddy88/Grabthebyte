@@ -229,9 +229,13 @@ export function CampusManagement() {
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             Refresh
           </Button>
+          <Button variant="outline" onClick={() => setShowWizard(true)}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Onboard Campus
+          </Button>
           <Button onClick={() => { resetCampusForm(); setShowCampusDialog(true); }}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Campus
+            Quick Add
           </Button>
         </div>
       </div>
