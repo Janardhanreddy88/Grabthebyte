@@ -25,6 +25,7 @@ import { useOrders } from "@/hooks/useOrders";
 import { EmptyState } from "@/components/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { ImageWithFallback } from "@/components/ImageWithFallback";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Checkout() {
   const navigate = useNavigate();
