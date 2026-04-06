@@ -534,6 +534,9 @@ export type Database = {
           global_commission_rate: number | null
           id: string
           manual_verification_enabled: boolean | null
+          orders_paused: boolean
+          orders_paused_at: string | null
+          orders_paused_reason: string | null
           settlement_period: string | null
           updated_at: string | null
         }
@@ -542,6 +545,9 @@ export type Database = {
           global_commission_rate?: number | null
           id?: string
           manual_verification_enabled?: boolean | null
+          orders_paused?: boolean
+          orders_paused_at?: string | null
+          orders_paused_reason?: string | null
           settlement_period?: string | null
           updated_at?: string | null
         }
@@ -550,6 +556,9 @@ export type Database = {
           global_commission_rate?: number | null
           id?: string
           manual_verification_enabled?: boolean | null
+          orders_paused?: boolean
+          orders_paused_at?: string | null
+          orders_paused_reason?: string | null
           settlement_period?: string | null
           updated_at?: string | null
         }
@@ -605,6 +614,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      refund_ledger: {
+        Row: {
+          amount: number
+          campus_id: string
+          created_at: string
+          created_by: string
+          customer_email: string | null
+          customer_name: string | null
+          id: string
+          order_id: string
+          order_number: string
+          razorpay_payment_id: string | null
+          reason: string
+          refund_reference: string | null
+          refund_status: string
+          refunded_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          campus_id: string
+          created_at?: string
+          created_by: string
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          order_id: string
+          order_number: string
+          razorpay_payment_id?: string | null
+          reason: string
+          refund_reference?: string | null
+          refund_status?: string
+          refunded_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          campus_id?: string
+          created_at?: string
+          created_by?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          id?: string
+          order_id?: string
+          order_number?: string
+          razorpay_payment_id?: string | null
+          reason?: string
+          refund_reference?: string | null
+          refund_status?: string
+          refunded_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       settlements: {
         Row: {
