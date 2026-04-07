@@ -910,6 +910,7 @@ export type Database = {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
       }
+      restore_order_stock: { Args: { p_order_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "student" | "admin" | "kiosk" | "super_admin"
