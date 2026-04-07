@@ -72,11 +72,17 @@ Deno.serve(async (req) => {
 
     if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
 
-    // 🌟 FIX 1: THE ARMOR PLATING!
-    // If the order is ALREADY paid, ignore any delayed "failed" webhooks from previous bad pin attempts!
-    if (order.payment_status === "completed" || order.status === "confirmed") {
+    // 🛡️ ARMOR PLATING: Guard against late webhooks on already-resolved orders
+    // If already paid/confirmed OR force-rejected, ignore ALL subsequent webhooks
+    if (order.payment_status === "completed" || order.status === "confirmed" || order.status === "collected") {
       console.log(`Order ${order.id} is already completed. Ignoring ${eventType} webhook.`);
       return new Response(JSON.stringify({ success: true, message: "Order already completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // 🛡️ CRITICAL: If super admin force-rejected this order, NEVER re-confirm it
+    if (order.status === "failed") {
+      console.log(`Order ${order.id} is already FAILED/REJECTED. Ignoring ${eventType} webhook to prevent resurrection.`);
+      return new Response(JSON.stringify({ success: true, message: "Order already failed — webhook ignored" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 8. STATUS LOGIC
