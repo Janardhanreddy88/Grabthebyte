@@ -193,8 +193,8 @@ export default function MyOrders() {
                             </div>
                           </div>
                           <p className="text-xs font-medium text-red-600/80 mt-1 line-clamp-1">{order.rejection_reason || "Bank error. You can still retry!"}</p>
-                          <Button className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-red-600/20" onClick={handleRetry} disabled={retryLoading}>
-                            {retryLoading ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />} Retry Payment
+                          <Button className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-red-600/20" onClick={handleRetry} disabled={isRetrying}>
+                            {isRetrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />} Retry Payment
                           </Button>
                         </div>
                       </div>
