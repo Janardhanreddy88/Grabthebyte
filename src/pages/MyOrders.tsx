@@ -113,8 +113,11 @@ export default function MyOrders() {
           const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed');
 
           const goToReceipt = () => navigate(`/order/${order.id}`);
+          const [retryLoading, setRetryLoading] = useState(false);
           const handleRetry = (e: React.MouseEvent) => { 
             e.stopPropagation(); 
+            if (retryLoading) return;
+            setRetryLoading(true);
             navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`); 
           };
 
