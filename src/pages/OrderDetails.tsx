@@ -59,7 +59,7 @@ export default function OrderDetails() {
     fetchOrderDetails();
   }, [orderId, navigate]);
 
-  if (loading) return <div className="min-h-screen bg-gray-50 flex justify-center items-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
+  if (loading) return <div className="min-h-screen bg-gray-50 flex justify-center items-center safe-top"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
   if (!order) return <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center text-muted-foreground gap-4">Order not found. <Button onClick={() => navigate('/my-orders')}>Back to Orders</Button></div>;
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
