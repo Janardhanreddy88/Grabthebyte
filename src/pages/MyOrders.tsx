@@ -221,8 +221,8 @@ export default function MyOrders() {
                           <div className="flex items-center gap-1 text-orange-700 bg-orange-100/80 px-2.5 py-0.5 rounded-md border border-orange-200"><Timer size={12} /><span className="text-xs font-black font-mono tracking-wider">{formatTime(rem)}</span></div>
                         </div>
                         <p className="text-xs font-medium text-orange-600/80 mt-1">Complete your payment to confirm order</p>
-                        <Button className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-orange-600/20" onClick={handleRetry}>
-                          <RefreshCw size={14} className="mr-2" /> Pay Now
+                        <Button className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-orange-600/20" onClick={handleRetry} disabled={retryLoading}>
+                          {retryLoading ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />} Pay Now
                         </Button>
                       </div>
                     </div>
