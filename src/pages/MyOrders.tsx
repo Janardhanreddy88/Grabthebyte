@@ -23,6 +23,7 @@ export default function MyOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [retryingOrderIds, setRetryingOrderIds] = useState<Set<string>>(new Set());
   const processingExpiryIds = useRef<Set<string>>(new Set());
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
 
