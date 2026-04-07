@@ -27,6 +27,7 @@ export default function OrderDetails() {
   
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!orderId) { navigate('/my-orders'); return; }
