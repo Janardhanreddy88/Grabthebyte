@@ -225,10 +225,11 @@ export default function OrderDetails() {
           {isPaymentFailed && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-700 text-white"
               >
-                <RefreshCw size={18} className="mr-2" /> Retry Payment
+                {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <RefreshCw size={18} className="mr-2" />} Retry Payment
               </Button>
             </motion.div>
           )}
@@ -236,10 +237,11 @@ export default function OrderDetails() {
           {normalizedStatus === 'pending' && !isTimedOut && !isPaid && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 text-white"
               >
-                <Receipt size={18} className="mr-2" /> Complete Payment Now
+                {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Receipt size={18} className="mr-2" />} Complete Payment Now
               </Button>
             </motion.div>
           )}
