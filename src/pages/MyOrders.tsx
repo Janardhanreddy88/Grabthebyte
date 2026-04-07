@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight, ShoppingBag, RefreshCw, AlertCircle, Timer, Ban } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight, ShoppingBag, RefreshCw, AlertCircle, Timer, Ban, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ export default function MyOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [retryingOrderIds, setRetryingOrderIds] = useState<Set<string>>(new Set());
   const processingExpiryIds = useRef<Set<string>>(new Set());
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -113,8 +114,11 @@ export default function MyOrders() {
           const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed');
 
           const goToReceipt = () => navigate(`/order/${order.id}`);
+          const isRetrying = retryingOrderIds.has(order.id);
           const handleRetry = (e: React.MouseEvent) => { 
             e.stopPropagation(); 
+            if (isRetrying) return;
+            setRetryingOrderIds(prev => new Set(prev).add(order.id));
             navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`); 
           };
 
@@ -189,8 +193,8 @@ export default function MyOrders() {
                             </div>
                           </div>
                           <p className="text-xs font-medium text-red-600/80 mt-1 line-clamp-1">{order.rejection_reason || "Bank error. You can still retry!"}</p>
-                          <Button className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-red-600/20" onClick={handleRetry}>
-                            <RefreshCw size={14} className="mr-2" /> Retry Payment
+                          <Button className="w-full mt-3 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-red-600/20" onClick={handleRetry} disabled={isRetrying}>
+                            {isRetrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />} Retry Payment
                           </Button>
                         </div>
                       </div>
@@ -218,8 +222,8 @@ export default function MyOrders() {
                           <div className="flex items-center gap-1 text-orange-700 bg-orange-100/80 px-2.5 py-0.5 rounded-md border border-orange-200"><Timer size={12} /><span className="text-xs font-black font-mono tracking-wider">{formatTime(rem)}</span></div>
                         </div>
                         <p className="text-xs font-medium text-orange-600/80 mt-1">Complete your payment to confirm order</p>
-                        <Button className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-orange-600/20" onClick={handleRetry}>
-                          <RefreshCw size={14} className="mr-2" /> Pay Now
+                        <Button className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white h-11 text-sm font-bold rounded-xl shadow-md shadow-orange-600/20" onClick={handleRetry} disabled={isRetrying}>
+                          {isRetrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />} Pay Now
                         </Button>
                       </div>
                     </div>

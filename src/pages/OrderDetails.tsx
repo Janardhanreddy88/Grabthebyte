@@ -27,6 +27,7 @@ export default function OrderDetails() {
   
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!orderId) { navigate('/my-orders'); return; }
@@ -58,7 +59,7 @@ export default function OrderDetails() {
     fetchOrderDetails();
   }, [orderId, navigate]);
 
-  if (loading) return <div className="min-h-screen bg-gray-50 flex justify-center items-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
+  if (loading) return <div className="min-h-screen bg-gray-50 flex justify-center items-center safe-top"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
   if (!order) return <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center text-muted-foreground gap-4">Order not found. <Button onClick={() => navigate('/my-orders')}>Back to Orders</Button></div>;
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -105,7 +106,7 @@ export default function OrderDetails() {
     <div className="min-h-screen bg-gray-100 flex justify-center sm:py-8 font-sans">
       <div className="w-full max-w-[420px] bg-[#F9FAFB] sm:rounded-[2.5rem] sm:border border-black/5 sm:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] relative overflow-hidden flex flex-col">
         
-        <div className={`bg-gradient-to-br ${config.bg} pt-6 pb-24 px-6 text-center text-white relative z-0 rounded-b-[2.5rem] shadow-sm`}>
+        <div className={`bg-gradient-to-br ${config.bg} pt-6 pb-24 px-6 text-center text-white relative z-0 rounded-b-[2.5rem] shadow-sm safe-top`}>
           <div className="flex justify-start mb-2">
             <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
               <ArrowLeft size={20} className="text-white" />
@@ -224,10 +225,11 @@ export default function OrderDetails() {
           {isPaymentFailed && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-700 text-white"
               >
-                <RefreshCw size={18} className="mr-2" /> Retry Payment
+                {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <RefreshCw size={18} className="mr-2" />} Retry Payment
               </Button>
             </motion.div>
           )}
@@ -235,10 +237,11 @@ export default function OrderDetails() {
           {normalizedStatus === 'pending' && !isTimedOut && !isPaid && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => navigate(`/payment?order_id=${order.id}&amount=${order.total}`)} 
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 text-white"
               >
-                <Receipt size={18} className="mr-2" /> Complete Payment Now
+                {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Receipt size={18} className="mr-2" />} Complete Payment Now
               </Button>
             </motion.div>
           )}

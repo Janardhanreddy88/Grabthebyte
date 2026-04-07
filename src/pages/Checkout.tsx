@@ -336,7 +336,7 @@ export default function Checkout() {
       </main>
 
       {/* Sticky Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50 safe-bottom">
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
