@@ -106,7 +106,7 @@ export default function OrderDetails() {
     <div className="min-h-screen bg-gray-100 flex justify-center sm:py-8 font-sans">
       <div className="w-full max-w-[420px] bg-[#F9FAFB] sm:rounded-[2.5rem] sm:border border-black/5 sm:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] relative overflow-hidden flex flex-col">
         
-        <div className={`bg-gradient-to-br ${config.bg} pt-6 pb-24 px-6 text-center text-white relative z-0 rounded-b-[2.5rem] shadow-sm`}>
+        <div className={`bg-gradient-to-br ${config.bg} pt-6 pb-24 px-6 text-center text-white relative z-0 rounded-b-[2.5rem] shadow-sm safe-top`}>
           <div className="flex justify-start mb-2">
             <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
               <ArrowLeft size={20} className="text-white" />
