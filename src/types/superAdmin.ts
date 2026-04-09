@@ -20,29 +20,7 @@ export interface Campus {
   updated_at: string;
 }
 
-export interface Settlement {
-  id: string;
-  campus_id: string;
-  period_start: string;
-  period_end: string;
-  total_sales: number;
-  total_orders: number;
-  commission_amount: number;
-  net_payable: number;
-  status: 'pending' | 'processing' | 'paid' | 'disputed';
-  paid_at: string | null;
-  payment_reference: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  campus?: {
-    name: string;
-    code: string;
-    owner_name?: string | null;
-    upi_id?: string | null;
-  };
-}
+// Settlement interface removed — system being rebuilt
 
 export interface PlatformSettings {
   id: string;
@@ -72,10 +50,7 @@ export interface PendingOrder {
 
 export interface DashboardStats {
   total_gmv: number;
-  net_revenue: number;
-  pending_payouts: number;
   active_orders: number;
-  pending_verification: number;
   total_orders_today: number;
 }
 
