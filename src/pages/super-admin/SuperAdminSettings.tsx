@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
 import { 
-  Settings, 
   CreditCard, 
-  Percent,
   Save,
   AlertCircle,
   Activity,
   Shield,
   Database,
-  Globe,
-  Bell
+  Globe
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
