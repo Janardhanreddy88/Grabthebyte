@@ -294,15 +294,13 @@ export function SuperAdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard title="Total Order Value" value={formatCurrency(dashboardStats?.total_gmv || 0)}
           subtitle="Confirmed + Collected" icon={IndianRupee} variant="primary" isLoading={isLoading} />
-        <StatCard title="Platform Commission" value={formatCurrency(dashboardStats?.net_revenue || 0)}
-          subtitle="Your earnings" icon={TrendingUp} variant="success" isLoading={isLoading} />
-        <StatCard title="Vendor Payable" value={formatCurrency(dashboardStats?.pending_payouts || 0)}
-          subtitle="Due to campuses" icon={Wallet} variant="warning" isLoading={isLoading} />
         <StatCard title="Active Orders" value={dashboardStats?.active_orders || 0}
-          subtitle="Preparing" icon={ShoppingBag} variant="default" isLoading={isLoading} />
+          subtitle="Pending + Confirmed" icon={ShoppingBag} variant="default" isLoading={isLoading} />
+        <StatCard title="Today's Orders" value={dashboardStats?.total_orders_today || 0}
+          subtitle="Confirmed + Collected" icon={Clock} variant="success" isLoading={isLoading} />
       </div>
 
       {/* Quick Stats Row */}
@@ -338,8 +336,8 @@ export function SuperAdminDashboard() {
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-1.5 sm:p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400" /></div>
             <div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Commission</p>
-              <p className="text-base sm:text-lg font-bold">{platformSettings?.global_commission_rate || 10}%</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Mode</p>
+              <p className="text-base sm:text-lg font-bold">{platformSettings?.manual_verification_enabled ? 'Manual' : 'Auto'}</p>
             </div>
           </div>
         </Card>

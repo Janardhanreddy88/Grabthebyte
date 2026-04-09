@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
 import { 
-  Settings, 
   CreditCard, 
-  Percent,
   Save,
   AlertCircle,
   Activity,
   Shield,
   Database,
-  Globe,
-  Bell
+  Globe
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,14 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -34,8 +23,6 @@ export function SuperAdminSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [localSettings, setLocalSettings] = useState({
     manual_verification_enabled: platformSettings?.manual_verification_enabled ?? true,
-    global_commission_rate: platformSettings?.global_commission_rate ?? 10,
-    settlement_period: platformSettings?.settlement_period ?? 'daily',
   });
 
   // Sync local state when platform settings load/change
@@ -43,8 +30,6 @@ export function SuperAdminSettings() {
     if (platformSettings) {
       setLocalSettings({
         manual_verification_enabled: platformSettings.manual_verification_enabled ?? true,
-        global_commission_rate: platformSettings.global_commission_rate ?? 10,
-        settlement_period: platformSettings.settlement_period ?? 'daily',
       });
     }
   }, [platformSettings]);
@@ -54,8 +39,6 @@ export function SuperAdminSettings() {
     
     const success = await updatePlatformSettings({
       manual_verification_enabled: localSettings.manual_verification_enabled,
-      global_commission_rate: localSettings.global_commission_rate,
-      settlement_period: localSettings.settlement_period,
     });
 
     if (success) {
@@ -68,9 +51,7 @@ export function SuperAdminSettings() {
   };
 
   const hasChanges = 
-    localSettings.manual_verification_enabled !== platformSettings?.manual_verification_enabled ||
-    localSettings.global_commission_rate !== platformSettings?.global_commission_rate ||
-    localSettings.settlement_period !== platformSettings?.settlement_period;
+    localSettings.manual_verification_enabled !== platformSettings?.manual_verification_enabled;
 
   // Calculate platform stats
   const activeCampuses = campuses.filter(c => c.is_active).length;
@@ -173,91 +154,6 @@ export function SuperAdminSettings() {
                 </span>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Commission Settings */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <Percent className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Commission Settings</CardTitle>
-                <CardDescription>
-                  Configure platform commission and settlement periods
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="commission-rate">Global Commission Rate (%)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="commission-rate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={localSettings.global_commission_rate}
-                  onChange={(e) => 
-                    setLocalSettings(prev => ({ 
-                      ...prev, 
-                      global_commission_rate: Number(e.target.value) 
-                    }))
-                  }
-                  className="w-24"
-                />
-                <span className="text-muted-foreground">% of order value</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                This is the default rate. Individual campuses can have custom rates.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="settlement-period">Settlement Period</Label>
-              <Select
-                value={localSettings.settlement_period}
-                onValueChange={(value) => 
-                  setLocalSettings(prev => ({ ...prev, settlement_period: value }))
-                }
-              >
-                <SelectTrigger id="settlement-period" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                How often settlements are generated for campus owners.
-              </p>
-            </div>
-
-            {/* Commission Preview */}
-            <div className="p-4 rounded-lg border bg-muted/50">
-              <h4 className="font-medium mb-3">Commission Preview</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sample Order Value</span>
-                  <span>₹100.00</span>
-                </div>
-                <div className="flex justify-between text-primary">
-                  <span>Platform Commission ({localSettings.global_commission_rate}%)</span>
-                  <span>₹{(100 * localSettings.global_commission_rate / 100).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-medium border-t pt-2">
-                  <span>Campus Receives</span>
-                  <span>₹{(100 - (100 * localSettings.global_commission_rate / 100)).toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

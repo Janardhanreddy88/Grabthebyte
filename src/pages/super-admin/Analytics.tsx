@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  BarChart3, TrendingUp, DollarSign, ShoppingCart, Calendar,
+  BarChart3, DollarSign, ShoppingCart, Calendar,
   RefreshCw, Loader2, Building2, Download
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,14 +15,13 @@ import { toast } from 'sonner';
 import { format, subDays, startOfDay } from 'date-fns';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell, Legend
+  BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
 
 interface DailyStats {
   date: string;
   orders: number;
   revenue: number;
-  commission: number;
 }
 
 interface CampusRevenue {
@@ -31,7 +30,6 @@ interface CampusRevenue {
   campus_code: string;
   orders: number;
   revenue: number;
-  commission: number;
 }
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
@@ -50,10 +48,9 @@ export function Analytics() {
       const days = parseInt(dateRange);
       const startDate = startOfDay(subDays(new Date(), days));
 
-      // Fetch all orders in range
       let query = supabase
         .from('orders')
-        .select('created_at, total, commission_amount, status, campus_id')
+        .select('created_at, total, status, campus_id')
         .gte('created_at', startDate.toISOString());
 
       if (filters.campusId) query = query.eq('campus_id', filters.campusId);
@@ -63,19 +60,18 @@ export function Analytics() {
       const validOrders = (ordersData || []).filter(o => o.status === 'confirmed' || o.status === 'collected');
 
       // Group by date
-      const dailyMap = new Map<string, { orders: number; revenue: number; commission: number }>();
+      const dailyMap = new Map<string, { orders: number; revenue: number }>();
       for (let i = 0; i <= days; i++) {
         const date = format(subDays(new Date(), days - i), 'MMM d');
-        dailyMap.set(date, { orders: 0, revenue: 0, commission: 0 });
+        dailyMap.set(date, { orders: 0, revenue: 0 });
       }
 
       validOrders.forEach(order => {
         const date = format(new Date(order.created_at), 'MMM d');
-        const existing = dailyMap.get(date) || { orders: 0, revenue: 0, commission: 0 };
+        const existing = dailyMap.get(date) || { orders: 0, revenue: 0 };
         dailyMap.set(date, {
           orders: existing.orders + 1,
           revenue: existing.revenue + (order.total || 0),
-          commission: existing.commission + ((order.commission_amount != null && order.commission_amount > 0) ? order.commission_amount : order.total * 0.1)
         });
       });
 
@@ -91,13 +87,12 @@ export function Analytics() {
 
       // Campus-level revenue comparison
       if (!filters.campusId) {
-        const campusMap = new Map<string, { orders: number; revenue: number; commission: number }>();
+        const campusMap = new Map<string, { orders: number; revenue: number }>();
         validOrders.forEach(o => {
-          const existing = campusMap.get(o.campus_id) || { orders: 0, revenue: 0, commission: 0 };
+          const existing = campusMap.get(o.campus_id) || { orders: 0, revenue: 0 };
           campusMap.set(o.campus_id, {
             orders: existing.orders + 1,
             revenue: existing.revenue + (o.total || 0),
-            commission: existing.commission + ((o.commission_amount != null && o.commission_amount > 0) ? o.commission_amount : o.total * 0.1),
           });
         });
 
@@ -122,14 +117,13 @@ export function Analytics() {
 
   const totalRevenue = dailyStats.reduce((s, d) => s + d.revenue, 0);
   const totalOrders = dailyStats.reduce((s, d) => s + d.orders, 0);
-  const totalCommission = dailyStats.reduce((s, d) => s + d.commission, 0);
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
   const exportCSV = () => {
-    const headers = ['Date', 'Orders', 'Revenue', 'Commission'];
-    const rows = dailyStats.map(d => [d.date, d.orders, d.revenue, d.commission]);
+    const headers = ['Date', 'Orders', 'Revenue'];
+    const rows = dailyStats.map(d => [d.date, d.orders, d.revenue]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -144,7 +138,7 @@ export function Analytics() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Analytics Dashboard</h1>
-          <p className="text-muted-foreground">Revenue trends, order analysis, and campus performance</p>
+          <p className="text-muted-foreground">Revenue trends and order analysis</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
@@ -164,11 +158,10 @@ export function Analytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: 'Total Order Value (GMV)', value: formatCurrency(totalRevenue), icon: DollarSign, bg: 'bg-green-500/10', color: 'text-green-600' },
           { label: 'Confirmed Orders', value: totalOrders.toString(), icon: ShoppingCart, bg: 'bg-blue-500/10', color: 'text-blue-600' },
-          { label: 'Platform Commission', value: formatCurrency(totalCommission), icon: TrendingUp, bg: 'bg-purple-500/10', color: 'text-purple-600' },
           { label: 'Avg Order Value', value: formatCurrency(avgOrderValue), icon: BarChart3, bg: 'bg-orange-500/10', color: 'text-orange-600' },
         ].map(kpi => (
           <Card key={kpi.label}>
@@ -193,7 +186,7 @@ export function Analytics() {
           <Card>
             <CardHeader>
               <CardTitle>Revenue Trend</CardTitle>
-              <CardDescription>Daily revenue and commission over the selected period</CardDescription>
+              <CardDescription>Daily revenue over the selected period</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-80">
@@ -203,9 +196,7 @@ export function Analytics() {
                     <XAxis dataKey="date" className="text-xs" />
                     <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} className="text-xs" />
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Legend />
                     <Line type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="commission" name="Commission" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} strokeDasharray="5 5" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -280,9 +271,7 @@ export function Analytics() {
                       <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} className="text-xs" />
                       <YAxis type="category" dataKey="campus_code" className="text-xs" width={80} />
                       <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Legend />
                       <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="commission" name="Commission" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -299,12 +288,10 @@ export function Analytics() {
                         <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
                           <span>{campus.orders} orders</span>
                           <span>Revenue: {formatCurrency(campus.revenue)}</span>
-                          <span>Commission: {formatCurrency(campus.commission)}</span>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="font-bold">{formatCurrency(campus.revenue)}</p>
-                        <p className="text-xs text-muted-foreground">Net: {formatCurrency(campus.revenue - campus.commission)}</p>
                       </div>
                     </div>
                   ))}
