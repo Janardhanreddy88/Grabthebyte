@@ -117,6 +117,13 @@ export type Database = {
             foreignKeyName: "audit_logs_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "audit_logs_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -225,6 +232,71 @@ export type Database = {
             foreignKeyName: "categories_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "categories_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_ledger: {
+        Row: {
+          campus_id: string | null
+          created_at: string
+          id: string
+          net_canteen_payout: number
+          order_id: string
+          platform_fee: number
+          settlement_status: string
+          total_order_value: number
+          transaction_type: string
+        }
+        Insert: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          net_canteen_payout: number
+          order_id: string
+          platform_fee: number
+          settlement_status?: string
+          total_order_value: number
+          transaction_type?: string
+        }
+        Update: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          net_canteen_payout?: number
+          order_id?: string
+          platform_fee?: number
+          settlement_status?: string
+          total_order_value?: number
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -286,6 +358,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "menu_items_campus_id_fkey"
@@ -442,6 +521,13 @@ export type Database = {
             foreignKeyName: "orders_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "orders_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -523,6 +609,13 @@ export type Database = {
             foreignKeyName: "platform_alerts_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "platform_alerts_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -572,6 +665,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          is_active: boolean | null
           phone: string | null
           updated_at: string
           user_id: string
@@ -583,6 +677,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          is_active?: boolean | null
           phone?: string | null
           updated_at?: string
           user_id: string
@@ -594,6 +689,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          is_active?: boolean | null
           phone?: string | null
           updated_at?: string
           user_id?: string
@@ -605,6 +701,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "profiles_campus_id_fkey"
@@ -733,6 +836,13 @@ export type Database = {
             foreignKeyName: "settlements_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "settlements_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -767,6 +877,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "user_roles_campus_id_fkey"
@@ -812,6 +929,18 @@ export type Database = {
         }
         Relationships: []
       }
+      campus_settlement_summary: {
+        Row: {
+          campus_code: string | null
+          campus_id: string | null
+          campus_name: string | null
+          pending_orders: number | null
+          pending_payout: number | null
+          total_paid_out: number | null
+          total_platform_profit: number | null
+        }
+        Relationships: []
+      }
       profiles_readable: {
         Row: {
           campus_code: string | null
@@ -826,6 +955,41 @@ export type Database = {
         }
         Relationships: []
       }
+      settlement_history_log: {
+        Row: {
+          amount_paid: number | null
+          campus_code: string | null
+          campus_id: string | null
+          campus_name: string | null
+          order_date: string | null
+          platform_profit: number | null
+          total_gmv: number | null
+          total_orders: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles_readable: {
         Row: {
           campus_code: string | null
@@ -835,19 +999,28 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string | null
+          is_active: boolean | null
+          phone: string | null
           role: Database["public"]["Enums"]["app_role"] | null
           user_id: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "user_roles_campus_id_fkey"
+            foreignKeyName: "profiles_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "user_roles_campus_id_fkey"
+            foreignKeyName: "profiles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "profiles_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campuses"
@@ -858,6 +1031,7 @@ export type Database = {
     }
     Functions: {
       atomic_decrement_stock: { Args: { p_order_id: string }; Returns: Json }
+      calculate_platform_fee: { Args: { cart_total: number }; Returns: number }
       check_phone_exists: { Args: { phone_input: string }; Returns: boolean }
       cleanup_expired_admin_sessions: { Args: never; Returns: number }
       cleanup_old_orders: { Args: never; Returns: number }
@@ -871,6 +1045,33 @@ export type Database = {
       fail_expired_orders_automatically: { Args: never; Returns: undefined }
       get_campus_health: { Args: never; Returns: Json }
       get_campus_user_stats: { Args: { p_campus_id?: string }; Returns: Json }
+      get_filtered_settlements: {
+        Args: {
+          p_campus_id?: string
+          p_end_date?: string
+          p_start_date?: string
+        }
+        Returns: {
+          campus_code: string
+          campus_id: string
+          campus_name: string
+          pending_orders: number
+          pending_payout: number
+          settlement_date: string
+          total_paid_out: number
+          total_platform_profit: number
+        }[]
+      }
+      get_ledger_stats:
+        | { Args: { p_campus_id?: string }; Returns: Json }
+        | {
+            Args: {
+              p_campus_id?: string
+              p_end_date?: string
+              p_start_date?: string
+            }
+            Returns: Json
+          }
       get_super_admin_stats: { Args: { p_campus_id?: string }; Returns: Json }
       get_user_campus_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
@@ -894,6 +1095,14 @@ export type Database = {
       mark_order_collected_secure: {
         Args: { p_secret_token: string }
         Returns: Json
+      }
+      mark_settlement_paid: {
+        Args: {
+          p_campus_id: string
+          p_end_date?: string
+          p_start_date?: string
+        }
+        Returns: undefined
       }
       place_order_atomic: {
         Args: {
