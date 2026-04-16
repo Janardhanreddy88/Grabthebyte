@@ -135,16 +135,21 @@ export type Database = {
           bank_account_name: string | null
           bank_account_number: string | null
           bank_ifsc: string | null
+          closing_time: string | null
           code: string
           commission_rate: number | null
           created_at: string
           id: string
           is_active: boolean
+          is_open: boolean | null
           logo_url: string | null
           name: string
+          opening_time: string | null
           owner_email: string | null
           owner_name: string | null
           owner_phone: string | null
+          prep_time_minutes: number | null
+          razorpay_account_id: string | null
           settings: Json
           updated_at: string
           upi_id: string | null
@@ -154,16 +159,21 @@ export type Database = {
           bank_account_name?: string | null
           bank_account_number?: string | null
           bank_ifsc?: string | null
+          closing_time?: string | null
           code: string
           commission_rate?: number | null
           created_at?: string
           id?: string
           is_active?: boolean
+          is_open?: boolean | null
           logo_url?: string | null
           name: string
+          opening_time?: string | null
           owner_email?: string | null
           owner_name?: string | null
           owner_phone?: string | null
+          prep_time_minutes?: number | null
+          razorpay_account_id?: string | null
           settings?: Json
           updated_at?: string
           upi_id?: string | null
@@ -173,16 +183,21 @@ export type Database = {
           bank_account_name?: string | null
           bank_account_number?: string | null
           bank_ifsc?: string | null
+          closing_time?: string | null
           code?: string
           commission_rate?: number | null
           created_at?: string
           id?: string
           is_active?: boolean
+          is_open?: boolean | null
           logo_url?: string | null
           name?: string
+          opening_time?: string | null
           owner_email?: string | null
           owner_name?: string | null
           owner_phone?: string | null
+          prep_time_minutes?: number | null
+          razorpay_account_id?: string | null
           settings?: Json
           updated_at?: string
           upi_id?: string | null
@@ -774,55 +789,37 @@ export type Database = {
       }
       settlements: {
         Row: {
-          campus_id: string
-          commission_amount: number | null
+          amount: number
+          campus_id: string | null
           created_at: string | null
-          created_by: string | null
           id: string
-          net_payable: number | null
-          notes: string | null
-          paid_at: string | null
-          payment_reference: string | null
-          period_end: string
-          period_start: string
+          platform_fee: number
+          razorpay_account_id: string
+          settled_at: string | null
           status: string | null
-          total_orders: number | null
-          total_sales: number | null
-          updated_at: string | null
+          utr_number: string | null
         }
         Insert: {
-          campus_id: string
-          commission_amount?: number | null
+          amount?: number
+          campus_id?: string | null
           created_at?: string | null
-          created_by?: string | null
           id?: string
-          net_payable?: number | null
-          notes?: string | null
-          paid_at?: string | null
-          payment_reference?: string | null
-          period_end: string
-          period_start: string
+          platform_fee?: number
+          razorpay_account_id: string
+          settled_at?: string | null
           status?: string | null
-          total_orders?: number | null
-          total_sales?: number | null
-          updated_at?: string | null
+          utr_number?: string | null
         }
         Update: {
-          campus_id?: string
-          commission_amount?: number | null
+          amount?: number
+          campus_id?: string | null
           created_at?: string | null
-          created_by?: string | null
           id?: string
-          net_payable?: number | null
-          notes?: string | null
-          paid_at?: string | null
-          payment_reference?: string | null
-          period_end?: string
-          period_start?: string
+          platform_fee?: number
+          razorpay_account_id?: string
+          settled_at?: string | null
           status?: string | null
-          total_orders?: number | null
-          total_sales?: number | null
-          updated_at?: string | null
+          utr_number?: string | null
         }
         Relationships: [
           {

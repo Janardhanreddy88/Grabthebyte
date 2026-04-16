@@ -18,13 +18,3 @@ verify_jwt = false
 [functions.manage-staff]
 verify_jwt = false
 
-[functions.razorpay-settlement]
-enabled = true
-verify_jwt = true
-import_map = "./functions/razorpay-settlement/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/razorpay-settlement/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/razorpay-settlement/*.html" ]
