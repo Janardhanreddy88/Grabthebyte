@@ -5,9 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useAuth } from "@/context/AuthContext";
-import { usePrinter } from "@/context/PrinterContext"; // 🌟 INJECTED PRINTER ENGINE
+import { usePrinter } from "@/context/PrinterContext"; 
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -25,12 +29,13 @@ import { useWeeklyAnalytics } from "@/hooks/useWeeklyAnalytics";
 import { useTodayAnalytics } from "@/hooks/useTodayAnalytics";
 import {
   LogOut, QrCode, LayoutDashboard, UtensilsCrossed, TrendingUp,
-  Package, Users, User, Mail, Phone, Building2, BellRing, Printer, BluetoothOff
+  Package, Users, User, Mail, Phone, Building2, BellRing, Printer, 
+  BluetoothOff, Settings, Landmark, ShieldCheck, Edit, Lock, Info, CalendarClock, CheckCircle2,
+  CalendarDays, CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp, CornerDownRight
 } from "lucide-react";
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
-
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -39,10 +44,8 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // 🌟 PULL IN THE PRINTER CONTEXT
   const { isPrinterConnected, printTicket } = usePrinter();
   
-  // 🌟 REFS FOR THE REALTIME LISTENER (Prevents stale closures)
   const printerRef = useRef(isPrinterConnected);
   const printTicketRef = useRef(printTicket);
 
@@ -58,9 +61,25 @@ export default function AdminDashboard() {
     campus_name: string | null;
     campus_code: string | null;
     campus_id: string | null;
+    razorpay_account_id: string | null;
+    upi_id: string | null;
+    bank_account_name: string | null;
+    bank_account_number: string | null;
+    bank_ifsc: string | null;
   } | null>(null);
 
-  // --- AUDIO HELPER FOR NOTIFICATIONS ---
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isSettlementInfoOpen, setIsSettlementInfoOpen] = useState(false); 
+  const [showHolidayExample, setShowHolidayExample] = useState(false); // 🌟 STATE FOR ACCORDION
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  const [settlements, setSettlements] = useState<any[]>([]);
+
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    phone: '',
+  });
+
   const playNotificationSound = useCallback(() => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -77,55 +96,163 @@ export default function AdminDashboard() {
         oscillator.start(audioCtx.currentTime + startTime);
         oscillator.stop(audioCtx.currentTime + startTime + duration);
       };
-      playTone(880, 0, 0.2); // A5
-      playTone(1108.73, 0.15, 0.4); // C#6
+      playTone(880, 0, 0.2); 
+      playTone(1108.73, 0.15, 0.4); 
     } catch (e) {
-      console.log("Audio play failed, browser might be blocking auto-play", e);
+      console.log("Audio play failed", e);
     }
   }, []);
 
-  // --- FETCH PROFILE ---
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id) return;
-      const { data } = await supabase
+      
+      const { data, error } = await supabase
         .from('profiles')
-        .select(`full_name, email, phone, campus_id, campuses:campus_id (name, code)`)
+        .select(`full_name, email, phone, campus_id, campuses:campus_id (name, code, razorpay_account_id, upi_id, bank_account_name, bank_account_number, bank_ifsc)`)
         .eq('user_id', session.user.id)
         .maybeSingle();
+        
       if (data) {
-        const campusData = data.campuses as { name: string; code: string } | null;
+        const campusData = data.campuses as any;
         setProfileData({
-          full_name: data.full_name, email: data.email, phone: data.phone,
-          campus_name: campusData?.name || null, campus_code: campusData?.code || null,
-          campus_id: data.campus_id 
+          full_name: data.full_name, 
+          email: data.email, 
+          phone: data.phone,
+          campus_name: campusData?.name || null, 
+          campus_code: campusData?.code || null,
+          campus_id: data.campus_id,
+          razorpay_account_id: campusData?.razorpay_account_id || null,
+          upi_id: campusData?.upi_id || null,
+          bank_account_name: campusData?.bank_account_name || null,
+          bank_account_number: campusData?.bank_account_number || null,
+          bank_ifsc: campusData?.bank_ifsc || null,
         });
       }
     };
     fetchProfile();
   }, []);
 
-  // --- 🌟 SUPABASE REALTIME LISTENER (WITH AUTO-PRINT) 🌟 ---
+  // 🌟 FETCH SETTLEMENTS & LISTEN FOR INSTANT PAYOUT NOTIFICATIONS
   useEffect(() => {
     if (!profileData?.campus_id) return;
+    
+    const fetchSettlements = async () => {
+      const { data, error } = await supabase
+        .from('settlements')
+        .select('*')
+        .eq('campus_id', profileData.campus_id)
+        .order('settled_at', { ascending: false })
+        .limit(10); 
+        
+      if (data) {
+        setSettlements(data);
+      }
+    };
+    
+    // Initial fetch
+    fetchSettlements();
 
-    console.log("🔔 Listening for new orders for campus:", profileData.campus_id);
+    // Set up Realtime Radar for new settlements
+    const settlementChannel = supabase
+      .channel('realtime-settlements')
+      .on(
+        'postgres_changes',
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'settlements', 
+          filter: `campus_id=eq.${profileData.campus_id}` 
+        },
+        async (payload) => {
+          playNotificationSound();
+          toast({
+            title: "💰 Settlement Processed!",
+            description: `A payout of ₹${Number(payload.new.amount).toFixed(2)} has been deposited to your bank account.`,
+            className: "bg-emerald-600 text-white border-none shadow-lg",
+            duration: 8000,
+          });
+          fetchSettlements();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(settlementChannel); };
+  }, [profileData?.campus_id, toast, playNotificationSound]);
+
+  const handleOpenEdit = () => {
+    setEditForm({
+      full_name: profileData?.full_name || '',
+      phone: profileData?.phone || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setIsUpdating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error("Authentication error");
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editForm.full_name,
+          phone: editForm.phone,
+        })
+        .eq('user_id', session.user.id);
+
+      if (profileError) throw profileError;
+
+      if (profileData?.campus_id) {
+        const { error: campusError } = await supabase
+          .from('campuses')
+          .update({
+            owner_name: editForm.full_name,
+            owner_phone: editForm.phone,
+          } as any)
+          .eq('id', profileData.campus_id);
+
+        if (campusError) {
+          console.error("Failed to sync with Campus directory:", campusError);
+        }
+      }
+
+      setProfileData(prev => prev ? {
+        ...prev,
+        full_name: editForm.full_name,
+        phone: editForm.phone,
+      } : null);
+
+      toast({
+        title: "Profile Updated",
+        description: "Your details have been saved and synced across the platform.",
+        className: "bg-green-600 text-white border-none",
+      });
+      setIsEditDialogOpen(false);
+
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!profileData?.campus_id) return;
 
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE', 
-          schema: 'public',
-          table: 'orders',
-          filter: `campus_id=eq.${profileData.campus_id}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `campus_id=eq.${profileData.campus_id}` },
         async (payload) => {
           if (payload.new.status === 'confirmed' && payload.old.status === 'pending') {
-            
-            // 1. Play the sound & Show the toast
             playNotificationSound();
             toast({
               title: "🔔 New Order Received!",
@@ -134,44 +261,16 @@ export default function AdminDashboard() {
               duration: 5000,
             });
 
-            // 2. Refresh UI
             queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
             queryClient.invalidateQueries({ queryKey: ["today-analytics"] });
-
-            // 3. 🖨️ AUTO-PRINT THE TICKET!
-            if (printerRef.current) {
-              console.log("Printer is connected! Fetching items to print auto-token...");
-              
-              // We must fetch the items because the realtime payload only contains the top-level order row
-              const { data: fullOrder } = await supabase
-                .from('orders')
-                .select('*, order_items(id, name, price, quantity)')
-                .eq('id', payload.new.id)
-                .single();
-
-              if (fullOrder && fullOrder.order_items) {
-                printTicketRef.current({
-                  orderNumber: fullOrder.order_number,
-                  items: fullOrder.order_items.map((i: any) => ({
-                    name: i.name, quantity: i.quantity, price: Number(i.price)
-                  })),
-                  totalAmount: Number(fullOrder.total),
-                  customerName: fullOrder.customer_name || 'Customer',
-                  createdAt: fullOrder.created_at
-                });
-              }
-            }
           }
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [profileData?.campus_id, queryClient, toast, playNotificationSound]);
 
-  // Hooks
   const { data: menuItems = [], isLoading: menuLoading } = useAdminMenuItems();
   const { data: orders = [], isLoading: ordersLoading } = useAdminOrders();
   const { data: stats } = useOrderStats();
@@ -194,7 +293,6 @@ export default function AdminDashboard() {
     navigate("/auth?logout=true");
   };
 
-  // Low stock items
   const lowStockItems = menuItems
     .filter((item) => (item.quantity ?? 0) <= 10)
     .map((item) => ({
@@ -205,15 +303,27 @@ export default function AdminDashboard() {
 
   const handleRestockClick = (itemId: string) => {};
 
+  const formatSettlementDates = (settledDateStr: string) => {
+    if (!settledDateStr) return { depositDate: 'Pending', salesDate: 'N/A' };
+    const settledDate = new Date(settledDateStr);
+    
+    const depositDate = settledDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    const salesDateObj = new Date(settledDate);
+    salesDateObj.setDate(salesDateObj.getDate() - 2);
+    
+    const salesDate = salesDateObj.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    return { depositDate, salesDate };
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border safe-top">
         <div className="flex items-center justify-between px-3 lg:px-5 h-13">
           <Logo size="sm" />
           <div className="flex items-center gap-2">
             
-            {/* Printer Status Indicator for the Dashboard */}
             {isPrinterConnected ? (
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/15 text-emerald-600 border border-emerald-500/20 rounded-lg text-xs font-bold mr-1">
                 <Printer size={14} /> Printer Ready
@@ -229,13 +339,11 @@ export default function AdminDashboard() {
               <span className="hidden sm:inline">Student View</span>
             </Button>
             
-            {/* 🌟 THE MAGIC FLAG ADDED HERE 🌟 */}
             <Button onClick={() => navigate("/kiosk-scanner", { state: { fromAdmin: true } })} size="sm" className="gap-1.5 rounded-xl text-xs font-semibold bg-secondary hover:bg-secondary/90 text-secondary-foreground">
               <QrCode size={15} />
               <span className="hidden sm:inline">🚀 Kiosk</span>
             </Button>
 
-            {/* Profile Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs hover:opacity-90 transition-opacity">
@@ -255,9 +363,18 @@ export default function AdminDashboard() {
                   </div>
                   <Separator className="mb-3" />
                   <div className="space-y-2.5">
-                    <div className="flex items-center gap-2.5 text-sm"><Mail size={14} className="text-muted-foreground shrink-0" /><span className="truncate">{profileData?.email || 'N/A'}</span></div>
-                    <div className="flex items-center gap-2.5 text-sm"><Phone size={14} className="text-muted-foreground shrink-0" /><span>{profileData?.phone || 'Not set'}</span></div>
-                    <div className="flex items-center gap-2.5 text-sm"><Building2 size={14} className="text-muted-foreground shrink-0" /><span className="truncate">{profileData?.campus_name || 'N/A'} ({profileData?.campus_code || 'N/A'})</span></div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Mail size={14} className="text-muted-foreground shrink-0" />
+                      <span className="truncate">{profileData?.email || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Phone size={14} className="text-muted-foreground shrink-0" />
+                      <span>{profileData?.phone || 'Not set'}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Building2 size={14} className="text-muted-foreground shrink-0" />
+                      <span className="truncate">{profileData?.campus_name || 'N/A'} ({profileData?.campus_code || 'N/A'})</span>
+                    </div>
                   </div>
                 </div>
                 <Separator />
@@ -294,45 +411,371 @@ export default function AdminDashboard() {
             <TabsTrigger value="menu" className="gap-1.5 rounded-full px-4 py-2 text-sm data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <UtensilsCrossed size={15} className="hidden sm:block" /> Menu
             </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1.5 rounded-full px-4 py-2 text-sm data-[state=active]:bg-card data-[state=active]:shadow-sm">
+              <Settings size={15} className="hidden sm:block" /> Profile
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="analytics">
             <AdminAnalyticsTab
-              todayStats={todayStats}
-              todayLoading={todayLoading}
-              todaySelectedDate={todaySelectedDate}
-              todaySetSelectedDate={todaySetSelectedDate}
-              weeklyStats={weeklyStats}
-              weeklyLoading={weeklyLoading}
-              monthlyStats={monthlyStats}
-              monthlyLoading={monthlyLoading}
-              monthlySelectedMonth={monthlySelectedMonth}
-              monthlySetSelectedMonth={monthlySetSelectedMonth}
-              monthlyMonthOptions={monthlyMonthOptions}
-              lowStockItems={lowStockItems}
-              onRestockClick={handleRestockClick}
+              todayStats={todayStats} todayLoading={todayLoading} todaySelectedDate={todaySelectedDate} todaySetSelectedDate={todaySetSelectedDate}
+              weeklyStats={weeklyStats} weeklyLoading={weeklyLoading} monthlyStats={monthlyStats} monthlyLoading={monthlyLoading}
+              monthlySelectedMonth={monthlySelectedMonth} monthlySetSelectedMonth={monthlySetSelectedMonth} monthlyMonthOptions={monthlyMonthOptions}
+              lowStockItems={lowStockItems} onRestockClick={handleRestockClick}
             />
           </TabsContent>
 
           <TabsContent value="orders">
             <AdminOrdersTab
-              orders={orders}
-              ordersLoading={ordersLoading}
-              markTokenUsed={markTokenUsed}
-              menuItems={menuItems}
+              orders={orders} ordersLoading={ordersLoading} markTokenUsed={markTokenUsed} menuItems={menuItems}
             />
           </TabsContent>
 
           <TabsContent value="menu">
             <AdminMenuTab
-              menuItems={menuItems}
-              menuLoading={menuLoading}
-              createMenuItem={createMenuItem}
-              updateMenuItem={updateMenuItem}
-              deleteMenuItem={deleteMenuItem}
+              menuItems={menuItems} menuLoading={menuLoading} createMenuItem={createMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem}
             />
           </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <div className="flex justify-end mb-2">
+              <Button onClick={handleOpenEdit} size="sm" className="gap-2 bg-primary text-primary-foreground">
+                <Edit size={16} /> Edit Profile
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Personal Details</CardTitle>
+                  <CardDescription>Your account contact information.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-muted-foreground">Full Name</p>
+                    <p className="font-semibold">{profileData?.full_name || 'Not provided'}</p>
+                  </div>
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-muted-foreground">Email Address</p>
+                    <p className="font-semibold">{profileData?.email || 'Not provided'}</p>
+                  </div>
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-muted-foreground">Phone Number</p>
+                    <p className="font-semibold">{profileData?.phone || 'Not provided'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Landmark className="w-5 h-5 text-emerald-600" /> Bank & Campus
+                  </CardTitle>
+                  <CardDescription>Your registered campus and payout routing details.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-muted-foreground">Campus Branch</p>
+                    <p className="font-semibold">{profileData?.campus_name || 'Not assigned'} ({profileData?.campus_code})</p>
+                    {profileData?.campus_id && (
+                      <p className="text-[11px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded-md w-fit mt-0.5 border border-border/50 select-all">
+                        ID: {profileData.campus_id}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="grid gap-1">
+                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                      Razorpay Linked Account <Lock size={12} className="text-muted-foreground" />
+                    </p>
+                    {profileData?.razorpay_account_id ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <p className="font-mono text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                          {profileData.razorpay_account_id}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="flex h-2 w-2 rounded-full bg-red-500"></span>
+                        <p className="text-sm text-red-600 font-medium">Bank Account Not Linked</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {profileData?.bank_account_number && (
+                    <div className="bg-muted/50 p-3 rounded-lg space-y-2 mt-2 border border-border/50 relative">
+                      <div className="absolute top-2 right-2">
+                        <Lock size={14} className="text-muted-foreground/50" />
+                      </div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Traditional Bank Info</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-xs">Account Name</p>
+                          <p className="font-medium truncate">{profileData.bank_account_name || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">IFSC Code</p>
+                          <p className="font-medium">{profileData.bank_ifsc || 'N/A'}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-muted-foreground text-xs">Account Number</p>
+                          <p className="font-mono font-medium">{profileData.bank_account_number}</p>
+                        </div>
+                        {profileData.upi_id && (
+                          <div className="col-span-2">
+                            <p className="text-muted-foreground text-xs">UPI ID</p>
+                            <p className="font-medium">{profileData.upi_id}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-center text-muted-foreground pt-2">
+                    To update your banking details, please contact GrabTheByte support.
+                  </p>
+
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 🌟 PAYOUTS & SETTLEMENTS SECTION WITH NEW BUTTON */}
+            <div className="mt-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Landmark className="h-6 w-6 text-primary" /> 
+                  Recent Bank Payouts
+                </h2>
+                {/* 🌟 BUTTON THAT OPENS TIMELINE */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    setIsSettlementInfoOpen(true);
+                    setShowHolidayExample(false); // Reset accordion on open
+                  }}
+                  className="gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 bg-blue-50/50"
+                >
+                  <CalendarDays className="h-4 w-4" /> My Settlement Cycle
+                </Button>
+              </div>
+
+              {/* SETTLEMENTS LIST */}
+              <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+                <div className="grid grid-cols-3 bg-muted/50 p-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
+                  <div className="col-span-2">Payout Details</div>
+                  <div className="text-right">Amount</div>
+                </div>
+                
+                <div className="divide-y divide-border">
+                  {settlements.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center">
+                      <CalendarClock className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                      <p className="font-medium text-sm">No payouts recorded yet.</p>
+                      <p className="text-xs mt-1">Your settlements will appear here automatically.</p>
+                    </div>
+                  ) : (
+                    settlements.map((settlement) => {
+                      const dates = formatSettlementDates(settlement.settled_at);
+                      
+                      return (
+                        <div key={settlement.id} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                          <div>
+                            <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              Bank Deposit: {dates.depositDate}
+                            </h4>
+                            
+                            <p className="text-xs text-blue-800/80 bg-blue-50/50 border border-blue-100 px-2 py-1 rounded-md flex items-center gap-1.5 mt-1.5 w-fit">
+                              <CalendarClock size={12} className="opacity-70 text-blue-600" />
+                              <span>Sales from: <strong className="text-blue-900">{dates.salesDate}</strong> (Day before yesterday's sales)</span>
+                            </p>
+                            
+                            <p className="text-[10px] text-muted-foreground mt-1.5 font-mono uppercase">
+                              Ref: {settlement.utr_number || 'Processing'}
+                            </p>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-emerald-600">
+                              ₹{Number(settlement.amount).toFixed(2)}
+                            </p>
+                            <p className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-block mt-1">
+                              {settlement.status}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </TabsContent>
         </Tabs>
+
+        {/* 🌟 NEW: THE CLEAN RAZORPAY TIMELINE DIALOG */}
+        <Dialog open={isSettlementInfoOpen} onOpenChange={setIsSettlementInfoOpen}>
+          <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden">
+            <div className="px-6 pt-6 pb-6">
+              <DialogHeader>
+                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                  <span className="text-sm font-semibold text-foreground">Settlement Schedule</span>
+                </div>
+                <DialogTitle className="sr-only">Settlement Schedule Info</DialogTitle>
+              </DialogHeader>
+              
+              <div className="flex border-b mb-6 mt-4">
+                <div className="pb-2 border-b-2 border-foreground px-1">
+                  <span className="text-sm font-semibold">2 day settlement (T+2)</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 mb-8">
+                <div className="bg-emerald-500 text-white rounded-md p-1.5 shrink-0 mt-0.5">
+                  <CheckCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base">Payments received reach your bank account in 2 working days</h3>
+                </div>
+              </div>
+
+              {/* Main Timeline Graphic */}
+              <div className="relative flex justify-between items-start mb-10 px-2">
+                {/* Connecting Dashed Line */}
+                <div className="absolute top-4 left-14 right-14 h-[2px] bg-border border-dashed border-t-2 z-0"></div>
+
+                {/* Day 0 */}
+                <div className="relative z-10 flex flex-col items-center w-1/3">
+                  <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-xs font-semibold">DAY 0</span>
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground px-2">Payment received from students</p>
+                </div>
+
+                {/* Day 1 */}
+                <div className="relative z-10 flex flex-col items-center w-1/3">
+                  <div className="bg-background border border-border rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-muted-foreground">DAY 1</span>
+                  </div>
+                </div>
+
+                {/* Day 2 */}
+                <div className="relative z-10 flex flex-col items-center w-1/3">
+                  <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-xs font-semibold">DAY 2</span>
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground px-2">Money transferred to your bank before 9 pm</p>
+                </div>
+              </div>
+
+              {/* 🌟 ACCORDION: Warning Alert & Example */}
+              <div className="bg-amber-900/5 rounded-lg border border-amber-900/10 transition-all duration-300">
+                {/* Clickable Header */}
+                <div 
+                  className="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-900/10 rounded-lg transition-colors"
+                  onClick={() => setShowHolidayExample(!showHolidayExample)}
+                >
+                  <div className="bg-amber-700 text-white rounded-md p-1.5 shrink-0">
+                    <AlertCircle className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground flex-1">
+                    Pay outs on bank holidays and weekends will be processed on the next working day.
+                  </p>
+                  <div className="flex items-center text-sm font-semibold text-blue-600 hover:underline whitespace-nowrap select-none">
+                    View example {showHolidayExample ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  </div>
+                </div>
+
+                {/* Expanded Timeline Content */}
+                {showHolidayExample && (
+                  <div className="px-2 pb-6 pt-2 animate-in slide-in-from-top-2">
+                    <div className="relative flex justify-between items-start px-2 mt-4">
+                      {/* Connecting Dashed Line for 4 nodes */}
+                      <div className="absolute top-4 left-10 right-10 h-[2px] bg-amber-900/20 border-dashed border-t-2 z-0"></div>
+
+                      <div className="relative z-10 flex flex-col items-center w-1/4">
+                        <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold">DAY 0</span>
+                        </div>
+                        <p className="text-[10px] text-center text-muted-foreground leading-tight">Payment received from students</p>
+                      </div>
+
+                      <div className="relative z-10 flex flex-col items-center w-1/4">
+                        <div className="bg-[#fef9f1] border border-border rounded-full px-2 py-1 flex items-center gap-1 mb-2 text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold">DAY 1</span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 flex flex-col items-center w-1/4">
+                        <div className="bg-amber-600 border border-amber-600 text-white rounded-full px-2 py-1 flex items-center gap-1 mb-2 shadow-sm">
+                          <CornerDownRight className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold tracking-wide">SKIPPED</span>
+                        </div>
+                        <p className="text-[10px] text-center text-muted-foreground leading-tight">If non-working day (bank holiday)</p>
+                      </div>
+
+                      <div className="relative z-10 flex flex-col items-center w-1/4">
+                        <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold">DAY 2</span>
+                        </div>
+                        <p className="text-[10px] text-center text-muted-foreground leading-tight">Money transferred to your bank before 9 pm</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* EDIT PROFILE DIALOG */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Profile Details</DialogTitle>
+              <DialogDescription>Update your personal contact information.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input 
+                  id="name" 
+                  value={editForm.full_name} 
+                  onChange={(e) => setEditForm({...editForm, full_name: e.target.value})} 
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <Input 
+                  id="phone" 
+                  type="tel"
+                  value={editForm.phone} 
+                  onChange={(e) => setEditForm({...editForm, phone: e.target.value})} 
+                  placeholder="e.g. +91 9876543210"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdating}>Cancel</Button>
+              <Button onClick={handleSaveProfile} disabled={isUpdating}>
+                {isUpdating ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   );

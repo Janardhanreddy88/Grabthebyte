@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   ShoppingBag, RefreshCw, Search, Eye, Clock, CheckCircle,
-  XCircle, Package, Calendar, Download, MoreHorizontal
+  XCircle, Package, Calendar, Download, Landmark, Ban, CheckSquare, ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,6 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { toast } from 'sonner';
@@ -34,6 +31,7 @@ interface Order {
   customer_email: string | null;
   customer_phone: string | null;
   total: number;
+  platform_fee: number | null;
   status: string;
   payment_status: string | null;
   payment_method: string | null;
@@ -50,24 +48,68 @@ export function SuperAdminOrders() {
   const { filters } = useSuperAdmin();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // 🟢 UPGRADE 2: Pagination & Search State
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 50;
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('today');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Global Stats state to track totals across ALL pages
+  const [globalStats, setGlobalStats] = useState({ total: 0, confirmed: 0, failed: 0, collected: 0, revenue: 0, profit: 0 });
+
+  // Debounce search query to prevent DB spam
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, dateFilter, filters.campusId]);
+
+  const fetchGlobalStats = useCallback(async () => {
+    let query = supabase.from('orders').select('total, platform_fee, commission_amount, status');
+    if (dateFilter === 'today') query = query.gte('created_at', startOfToday().toISOString());
+    else if (dateFilter === 'yesterday') {
+      query = query.gte('created_at', startOfYesterday().toISOString()).lte('created_at', endOfYesterday().toISOString());
+    }
+    if (filters.campusId) query = query.eq('campus_id', filters.campusId);
+
+    const { data } = await query;
+    if (data) {
+      setGlobalStats({
+        total: data.length,
+        confirmed: data.filter(o => o.status === 'confirmed').length,
+        failed: data.filter(o => ['failed', 'expired'].includes(o.status)).length,
+        collected: data.filter(o => o.status === 'collected').length,
+        revenue: data.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + o.total, 0),
+        profit: data.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + (o.platform_fee || o.commission_amount || 0), 0),
+      });
+    }
+  }, [dateFilter, filters.campusId]);
+
   const fetchOrders = useCallback(async () => {
     setIsLoading(true);
+    fetchGlobalStats(); // Update header stats
     
     let query = supabase
       .from('orders')
       .select(`
         id, order_number, customer_name, customer_email, customer_phone,
-        total, status, payment_status, payment_method, razorpay_payment_id,
+        total, platform_fee, status, payment_status, payment_method, razorpay_payment_id,
         commission_amount, notes, created_at, updated_at,
         campus:campuses(name, code),
         order_items(id, name, quantity, price)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (dateFilter === 'today') query = query.gte('created_at', startOfToday().toISOString());
@@ -76,22 +118,25 @@ export function SuperAdminOrders() {
     }
     if (filters.campusId) query = query.eq('campus_id', filters.campusId);
     if (statusFilter !== 'all') query = query.eq('status', statusFilter as any);
-    query = query.limit(dateFilter === 'all' ? 200 : 500);
+    
+    // Server-side search
+    if (debouncedSearch) {
+      query = query.or(`order_number.ilike.%${debouncedSearch}%,customer_name.ilike.%${debouncedSearch}%,customer_email.ilike.%${debouncedSearch}%`);
+    }
 
-    const { data, error } = await query;
+    // 🟢 UPGRADE 2: True Pagination execution
+    query = query.range((page - 1) * pageSize, page * pageSize - 1);
+
+    const { data, count, error } = await query;
     if (error) { toast.error('Failed to load orders'); } 
-    else { setOrders((data || []) as Order[]); }
+    else { 
+      setOrders((data || []) as Order[]); 
+      if (count !== null) setTotalCount(count);
+    }
     setIsLoading(false);
-  }, [filters.campusId, statusFilter, dateFilter]);
+  }, [filters.campusId, statusFilter, dateFilter, debouncedSearch, page, fetchGlobalStats]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
-
-  useEffect(() => {
-    const channel = supabase.channel('all-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchOrders]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
@@ -108,12 +153,6 @@ export function SuperAdminOrders() {
     return <Badge variant={config.variant} className="gap-1"><Icon className="h-3 w-3" />{config.label}</Badge>;
   };
 
-  const filteredOrders = orders.filter(order => {
-    if (!searchQuery) return true;
-    const s = searchQuery.toLowerCase();
-    return order.order_number?.toLowerCase().includes(s) || order.customer_name?.toLowerCase().includes(s) || order.customer_email?.toLowerCase().includes(s);
-  });
-
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -123,46 +162,96 @@ export function SuperAdminOrders() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredOrders.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+    if (selectedIds.size === orders.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(orders.map(o => o.id)));
+  };
+
+  // 🟢 UPGRADE 1: Bulk Mark Collected Function
+  const handleBulkMarkCollected = async () => {
+    if (selectedIds.size === 0) return;
+    setIsUpdating(true);
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'collected' })
+      .in('id', Array.from(selectedIds));
+      
+    setIsUpdating(false);
+    if (error) {
+      toast.error('Failed to update orders');
+    } else {
+      toast.success(`${selectedIds.size} orders marked as collected`);
+      setSelectedIds(new Set());
+      fetchOrders();
+    }
+  };
+
+  // 🟢 UPGRADE 3: Admin Kill Switch (FIXED REASON LOGIC)
+  const handleCancelOrder = async (id: string) => {
+    setIsUpdating(true);
+    const { error } = await supabase
+      .from('orders')
+      .update({ 
+        status: 'failed', 
+        rejection_reason: 'Cancelled by Admin. Refund will be processed.', // 🟢 The fix!
+        notes: 'Cancelled by Super Admin' 
+      })
+      .eq('id', id);
+      
+    setIsUpdating(false);
+    if (error) {
+      toast.error('Failed to cancel order');
+    } else {
+      toast.success('Order forcefully cancelled');
+      setSelectedOrder(null);
+      fetchOrders();
+    }
   };
 
   const exportCSV = () => {
-    const exportOrders = selectedIds.size > 0 ? filteredOrders.filter(o => selectedIds.has(o.id)) : filteredOrders;
-    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Amount', 'Status', 'Payment', 'Date'];
-    const rows = exportOrders.map(o => [
-      o.order_number, o.customer_name || '', o.customer_email || '',
-      o.campus?.code || '', o.total, o.status, o.payment_status || '',
-      format(new Date(o.created_at), 'yyyy-MM-dd HH:mm')
-    ]);
+    const exportOrders = selectedIds.size > 0 ? orders.filter(o => selectedIds.has(o.id)) : orders;
+    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Grand Total (GMV)', 'Platform Fee', 'Canteen Payout', 'Status', 'Payment', 'Date'];
+    const rows = exportOrders.map(o => {
+      const fee = o.platform_fee || o.commission_amount || 0;
+      const payout = o.total - fee;
+      return [
+        o.order_number, o.customer_name || '', o.customer_email || '',
+        o.campus?.code || '', o.total, fee, payout, o.status, o.payment_status || '',
+        format(new Date(o.created_at), 'yyyy-MM-dd HH:mm')
+      ];
+    });
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `orders-${dateFilter}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.href = url; a.download = `grabthebyte-orders-${dateFilter}-page${page}.csv`;
     a.click(); URL.revokeObjectURL(url);
-    toast.success(`Exported ${exportOrders.length} orders`);
+    toast.success(`Exported ${exportOrders.length} orders for accounting`);
   };
-
-  const totalOrders = orders.length;
-  const confirmedOrders = orders.filter(o => o.status === 'confirmed').length;
-  const failedOrders = orders.filter(o => ['failed', 'expired'].includes(o.status)).length;
-  const collectedOrders = orders.filter(o => o.status === 'collected').length;
-  const totalRevenue = orders.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Orders Manager</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground flex items-center gap-2 flex-wrap mt-1">
             {dateFilter === 'today' ? "Today's live orders" : dateFilter === 'yesterday' ? "Yesterday's orders" : "Complete history"}
-            {totalRevenue > 0 && ` · Revenue: ${formatCurrency(totalRevenue)}`}
+            {globalStats.revenue > 0 && <span className="text-gray-300">|</span>}
+            {globalStats.revenue > 0 && <span className="font-semibold text-gray-900">GMV: {formatCurrency(globalStats.revenue)}</span>}
+            {globalStats.profit > 0 && <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md text-xs">Profit: {formatCurrency(globalStats.profit)}</span>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          
+          {/* 🟢 BULK ACTION BUTTON */}
+          {selectedIds.size > 0 && (
+            <Button variant="default" size="sm" onClick={handleBulkMarkCollected} disabled={isUpdating} className="bg-green-600 hover:bg-green-700 text-white shadow-sm border border-green-700">
+              {isUpdating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckSquare className="h-4 w-4 mr-1" />} 
+              Mark {selectedIds.size} Collected
+            </Button>
+          )}
+
           <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-1" /> Export {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+            <Download className="h-4 w-4 mr-1" /> Export Page {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
           </Button>
           <Button variant="outline" onClick={fetchOrders} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} /> Refresh
@@ -170,19 +259,19 @@ export function SuperAdminOrders() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Global Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Total</div><div className="text-2xl font-bold">{totalOrders}</div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Confirmed</div><div className="text-2xl font-bold text-blue-600">{confirmedOrders}</div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Failed/Expired</div><div className="text-2xl font-bold text-destructive">{failedOrders}</div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Collected</div><div className="text-2xl font-bold text-green-600">{collectedOrders}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Total (All Pages)</div><div className="text-2xl font-bold">{globalStats.total}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Confirmed</div><div className="text-2xl font-bold text-blue-600">{globalStats.confirmed}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Failed/Expired</div><div className="text-2xl font-bold text-destructive">{globalStats.failed}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Collected</div><div className="text-2xl font-bold text-green-600">{globalStats.collected}</div></CardContent></Card>
       </div>
 
       {/* Table */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle>Order List</CardTitle>
+            <CardTitle>Order Ledger</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger className="w-[130px]"><Calendar className="w-4 h-4 mr-2 opacity-50" /><SelectValue /></SelectTrigger>
@@ -213,7 +302,7 @@ export function SuperAdminOrders() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-4">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-          ) : filteredOrders.length === 0 ? (
+          ) : orders.length === 0 ? (
             <div className="p-12 text-center">
               <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg">No Orders Found</h3>
@@ -224,44 +313,75 @@ export function SuperAdminOrders() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
-                      <Checkbox checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0}
+                      <Checkbox checked={selectedIds.size === orders.length && orders.length > 0}
                         onCheckedChange={toggleSelectAll} />
                     </TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Campus</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>Amount (GMV)</TableHead>
+                    <TableHead>Platform Fee</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOrders.map((order) => (
-                    <TableRow key={order.id} className={cn(selectedIds.has(order.id) && "bg-primary/5")}>
-                      <TableCell>
-                        <Checkbox checked={selectedIds.has(order.id)} onCheckedChange={() => toggleSelect(order.id)} />
-                      </TableCell>
-                      <TableCell className="font-mono font-medium text-sm">{order.order_number}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-sm">{order.customer_name || 'Unknown'}</p>
-                          <p className="text-xs text-muted-foreground">{order.customer_email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell><Badge variant="outline">{order.campus?.code || 'N/A'}</Badge></TableCell>
-                      <TableCell className="font-semibold">{formatCurrency(order.total)}</TableCell>
-                      <TableCell>{getStatusBadge(order.status)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{format(new Date(order.created_at), 'MMM d, h:mm a')}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedOrder(order)}>
-                          <Eye className="h-4 w-4 mr-1" /> View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {orders.map((order) => {
+                    const fee = order.platform_fee || order.commission_amount || 0;
+                    return (
+                      <TableRow key={order.id} className={cn(selectedIds.has(order.id) && "bg-primary/5")}>
+                        <TableCell>
+                          <Checkbox checked={selectedIds.has(order.id)} onCheckedChange={() => toggleSelect(order.id)} />
+                        </TableCell>
+                        <TableCell className="font-mono font-medium text-sm">{order.order_number}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{order.customer_name || 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell><Badge variant="outline">{order.campus?.code || 'N/A'}</Badge></TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(order.total)}</TableCell>
+                        
+                        <TableCell>
+                          {fee > 0 ? (
+                            <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs border border-green-100">
+                              +{formatCurrency(fee)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">₹0</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell>{getStatusBadge(order.status)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{format(new Date(order.created_at), 'MMM d, h:mm a')}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedOrder(order)}>
+                            <Eye className="h-4 w-4 mr-1" /> View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
+              
+              {/* 🟢 UPGRADE 2: Pagination Controls */}
+              <div className="flex items-center justify-between p-4 border-t border-gray-100 bg-gray-50/50">
+                <div className="text-sm text-muted-foreground font-medium">
+                  Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} orders
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || isLoading}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page * pageSize >= totalCount || isLoading}>
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+
             </div>
           )}
         </CardContent>
@@ -272,7 +392,7 @@ export function SuperAdminOrders() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Order #{selectedOrder?.order_number}</DialogTitle>
-            <DialogDescription>Full order details</DialogDescription>
+            <DialogDescription>Full financial and order details</DialogDescription>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
@@ -293,39 +413,50 @@ export function SuperAdminOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Order Status</p>
-                  {getStatusBadge(selectedOrder.status)}
+                  <div className="mt-1">{getStatusBadge(selectedOrder.status)}</div>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Payment</p>
-                  <Badge variant="outline">{selectedOrder.payment_status || 'N/A'}</Badge>
+                  <Badge variant="outline" className="mt-1">{selectedOrder.payment_status || 'N/A'}</Badge>
                 </div>
               </div>
 
               {selectedOrder.razorpay_payment_id && (
                 <div>
                   <p className="text-sm text-muted-foreground">Razorpay Payment ID</p>
-                  <p className="font-mono text-xs">{selectedOrder.razorpay_payment_id}</p>
+                  <p className="font-mono text-xs bg-gray-50 p-1.5 rounded border inline-block mt-1">{selectedOrder.razorpay_payment_id}</p>
                 </div>
               )}
 
-              {selectedOrder.commission_amount && selectedOrder.commission_amount > 0 && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Commission</p>
-                  <p className="font-medium">{formatCurrency(selectedOrder.commission_amount)}</p>
-                </div>
-              )}
-
+              {/* Financial Breakdown Section */}
               <div>
-                <p className="text-sm text-muted-foreground mb-2">Items</p>
-                <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                  <Landmark size={14} /> Financial Breakdown
+                </p>
+                <div className="space-y-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
                   {selectedOrder.order_items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
+                    <div key={item.id} className="flex justify-between text-sm text-gray-600">
                       <span>{item.name} × {item.quantity}</span>
-                      <span className="font-medium">{formatCurrency(item.price * item.quantity)}</span>
+                      <span>{formatCurrency(item.price * item.quantity)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between font-semibold border-t pt-2 mt-2">
-                    <span>Total</span>
+                  
+                  <div className="border-t border-dashed border-gray-200 my-2 pt-2"></div>
+                  
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Food Subtotal</span>
+                    <span>{formatCurrency(selectedOrder.total - (selectedOrder.platform_fee || selectedOrder.commission_amount || 0))}</span>
+                  </div>
+                  
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-green-700">Platform Fee (Profit)</span>
+                    <span className="font-bold text-green-700">+{formatCurrency(selectedOrder.platform_fee || selectedOrder.commission_amount || 0)}</span>
+                  </div>
+
+                  <div className="border-t border-gray-200 my-2 pt-2"></div>
+
+                  <div className="flex justify-between font-black text-base">
+                    <span>Grand Total (Paid)</span>
                     <span>{formatCurrency(selectedOrder.total)}</span>
                   </div>
                 </div>
@@ -334,20 +465,39 @@ export function SuperAdminOrders() {
               {selectedOrder.notes && (
                 <div>
                   <p className="text-sm text-muted-foreground">Notes</p>
-                  <p className="text-sm">{selectedOrder.notes}</p>
+                  <p className="text-sm bg-yellow-50 p-2 rounded border border-yellow-100 text-yellow-800 mt-1">{selectedOrder.notes}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-xs bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <div>
-                  <p className="text-muted-foreground">Created</p>
+                  <p className="text-muted-foreground font-semibold">Created</p>
                   <p>{format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Last Updated</p>
+                  <p className="text-muted-foreground font-semibold">Last Updated</p>
                   <p>{format(new Date(selectedOrder.updated_at), 'MMM d, yyyy h:mm a')}</p>
                 </div>
               </div>
+
+              {/* 🟢 UPGRADE 3: Admin Kill Switch */}
+              {selectedOrder.status !== 'failed' && selectedOrder.status !== 'expired' && selectedOrder.status !== 'collected' && (
+                <div className="pt-2">
+                  <Button 
+                    variant="destructive" 
+                    className="w-full bg-red-600 hover:bg-red-700 font-bold shadow-sm" 
+                    onClick={() => handleCancelOrder(selectedOrder.id)}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+                    Force Cancel & Expire Order
+                  </Button>
+                  <p className="text-[10px] text-center text-muted-foreground mt-2">
+                    Warning: This instantly marks the order as failed. Use only for customer disputes or out-of-stock items.
+                  </p>
+                </div>
+              )}
+
             </div>
           )}
         </DialogContent>

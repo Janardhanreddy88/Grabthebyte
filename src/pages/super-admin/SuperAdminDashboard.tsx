@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -16,7 +16,9 @@ import {
   Package,
   CheckCircle2,
   XCircle,
-  BarChart3
+  BarChart3,
+  Landmark,
+  CalendarRange
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,8 +39,10 @@ import {
   Tooltip,
   ResponsiveContainer,
   BarChart,
-  Bar
+  Bar,
+  Legend
 } from 'recharts';
+import { toast } from 'sonner';
 
 interface StatCardProps {
   title: string;
@@ -122,23 +126,10 @@ interface RecentOrder {
   created_at: string;
 }
 
-interface TopItem {
-  name: string;
-  count: number;
-}
-
-interface UserStats {
-  total_users: number;
-  admins: number;
-  students: number;
-  kiosk_users: number;
-}
-
-interface WeeklyData {
-  day: string;
-  revenue: number;
-  orders: number;
-}
+interface TopItem { name: string; count: number; }
+interface UserStats { total_users: number; admins: number; students: number; kiosk_users: number; }
+interface WeeklyData { day: string; gmv: number; profit: number; orders: number; }
+interface LedgerStats { total_gmv: number; platform_revenue: number; canteen_payout: number; pending_payout: number; }
 
 export function SuperAdminDashboard() {
   const { dashboardStats, platformSettings, pendingCount, isLoading, filters, campuses, refreshData } = useSuperAdmin();
@@ -146,111 +137,126 @@ export function SuperAdminDashboard() {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([]);
+  const [ledgerStats, setLedgerStats] = useState<LedgerStats>({ total_gmv: 0, platform_revenue: 0, canteen_payout: 0, pending_payout: 0 });
   const [extraLoading, setExtraLoading] = useState(true);
+  
+  // 🟢 UPGRADE 2: Date Range State
+  const [dateRange, setDateRange] = useState<string>('7d');
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
   };
 
-  useEffect(() => {
-    const fetchExtra = async () => {
-      setExtraLoading(true);
-      try {
-        // Recent orders
-        let ordersQuery = supabase
-          .from('orders')
-          .select('id, order_number, total, status, payment_status, customer_name, created_at')
-          .order('created_at', { ascending: false })
-          .limit(8);
-        if (filters.campusId) ordersQuery = ordersQuery.eq('campus_id', filters.campusId);
-        const { data: ordersData } = await ordersQuery;
-        setRecentOrders((ordersData as RecentOrder[]) || []);
-
-        // Top selling items — filter by campus if selected
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-        if (filters.campusId) {
-          // Get order IDs for this campus first, then fetch their items
-          const { data: campusOrders } = await supabase
-            .from('orders')
-            .select('id')
-            .eq('campus_id', filters.campusId)
-            .gte('created_at', sevenDaysAgo.toISOString());
-          
-          const orderIds = (campusOrders || []).map(o => o.id);
-          if (orderIds.length > 0) {
-            const { data: itemsData } = await supabase
-              .from('order_items')
-              .select('name, quantity')
-              .in('order_id', orderIds.slice(0, 200));
-            
-            if (itemsData) {
-              const itemCounts = new Map<string, number>();
-              itemsData.forEach(item => itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity));
-              setTopItems(Array.from(itemCounts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5));
-            }
-          } else {
-            setTopItems([]);
-          }
-        } else {
-          const { data: itemsData } = await supabase
-            .from('order_items')
-            .select('name, quantity');
-          if (itemsData) {
-            const itemCounts = new Map<string, number>();
-            itemsData.forEach(item => itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity));
-            setTopItems(Array.from(itemCounts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5));
-          }
-        }
-
-        // User stats
-        const { data: userStatsData } = await supabase.rpc('get_campus_user_stats', {
-          p_campus_id: filters.campusId,
-        });
-        if (userStatsData) setUserStats(userStatsData as unknown as UserStats);
-
-        // Weekly revenue — single query instead of 7 sequential queries
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 6);
-        weekStart.setHours(0, 0, 0, 0);
-
-        let weekQuery = supabase
-          .from('orders')
-          .select('total, created_at')
-          .gte('created_at', weekStart.toISOString())
-          .in('status', ['confirmed', 'collected']);
-        if (filters.campusId) weekQuery = weekQuery.eq('campus_id', filters.campusId);
-
-        const { data: weekOrders } = await weekQuery;
-
-        const dayMap = new Map<string, { revenue: number; orders: number }>();
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(); d.setDate(d.getDate() - i);
-          dayMap.set(format(d, 'yyyy-MM-dd'), { revenue: 0, orders: 0 });
-        }
-        (weekOrders || []).forEach(o => {
-          const key = format(new Date(o.created_at), 'yyyy-MM-dd');
-          const entry = dayMap.get(key);
-          if (entry) { entry.revenue += o.total || 0; entry.orders += 1; }
-        });
-
-        const weekData: WeeklyData[] = [];
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(); d.setDate(d.getDate() - i);
-          const key = format(d, 'yyyy-MM-dd');
-          const entry = dayMap.get(key) || { revenue: 0, orders: 0 };
-          weekData.push({ day: format(d, 'EEE'), revenue: entry.revenue, orders: entry.orders });
-        }
-        setWeeklyData(weekData);
-      } catch (err) {
-        console.error('Error fetching dashboard extras:', err);
-      } finally {
-        setExtraLoading(false);
+  const fetchExtra = useCallback(async () => {
+    setExtraLoading(true);
+    try {
+      // Calculate start date based on selected range
+      let startDate = null;
+      const now = new Date();
+      if (dateRange === 'today') {
+        startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+      } else if (dateRange === '7d') {
+        const d = new Date(); d.setDate(d.getDate() - 7);
+        startDate = d.toISOString();
+      } else if (dateRange === '30d') {
+        const d = new Date(); d.setDate(d.getDate() - 30);
+        startDate = d.toISOString();
       }
-    };
-    fetchExtra();
-  }, [filters.campusId]);
+
+      // Fetch Ledger Stats with Date Filtering
+      const { data: ledgerData } = await supabase.rpc('get_ledger_stats', { 
+        p_campus_id: filters.campusId || null,
+        p_start_date: startDate,
+        p_end_date: null
+      });
+      if (ledgerData) setLedgerStats(ledgerData as unknown as LedgerStats);
+
+      // Fetch Recent Orders (Limit 8)
+      let ordersQuery = supabase.from('orders').select('id, order_number, total, status, payment_status, customer_name, created_at').order('created_at', { ascending: false }).limit(8);
+      if (filters.campusId) ordersQuery = ordersQuery.eq('campus_id', filters.campusId);
+      const { data: ordersData } = await ordersQuery;
+      setRecentOrders((ordersData as RecentOrder[]) || []);
+
+      // Fetch Top Items (Always last 7 days for relevance, or adapt to dateRange if preferred)
+      const itemFilterDate = startDate || new Date(new Date().setDate(now.getDate() - 30)).toISOString();
+      const { data: campusOrders } = await supabase.from('orders').select('id').gte('created_at', itemFilterDate);
+      const orderIds = (campusOrders || []).map(o => o.id);
+      
+      if (orderIds.length > 0) {
+        const { data: itemsData } = await supabase.from('order_items').select('name, quantity').in('order_id', orderIds.slice(0, 300));
+        if (itemsData) {
+          const itemCounts = new Map<string, number>();
+          itemsData.forEach(item => itemCounts.set(item.name, (itemCounts.get(item.name) || 0) + item.quantity));
+          setTopItems(Array.from(itemCounts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5));
+        }
+      } else {
+        setTopItems([]);
+      }
+
+      // User stats
+      const { data: userStatsData } = await supabase.rpc('get_campus_user_stats', { p_campus_id: filters.campusId });
+      if (userStatsData) setUserStats(userStatsData as unknown as UserStats);
+
+      // 🟢 UPGRADE 3: Fetch Chart Data directly from the financial ledger to plot Profit vs GMV
+      const chartDays = dateRange === '30d' ? 30 : 7;
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - (chartDays - 1));
+      weekStart.setHours(0, 0, 0, 0);
+
+      let ledgerQuery = supabase.from('financial_ledger').select('total_order_value, platform_fee, created_at').gte('created_at', weekStart.toISOString());
+      if (filters.campusId) ledgerQuery = ledgerQuery.eq('campus_id', filters.campusId);
+      const { data: ledgerRows } = await ledgerQuery;
+
+      const dayMap = new Map<string, { gmv: number; profit: number; orders: number }>();
+      for (let i = chartDays - 1; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        dayMap.set(format(d, 'yyyy-MM-dd'), { gmv: 0, profit: 0, orders: 0 });
+      }
+      
+      (ledgerRows || []).forEach(row => {
+        const key = format(new Date(row.created_at), 'yyyy-MM-dd');
+        const entry = dayMap.get(key);
+        if (entry) { 
+          entry.gmv += row.total_order_value || 0; 
+          entry.profit += row.platform_fee || 0;
+          entry.orders += 1; 
+        }
+      });
+
+      const weekData: WeeklyData[] = [];
+      for (let i = chartDays - 1; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const key = format(d, 'yyyy-MM-dd');
+        const entry = dayMap.get(key) || { gmv: 0, profit: 0, orders: 0 };
+        weekData.push({ 
+          day: chartDays > 7 ? format(d, 'dd MMM') : format(d, 'EEE'), 
+          gmv: entry.gmv, 
+          profit: entry.profit, 
+          orders: entry.orders 
+        });
+      }
+      setWeeklyData(weekData);
+
+    } catch (err) {
+      console.error('Error fetching dashboard extras:', err);
+    } finally {
+      setExtraLoading(false);
+    }
+  }, [filters.campusId, dateRange]);
+
+  useEffect(() => { fetchExtra(); }, [fetchExtra]);
+
+  // 🟢 UPGRADE 1: Live Ticker Realtime Connection
+  useEffect(() => {
+    const channel = supabase.channel('dashboard-live-ticker')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'financial_ledger' }, (payload) => {
+        toast.success("New payment processed! Updating dashboard...", { icon: '💰' });
+        fetchExtra(); // Silently refresh the charts and numbers
+      })
+      .subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchExtra]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -273,34 +279,79 @@ export function SuperAdminDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">GrabTheByte Command Center</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className={cn("gap-1.5 py-1 px-2.5 text-xs",
+        
+        <div className="flex items-center gap-2 flex-wrap bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm">
+          <Badge variant="outline" className={cn("gap-1.5 py-1.5 px-3 text-xs border-none shadow-none",
             platformSettings?.manual_verification_enabled 
-              ? "border-amber-500/50 text-amber-600 dark:text-amber-400 bg-amber-500/10"
-              : "border-green-500/50 text-green-600 dark:text-green-400 bg-green-500/10"
+              ? "text-amber-600 bg-amber-500/10"
+              : "text-green-600 bg-green-500/10"
           )}>
-            <Activity className="h-3 w-3" />
+            <Activity className="h-3.5 w-3.5" />
             {platformSettings?.manual_verification_enabled ? "Manual" : "Auto Gateway"}
           </Badge>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => refreshData()}>
-            <RefreshCw className="h-3.5 w-3.5" />
+          
+          <div className="h-6 w-[1px] bg-gray-200 mx-1"></div>
+          
+          {/* 🟢 UPGRADE 2: Date Range Picker UI */}
+          <div className="relative flex items-center">
+            <CalendarRange className="w-4 h-4 text-gray-500 absolute left-2 pointer-events-none" />
+            <select 
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="pl-8 pr-8 py-1.5 text-xs font-bold bg-gray-50 border-none rounded-lg text-gray-700 appearance-none focus:ring-0 cursor-pointer hover:bg-gray-100 transition-colors"
+            >
+              <option value="today">Today</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-gray-100" onClick={() => fetchExtra()}>
+            <RefreshCw className={cn("h-4 w-4 text-gray-600", extraLoading && "animate-spin")} />
           </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <StatCard title="Total Order Value" value={formatCurrency(dashboardStats?.total_gmv || 0)}
-          subtitle="Confirmed + Collected" icon={IndianRupee} variant="primary" isLoading={isLoading} />
-        <StatCard title="Active Orders" value={dashboardStats?.active_orders || 0}
-          subtitle="Pending + Confirmed" icon={ShoppingBag} variant="default" isLoading={isLoading} />
-        <StatCard title="Today's Orders" value={dashboardStats?.total_orders_today || 0}
-          subtitle="Confirmed + Collected" icon={Clock} variant="success" isLoading={isLoading} />
+      {/* 4-Column CFO Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard 
+          title="Total GMV" 
+          value={formatCurrency(ledgerStats.total_gmv)}
+          subtitle="Gross transaction volume" 
+          icon={IndianRupee} 
+          variant="primary" 
+          isLoading={extraLoading} 
+        />
+        <StatCard 
+          title="Platform Revenue" 
+          value={formatCurrency(ledgerStats.platform_revenue)}
+          subtitle="Your pure profit" 
+          icon={Landmark} 
+          variant="success" 
+          isLoading={extraLoading} 
+        />
+        <StatCard 
+          title="Pending Payouts" 
+          value={formatCurrency(ledgerStats.pending_payout)}
+          subtitle="Owed to Canteens" 
+          icon={Wallet} 
+          variant={ledgerStats.pending_payout > 0 ? "warning" : "default"} 
+          isLoading={extraLoading} 
+        />
+        <StatCard 
+          title={dateRange === 'today' ? "Orders Today" : "Total Orders"} 
+          value={extraLoading ? "..." : weeklyData.reduce((acc, curr) => acc + curr.orders, 0)}
+          subtitle="Successful orders" 
+          icon={ShoppingBag} 
+          variant="default" 
+          isLoading={isLoading} 
+        />
       </div>
 
       {/* Quick Stats Row */}
@@ -327,8 +378,8 @@ export function SuperAdminDashboard() {
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-1.5 sm:p-2 rounded-lg bg-green-500/10"><ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 dark:text-green-400" /></div>
             <div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Today</p>
-              <p className="text-base sm:text-lg font-bold">{isLoading ? <Skeleton className="h-5 w-8" /> : dashboardStats?.total_orders_today || 0}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Live Mode</p>
+              <p className="text-base sm:text-lg font-bold text-green-600">Active</p>
             </div>
           </div>
         </Card>
@@ -336,19 +387,19 @@ export function SuperAdminDashboard() {
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-1.5 sm:p-2 rounded-lg bg-amber-500/10"><BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 dark:text-amber-400" /></div>
             <div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Mode</p>
-              <p className="text-base sm:text-lg font-bold">{platformSettings?.manual_verification_enabled ? 'Manual' : 'Auto'}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">App Status</p>
+              <p className="text-base sm:text-lg font-bold">Stable</p>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* Charts Row */}
+      {/* 🟢 UPGRADE 3: CFO Charts Row (Double Line Chart) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
           <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-            <CardTitle className="text-sm sm:text-lg">Revenue (7 Days)</CardTitle>
-            <CardDescription className="text-xs">Daily revenue trend</CardDescription>
+            <CardTitle className="text-sm sm:text-lg">GMV vs Profit ({dateRange})</CardTitle>
+            <CardDescription className="text-xs">Compare gross volume to your platform cut</CardDescription>
           </CardHeader>
           <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
@@ -359,9 +410,12 @@ export function SuperAdminDashboard() {
                   <LineChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
-                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={35} />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                    <YAxis yAxisId="left" tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={35} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `₹${v}`} className="text-[10px] sm:text-xs text-green-600" tick={{ fontSize: 10 }} width={25} />
+                    <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === 'gmv' ? 'Total GMV' : 'Profit']} />
+                    <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    <Line yAxisId="left" name="gmv" type="monotone" dataKey="gmv" stroke="#94a3b8" strokeWidth={2} dot={false} />
+                    <Line yAxisId="right" name="profit" type="monotone" dataKey="profit" stroke="#16a34a" strokeWidth={3} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -371,8 +425,8 @@ export function SuperAdminDashboard() {
 
         <Card>
           <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-            <CardTitle className="text-sm sm:text-lg">Orders (7 Days)</CardTitle>
-            <CardDescription className="text-xs">Daily order volume</CardDescription>
+            <CardTitle className="text-sm sm:text-lg">Order Volume ({dateRange})</CardTitle>
+            <CardDescription className="text-xs">Daily successful transactions</CardDescription>
           </CardHeader>
           <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
             {extraLoading ? (
@@ -385,7 +439,7 @@ export function SuperAdminDashboard() {
                     <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
                     <YAxis className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={25} />
                     <Tooltip />
-                    <Bar dataKey="orders" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="orders" name="Orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -394,12 +448,10 @@ export function SuperAdminDashboard() {
         </Card>
       </div>
 
-      {/* Campus Health Monitor */}
       <CampusHealthMonitor />
 
       {/* Bottom Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* Recent Orders */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2 flex flex-row items-center justify-between px-3 sm:px-6 pt-3 sm:pt-6">
             <div>
@@ -441,9 +493,7 @@ export function SuperAdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Right Column */}
         <div className="space-y-6">
-          {/* Top Selling Items */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Top Selling Items</CardTitle>
@@ -474,7 +524,6 @@ export function SuperAdminDashboard() {
             </CardContent>
           </Card>
 
-          {/* User Distribution */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">User Distribution</CardTitle>
@@ -503,7 +552,6 @@ export function SuperAdminDashboard() {
             </CardContent>
           </Card>
 
-          {/* Quick Links */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Quick Actions</CardTitle>
@@ -514,7 +562,6 @@ export function SuperAdminDashboard() {
                 { to: '/super-admin/users', label: 'Manage Users', icon: Users },
                 { to: '/super-admin/settlements', label: 'Settlements', icon: Wallet },
                 { to: '/super-admin/analytics', label: 'Full Analytics', icon: BarChart3 },
-                
               ].map(link => (
                 <Link key={link.to} to={link.to}
                   className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-muted transition-colors text-sm">

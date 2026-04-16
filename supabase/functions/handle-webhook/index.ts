@@ -21,6 +21,37 @@ async function verifySignature(rawBody: string, signature: string, secretKey: st
   return computedSignature === signature;
 }
 
+// 📲 🌟 NEW: OneSignal Helper for Settlements!
+async function sendSettlementNotification(campusId: string, amount: number) {
+  const appId = Deno.env.get("ONESIGNAL_APP_ID");
+  const restKey = Deno.env.get("ONESIGNAL_REST_API_KEY");
+
+  if (!appId || !restKey || !campusId) {
+    console.warn("OneSignal config missing, skipping push notification.");
+    return;
+  }
+
+  try {
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Basic ${restKey}` },
+      body: JSON.stringify({
+        app_id: appId,
+        filters: [
+          { field: "tag", key: "role", relation: "=", value: "admin" },
+          { operator: "AND" },
+          { field: "tag", key: "campus_id", relation: "=", value: campusId }
+        ],
+        headings: { en: "💰 Settlement Processed!" },
+        contents: { en: `₹${amount.toFixed(2)} has been deposited to your bank account.` },
+      })
+    });
+    console.log(`✅ OneSignal Push sent to Campus Admin: ${campusId}`);
+  } catch (err) {
+    console.error("[OneSignal Error] Failed to dispatch settlement push:", err);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -46,14 +77,71 @@ Deno.serve(async (req) => {
 
     const payload = JSON.parse(rawBody);
     const eventType = payload.event;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+
+    console.log(`🔔 Webhook Event Received: ${eventType}`);
+
+    // ==========================================================
+    // 🏢 LANE 1: SETTLEMENT AUTOMATION (Fixed & Upgraded)
+    // ==========================================================
+    if (eventType === "settlement.processed") {
+      const settlementData = payload.payload?.settlement?.entity;
+      if (!settlementData) return new Response(JSON.stringify({ message: "No settlement entity" }), { status: 200 });
+
+      // 🌟 FIX 1: The real linked account ID is at the root of the Razorpay webhook!
+      const linkedAccountId = payload.account_id; 
+      const utr = settlementData.utr;
+      const amountInINR = settlementData.amount / 100; // Razorpay sends amount in paise
+
+      console.log(`🤑 Processing Settlement -> Account: ${linkedAccountId}, UTR: ${utr}, Amount: ₹${amountInINR}`);
+
+      if (!linkedAccountId) {
+         console.error("Missing linkedAccountId in webhook!");
+         return new Response(JSON.stringify({ message: "Missing Account ID" }), { status: 200 });
+      }
+
+      // 🌟 FIX 2: Look up the Campus ID so we can attach the money to the right canteen
+      const { data: campus } = await supabase
+        .from('campuses')
+        .select('id')
+        .eq('razorpay_account_id', linkedAccountId)
+        .maybeSingle();
+
+      // 🌟 FIX 3: INSERT the brand new record so it actually shows up on your dashboard!
+      const { error: settlementError } = await supabase
+        .from('settlements')
+        .insert({ 
+          campus_id: campus?.id || null,
+          razorpay_account_id: linkedAccountId,
+          amount: amountInINR,
+          status: 'SETTLED', 
+          utr_number: utr,
+          settled_at: new Date().toISOString()
+        });
+
+      if (settlementError) {
+        console.error("Settlement Insert Error:", settlementError);
+      } else {
+        console.log(`✅ Successfully inserted settlement for UTR: ${utr}`);
+        
+        // 📲 🌟 NEW: FIRE THE BACKGROUND PUSH NOTIFICATION!
+        if (campus?.id) {
+          await sendSettlementNotification(campus.id, amountInINR);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, type: "settlement" }), { status: 200, headers: corsHeaders });
+    }
+
+    // ==========================================================
+    // 🍕 LANE 2: ORDER PAYMENTS (Your Existing Logic)
+    // ==========================================================
     
-    // Safely extract IDs
+    // Safely extract IDs for Orders
     const razorpayOrderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id;
     const razorpayPaymentId = payload.payload?.payment?.entity?.id;
 
     if (!razorpayOrderId) return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
     // 6. LOG WEBHOOK
     await supabase.from("payment_webhooks").insert({
@@ -72,17 +160,13 @@ Deno.serve(async (req) => {
 
     if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
 
-    // 🛡️ ARMOR PLATING: Guard against late webhooks on already-resolved orders
-    // If already paid/confirmed OR force-rejected, ignore ALL subsequent webhooks
+    // 🛡️ Guard against late webhooks on already-resolved orders
     if (order.payment_status === "completed" || order.status === "confirmed" || order.status === "collected") {
-      console.log(`Order ${order.id} is already completed. Ignoring ${eventType} webhook.`);
       return new Response(JSON.stringify({ success: true, message: "Order already completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 🛡️ CRITICAL: If super admin force-rejected this order, NEVER re-confirm it
     if (order.status === "failed") {
-      console.log(`Order ${order.id} is already FAILED/REJECTED. Ignoring ${eventType} webhook to prevent resurrection.`);
-      return new Response(JSON.stringify({ success: true, message: "Order already failed — webhook ignored" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, message: "Order already failed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 8. STATUS LOGIC
@@ -94,7 +178,6 @@ Deno.serve(async (req) => {
       newOrderStatus = "confirmed";
     } else if (eventType === "payment.failed") {
       newPaymentStatus = "failed";
-      // Notice we do NOT change orderStatus to failed here. We leave it pending so they can retry!
     }
 
     // 9. UPDATE DATABASE
@@ -108,11 +191,11 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id); 
-        // 🌟 FIX 2: REMOVED .eq("payment_status", "pending") SO IT CAN UPGRADE FROM 'failed' TO 'completed'!
     }
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, type: "order" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
+    console.error("Critical Webhook Error:", error.message);
     return new Response(JSON.stringify({ success: false }), { status: 200, headers: corsHeaders });
   }
 });

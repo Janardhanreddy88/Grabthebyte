@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Plus, Edit, Trash2, RefreshCw, Search,
-  MapPin, Phone, Mail, User, CreditCard, Percent, Sparkles
+  MapPin, Phone, Mail, User, CreditCard, Sparkles, Download, ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,8 @@ export function CampusManagement() {
   // Campus Dialog
   const [showCampusDialog, setShowCampusDialog] = useState(false);
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
+  
+  // 🌟 ADDED razorpay_account_id TO STATE
   const [campusForm, setCampusForm] = useState({
     name: '',
     code: '',
@@ -58,7 +60,7 @@ export function CampusManagement() {
     bank_account_name: '',
     bank_account_number: '',
     bank_ifsc: '',
-    commission_rate: 10,
+    razorpay_account_id: '', 
   });
 
   // Delete Dialog
@@ -68,6 +70,7 @@ export function CampusManagement() {
   const fetchCampuses = useCallback(async () => {
     setIsLoading(true);
     
+    // Explicitly fetching razorpay_account_id just in case
     const { data, error } = await supabase
       .from('campuses')
       .select('*')
@@ -87,16 +90,83 @@ export function CampusManagement() {
     fetchCampuses();
   }, [fetchCampuses]);
 
+  // CFO Export Engine (CSV Download)
+  const exportToCSV = () => {
+    if (campuses.length === 0) {
+      toast.error("No campuses to export!");
+      return;
+    }
+
+    // 🌟 ADDED RAZORPAY ID TO EXPORT HEADERS
+    const headers = ['Campus Name', 'Code', 'Status', 'Owner', 'Phone', 'Razorpay Linked Account', 'UPI ID', 'A/C Name', 'A/C Number', 'IFSC'];
+    
+    const rows = campuses.map((c: any) => [
+      `"${c.name}"`, 
+      c.code, 
+      c.is_active ? 'Active' : 'Archived',
+      `"${c.owner_name || ''}"`, 
+      c.owner_phone || '', 
+      c.razorpay_account_id || 'Not Linked', // 🌟 ADDED RAZORPAY ID
+      c.upi_id || '',
+      `"${c.bank_account_name || ''}"`, 
+      c.bank_account_number || '', 
+      c.bank_ifsc || ''
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `GrabTheByte_Campuses_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    
+    toast.success("CSV Exported! Give this to your accountant. 📈");
+  };
+
+  const copyPayoutDetails = (campus: any) => {
+    let text = `Payout Details for ${campus.name}:\n`;
+    if (campus.razorpay_account_id) text += `Razorpay Account: ${campus.razorpay_account_id}\n`;
+    if (campus.upi_id) text += `UPI: ${campus.upi_id}\n`;
+    if (campus.bank_account_number) text += `A/C Name: ${campus.bank_account_name || 'N/A'}\nA/C: ${campus.bank_account_number}\nIFSC: ${campus.bank_ifsc}`;
+    
+    if (!campus.upi_id && !campus.bank_account_number && !campus.razorpay_account_id) {
+      toast.error("No bank details saved for this campus!");
+      return;
+    }
+    
+    navigator.clipboard.writeText(text);
+    toast.success("Bank details copied to clipboard! 📋");
+  };
+
   const handleSaveCampus = async () => {
     if (!campusForm.name.trim() || !campusForm.code.trim()) {
-      toast.error('Name and code are required');
+      toast.error('Campus Name and Code are strictly required.');
+      return;
+    }
+
+    if (campusForm.bank_ifsc.trim()) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(campusForm.bank_ifsc.trim().toUpperCase())) {
+        toast.error('Invalid IFSC Code. Please check the format (e.g., SBIN0001234).');
+        return;
+      }
+    }
+
+    if (campusForm.upi_id.trim() && !campusForm.upi_id.includes('@')) {
+      toast.error('Invalid UPI ID format. Must contain @ (e.g., name@okbank).');
+      return;
+    }
+
+    if (campusForm.owner_phone.trim() && campusForm.owner_phone.replace(/\D/g,'').length < 10) {
+      toast.error('Phone number must be at least 10 digits.');
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      const data = {
+      // 🌟 ADDED RAZORPAY ID & CAST AS ANY TO BYPASS STRICT TS CHECKS
+      const data: any = {
         name: campusForm.name.trim(),
         code: campusForm.code.trim().toUpperCase(),
         address: campusForm.address.trim() || null,
@@ -107,23 +177,17 @@ export function CampusManagement() {
         upi_id: campusForm.upi_id.trim() || null,
         bank_account_name: campusForm.bank_account_name.trim() || null,
         bank_account_number: campusForm.bank_account_number.trim() || null,
-        bank_ifsc: campusForm.bank_ifsc.trim() || null,
-        commission_rate: campusForm.commission_rate,
+        bank_ifsc: campusForm.bank_ifsc.trim().toUpperCase() || null,
+        razorpay_account_id: campusForm.razorpay_account_id.trim() || null, // 🌟 NEW FIELD
+        commission_rate: 0, 
       };
 
       if (editingCampus) {
-        const { error } = await supabase
-          .from('campuses')
-          .update(data)
-          .eq('id', editingCampus.id);
-
+        const { error } = await supabase.from('campuses').update(data).eq('id', editingCampus.id);
         if (error) throw error;
         toast.success('Campus updated successfully');
       } else {
-        const { error } = await supabase
-          .from('campuses')
-          .insert(data);
-
+        const { error } = await supabase.from('campuses').insert(data);
         if (error) throw error;
         toast.success('Campus created successfully');
       }
@@ -132,10 +196,13 @@ export function CampusManagement() {
       refreshData();
       setShowCampusDialog(false);
       resetCampusForm();
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error('Error saving campus:', err);
-      const message = err instanceof Error ? err.message : 'Failed to save campus';
-      toast.error(message);
+      if (err.code === '23505') {
+        toast.error(`A campus with the code ${campusForm.code} already exists!`);
+      } else {
+        toast.error(err.message || 'Failed to save campus details.');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -143,24 +210,25 @@ export function CampusManagement() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-
     setIsProcessing(true);
 
     try {
       const { error } = await supabase
         .from('campuses')
-        .delete()
+        .update({ 
+          is_active: false, 
+          name: `[ARCHIVED] ${deleteTarget.name}` 
+        })
         .eq('id', deleteTarget.id);
 
       if (error) throw error;
 
-      toast.success('Campus deleted successfully');
+      toast.success('Campus archived safely. Financial history preserved.');
       fetchCampuses();
       refreshData();
-    } catch (err: unknown) {
-      console.error('Error deleting:', err);
-      const message = err instanceof Error ? err.message : 'Failed to delete campus';
-      toast.error(message);
+    } catch (err: any) {
+      console.error('Error archiving:', err);
+      toast.error(err.message || 'Failed to archive campus');
     } finally {
       setIsProcessing(false);
       setDeleteTarget(null);
@@ -180,12 +248,12 @@ export function CampusManagement() {
       bank_account_name: '',
       bank_account_number: '',
       bank_ifsc: '',
-      commission_rate: 10,
+      razorpay_account_id: '', // 🌟 RESET NEW FIELD
     });
     setEditingCampus(null);
   };
 
-  const openEditCampus = (campus: Campus) => {
+  const openEditCampus = (campus: any) => {
     setCampusForm({
       name: campus.name,
       code: campus.code,
@@ -198,7 +266,7 @@ export function CampusManagement() {
       bank_account_name: campus.bank_account_name || '',
       bank_account_number: campus.bank_account_number || '',
       bank_ifsc: campus.bank_ifsc || '',
-      commission_rate: campus.commission_rate || 10,
+      razorpay_account_id: campus.razorpay_account_id || '', // 🌟 LOAD NEW FIELD
     });
     setEditingCampus(campus);
     setShowCampusDialog(true);
@@ -216,7 +284,6 @@ export function CampusManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Campus Management</h1>
@@ -224,23 +291,26 @@ export function CampusManagement() {
             Manage your campuses and their settings
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => { fetchCampuses(); refreshData(); }} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button variant="outline" onClick={exportToCSV} className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200">
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export CSV</span>
           </Button>
           <Button variant="outline" onClick={() => setShowWizard(true)}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Onboard Campus
+            <Sparkles className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Onboard Campus</span>
           </Button>
           <Button onClick={() => { resetCampusForm(); setShowCampusDialog(true); }}>
-            <Plus className="h-4 w-4 mr-2" />
-            Quick Add
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Quick Add</span>
           </Button>
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative w-full sm:w-80">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -251,7 +321,6 @@ export function CampusManagement() {
         />
       </div>
 
-      {/* Campus Grid */}
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -273,46 +342,63 @@ export function CampusManagement() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredCampuses.map((campus) => (
-            <Card key={campus.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
+          {filteredCampuses.map((campus: any) => (
+            <Card key={campus.id} className="hover:shadow-md transition-shadow flex flex-col">
+              <CardContent className="p-4 flex flex-col h-full">
+                <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="font-semibold text-lg">{campus.name}</h3>
                     <Badge variant="outline" className="mt-1">{campus.code}</Badge>
                   </div>
                   <Badge variant={campus.is_active ? 'default' : 'secondary'}>
-                    {campus.is_active ? 'Active' : 'Inactive'}
+                    {campus.is_active ? 'Active' : 'Archived'}
                   </Badge>
                 </div>
                 
-                {campus.address && (
-                  <div className="flex items-start gap-2 text-sm text-muted-foreground mb-2">
-                    <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span>{campus.address}</span>
-                  </div>
-                )}
-                
-                {campus.owner_name && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                    <User className="h-4 w-4" />
-                    <span>{campus.owner_name}</span>
-                  </div>
-                )}
-                
-                {campus.owner_phone && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                    <Phone className="h-4 w-4" />
-                    <span>{campus.owner_phone}</span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                  <Percent className="h-4 w-4" />
-                  <span>Commission: {campus.commission_rate}%</span>
+                <div className="space-y-3 mb-6 flex-1">
+                  {campus.address && (
+                    <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{campus.address}</span>
+                    </div>
+                  )}
+                  
+                  {campus.owner_name && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <User className="h-4 w-4" />
+                      <span>{campus.owner_name}</span>
+                    </div>
+                  )}
+                  
+                  {campus.owner_phone && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="h-4 w-4" />
+                      <span>{campus.owner_phone}</span>
+                    </div>
+                  )}
+
+                  {/* 🌟 NEW: DISPLAY RAZORPAY ID ON CARD IF LINKED */}
+                  {campus.razorpay_account_id && (
+                    <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600 bg-emerald-50 w-fit px-2 py-0.5 rounded mt-2">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Linked: {campus.razorpay_account_id}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pt-3 border-t border-gray-100 mt-auto">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => copyPayoutDetails(campus)} 
+                    title="Copy Bank Details"
+                  >
+                    <CreditCard className="h-4 w-4 mr-1" /> Copy Bank
+                  </Button>
+                  
+                  <div className="flex-1"></div>
+                  
                   <Button variant="outline" size="sm" onClick={() => openEditCampus(campus)}>
                     <Edit className="h-4 w-4 mr-1" />
                     Edit
@@ -369,7 +455,7 @@ export function CampusManagement() {
                     value={campusForm.code}
                     onChange={(e) => setCampusForm(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
                   />
-                  <p className="text-xs text-muted-foreground">Use numbering for multiple: CMRTC01, CMRTC02</p>
+                  <p className="text-xs text-muted-foreground">Must be unique (e.g., CMRTC01)</p>
                 </div>
               </div>
               <div className="mt-4 space-y-2">
@@ -387,7 +473,7 @@ export function CampusManagement() {
                   checked={campusForm.is_active}
                   onCheckedChange={(checked) => setCampusForm(prev => ({ ...prev, is_active: checked }))}
                 />
-                <Label htmlFor="is_active">Active</Label>
+                <Label htmlFor="is_active">Active Campus</Label>
               </div>
             </div>
 
@@ -440,8 +526,25 @@ export function CampusManagement() {
                 Payment Details
               </h4>
               <div className="space-y-4">
+                
+                {/* 🌟 NEW: RAZORPAY ACCOUNT ID FIELD */}
+                <div className="space-y-2 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
+                  <Label htmlFor="razorpay_account_id" className="flex items-center gap-2 text-emerald-800">
+                    <ShieldCheck className="h-4 w-4" />
+                    Razorpay Linked Account ID
+                  </Label>
+                  <Input
+                    id="razorpay_account_id"
+                    placeholder="e.g. acc_XYZ12345"
+                    className="border-emerald-200"
+                    value={campusForm.razorpay_account_id}
+                    onChange={(e) => setCampusForm(prev => ({ ...prev, razorpay_account_id: e.target.value }))}
+                  />
+                  <p className="text-xs text-emerald-600/80">Required for automated T+2 payouts via Razorpay Route.</p>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="upi_id">UPI ID</Label>
+                  <Label htmlFor="upi_id">Legacy UPI ID</Label>
                   <Input
                     id="upi_id"
                     placeholder="name@upi"
@@ -472,25 +575,11 @@ export function CampusManagement() {
                     <Label htmlFor="bank_ifsc">IFSC Code</Label>
                     <Input
                       id="bank_ifsc"
-                      placeholder="IFSC"
+                      placeholder="e.g. SBIN0001234"
                       value={campusForm.bank_ifsc}
                       onChange={(e) => setCampusForm(prev => ({ ...prev, bank_ifsc: e.target.value.toUpperCase() }))}
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="commission_rate">Commission Rate (%)</Label>
-                  <Input
-                    id="commission_rate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    value={campusForm.commission_rate}
-                    onChange={(e) => setCampusForm(prev => ({ ...prev, commission_rate: Number(e.target.value) }))}
-                    className="w-32"
-                  />
-                  <p className="text-xs text-muted-foreground">Platform commission for this campus</p>
                 </div>
               </div>
             </div>
@@ -511,11 +600,10 @@ export function CampusManagement() {
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Campus</AlertDialogTitle>
+            <AlertDialogTitle>Archive Campus</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? 
-              This will also delete all associated data including orders, menu items, and user profiles.
-              This action cannot be undone.
+              Are you sure you want to archive <strong>{deleteTarget?.name}</strong>? 
+              This will disable the campus and hide it from new students. For accounting safety, the campus data is archived, not permanently deleted, preserving your historical financial ledgers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -525,7 +613,7 @@ export function CampusManagement() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isProcessing}
             >
-              {isProcessing ? 'Deleting...' : 'Delete'}
+              {isProcessing ? 'Archiving...' : 'Archive Campus'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

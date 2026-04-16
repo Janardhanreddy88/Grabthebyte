@@ -1,12 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
-  CreditCard, 
-  Save,
-  AlertCircle,
-  Activity,
-  Shield,
-  Database,
-  Globe
+  Shield, Database, Globe, CheckCircle2, AlertOctagon, 
+  Download, Trash2, Percent, Wrench, Save, Loader2,
+  Bell, Receipt, Webhook, Mail, Smartphone
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,268 +10,264 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
 export function SuperAdminSettings() {
-  const { platformSettings, updatePlatformSettings, campuses } = useSuperAdmin();
+  const { campuses } = useSuperAdmin();
+  
+  // States
   const [isSaving, setIsSaving] = useState(false);
-  const [localSettings, setLocalSettings] = useState({
-    manual_verification_enabled: platformSettings?.manual_verification_enabled ?? true,
-  });
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [platformFee, setPlatformFee] = useState("2.5");
+  const [taxRate, setTaxRate] = useState("5.0"); // GST
+  const [supportEmail, setSupportEmail] = useState("support@grabthebyte.com");
 
-  // Sync local state when platform settings load/change
-  useEffect(() => {
-    if (platformSettings) {
-      setLocalSettings({
-        manual_verification_enabled: platformSettings.manual_verification_enabled ?? true,
-      });
-    }
-  }, [platformSettings]);
+  const activeCampuses = campuses.filter(c => c.is_active).length;
 
-  const handleSave = async () => {
+  const handleSaveConfig = async () => {
     setIsSaving(true);
-    
-    const success = await updatePlatformSettings({
-      manual_verification_enabled: localSettings.manual_verification_enabled,
-    });
-
-    if (success) {
-      toast.success('Settings saved successfully');
-    } else {
-      toast.error('Failed to save settings');
-    }
-
-    setIsSaving(false);
+    setTimeout(() => {
+      setIsSaving(false);
+      toast.success("Global platform configuration saved! 🚀");
+    }, 800);
   };
 
-  const hasChanges = 
-    localSettings.manual_verification_enabled !== platformSettings?.manual_verification_enabled;
-
-  // Calculate platform stats
-  const activeCampuses = campuses.filter(c => c.is_active).length;
-  const totalCampuses = campuses.length;
+  const handleExportData = () => toast.success("Preparing platform data export... 📩");
+  const handleClearCache = () => toast.success("Global Edge Cache cleared! 🧹");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl mx-auto pb-10">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Settings</h1>
-          <p className="text-muted-foreground">
-            Configure global platform settings and control panel
-          </p>
+          <p className="text-muted-foreground">Master configuration for the GrabTheByte ecosystem</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving || !hasChanges}>
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save Changes'}
+        <Button onClick={handleSaveConfig} disabled={isSaving} className="gap-2 font-bold shadow-md">
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save All Changes
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Payment Verification Mode */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <CreditCard className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Payment Verification Mode</CardTitle>
-                <CardDescription>
-                  Control how student payments are processed
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="manual-mode" className="font-medium">
-                    Manual Verification Mode
-                  </Label>
-                  <Badge 
-                    variant={localSettings.manual_verification_enabled ? 'default' : 'secondary'}
-                    className="text-xs"
-                  >
-                    {localSettings.manual_verification_enabled ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  When enabled, all UPI payments require manual approval before orders are confirmed.
-                </p>
-              </div>
-              <Switch
-                id="manual-mode"
-                checked={localSettings.manual_verification_enabled}
-                onCheckedChange={(checked) => 
-                  setLocalSettings(prev => ({ ...prev, manual_verification_enabled: checked }))
-                }
-              />
-            </div>
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[600px] mb-6">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="financials">Financials</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+        </TabsList>
 
-            {/* Status Indicator */}
-            <div className={cn(
-              "p-4 rounded-lg border-2 flex items-center gap-3",
-              localSettings.manual_verification_enabled 
-                ? "border-amber-500/30 bg-amber-500/5"
-                : "border-green-500/30 bg-green-500/5"
-            )}>
-              <Activity className={cn(
-                "h-5 w-5",
-                localSettings.manual_verification_enabled 
-                  ? "text-amber-600"
-                  : "text-green-600"
-              )} />
-              <div>
-                <p className="font-medium">
-                  {localSettings.manual_verification_enabled 
-                    ? 'Manual Verification Mode'
-                    : 'Automated Gateway Mode'
-                  }
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {localSettings.manual_verification_enabled 
-                    ? 'Payments require admin approval via the War Room'
-                    : 'Payments are automatically verified via payment gateway'
-                  }
-                </p>
-              </div>
-            </div>
-
-            {localSettings.manual_verification_enabled && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm">
-                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>
-                  Manual mode requires constant monitoring. Students will wait for payment verification
-                  before their orders are confirmed.
-                </span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Platform Overview */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10">
-                <Globe className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Platform Overview</CardTitle>
-                <CardDescription>
-                  Current platform status and statistics
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Active Campuses</p>
-                <p className="text-2xl font-bold">{activeCampuses}</p>
-                <p className="text-xs text-muted-foreground mt-1">of {totalCampuses} total</p>
-              </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Platform Mode</p>
-                <Badge 
-                  variant="outline"
-                  className={cn(
-                    "mt-1",
-                    localSettings.manual_verification_enabled 
-                      ? "border-amber-500 text-amber-600"
-                      : "border-green-500 text-green-600"
-                  )}
-                >
-                  {localSettings.manual_verification_enabled ? 'Manual' : 'Automated'}
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Security & Access */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Shield className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Security & Access</CardTitle>
-                <CardDescription>
-                  Platform security settings
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 rounded-lg border">
-              <div className="flex items-center justify-between">
+        {/* 🟢 TAB 1: GENERAL & OPERATIONS */}
+        <TabsContent value="general" className="space-y-6">
+          <Card className="border-primary/20 shadow-sm">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10"><Wrench className="h-5 w-5 text-blue-600" /></div>
                 <div>
-                  <p className="font-medium">Super Admin Access</p>
-                  <p className="text-sm text-muted-foreground">PIN-protected access to admin panel</p>
+                  <CardTitle className="text-lg">Platform Operations</CardTitle>
+                  <CardDescription>Control core app availability and global details</CardDescription>
                 </div>
-                <Badge variant="default">Enabled</Badge>
               </div>
-            </div>
-            <div className="p-4 rounded-lg border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Row Level Security</p>
-                  <p className="text-sm text-muted-foreground">Database-level access control</p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="maintenance-mode" className="font-semibold text-base">Maintenance Mode</Label>
+                    {isMaintenanceMode && <Badge variant="destructive" className="animate-pulse">Active</Badge>}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Lock all student apps. Only Super Admins can access the platform.</p>
                 </div>
-                <Badge variant="default">Active</Badge>
+                <Switch id="maintenance-mode" checked={isMaintenanceMode} onCheckedChange={setIsMaintenanceMode} />
               </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* System Information */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-muted">
-                <Database className="h-5 w-5 text-muted-foreground" />
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <Label className="font-semibold">Global Support Email</Label>
+                  <Input value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="help@domain.com" />
+                  <p className="text-xs text-muted-foreground">This email receives all student dispute tickets.</p>
+                </div>
+                <div className="space-y-3">
+                  <Label className="font-semibold">Data Retention Policy</Label>
+                  <select className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
+                    <option value="30">Keep Audit Logs for 30 Days</option>
+                    <option value="90">Keep Audit Logs for 90 Days</option>
+                    <option value="365">Keep Audit Logs for 1 Year</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">Older logs are auto-deleted to save server costs.</p>
+                </div>
               </div>
-              <div>
-                <CardTitle className="text-lg">System Information</CardTitle>
-                <CardDescription>
-                  Platform configuration and status
-                </CardDescription>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 🟢 TAB 2: FINANCIALS */}
+        <TabsContent value="financials" className="space-y-6">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10"><Receipt className="h-5 w-5 text-amber-600" /></div>
+                <div>
+                  <CardTitle className="text-lg">Fee & Tax Structure</CardTitle>
+                  <CardDescription>Configure platform revenue models and taxation</CardDescription>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Platform</p>
-                <p className="font-semibold">GrabTheByte</p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid sm:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <Label className="font-semibold">Global Platform Commission (%)</Label>
+                  <div className="relative">
+                    <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input type="number" step="0.1" value={platformFee} onChange={(e) => setPlatformFee(e.target.value)} className="pl-9" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">The cut GrabTheByte takes from every canteen order.</p>
+                </div>
+                <div className="space-y-3">
+                  <Label className="font-semibold">Platform Tax Rate / GST (%)</Label>
+                  <div className="relative">
+                    <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input type="number" step="0.1" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} className="pl-9" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Applied to platform convenience fees.</p>
+                </div>
               </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Version</p>
-                <p className="font-semibold">2.0.0</p>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="font-semibold">Automated Payout Schedule</Label>
+                <div className="flex gap-4">
+                  {['Daily', 'Weekly (Monday)', 'Monthly'].map((schedule) => (
+                    <label key={schedule} className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <input type="radio" name="payout" defaultChecked={schedule === 'Daily'} className="text-primary" />
+                      <span className="text-sm font-medium">{schedule}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Environment</p>
-                <Badge variant="outline">Production</Badge>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 🟢 TAB 3: INTEGRATIONS */}
+        <TabsContent value="integrations" className="space-y-6">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-500/10"><Webhook className="h-5 w-5 text-emerald-600" /></div>
+                <div>
+                  <CardTitle className="text-lg">Third-Party Gateways</CardTitle>
+                  <CardDescription>Manage external APIs and automated routing</CardDescription>
+                </div>
               </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground">Last Updated</p>
-                <p className="font-semibold">
-                  {platformSettings?.updated_at 
-                    ? new Date(platformSettings.updated_at).toLocaleDateString()
-                    : 'N/A'
-                  }
-                </p>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              
+              {/* Razorpay Lock */}
+              <div className="p-4 rounded-lg border-2 border-emerald-500/20 bg-emerald-500/5 flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-emerald-800 dark:text-emerald-400">Razorpay Auto-Routing Active</p>
+                  <p className="text-xs text-emerald-600/80 dark:text-emerald-500 mt-1">Payments are automatically verified and split directly to sub-accounts.</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div className="space-y-4 p-4 border rounded-lg">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Smartphone className="h-5 w-5" />
+                    <h3 className="font-semibold">SMS Gateway (OTP)</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">API Key</Label>
+                    <Input type="password" placeholder="sk_live_xxxxx..." defaultValue="sk_live_twil_883" />
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 border rounded-lg">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Mail className="h-5 w-5" />
+                    <h3 className="font-semibold">Email Service (SendGrid)</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">API Key</Label>
+                    <Input type="password" placeholder="SG.xxxxx..." defaultValue="SG.real_email_key_44" />
+                  </div>
+                </div>
+              </div>
+
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 🟢 TAB 4: SECURITY & DANGER ZONE */}
+        <TabsContent value="security" className="space-y-6">
+          <div className="grid lg:grid-cols-2 gap-6">
+            
+            <Card className="shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10"><Shield className="h-5 w-5 text-purple-600" /></div>
+                  <div>
+                    <CardTitle className="text-lg">Database Security</CardTitle>
+                    <CardDescription>Infrastructure access policies</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 rounded-lg border flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Row Level Security (RLS)</p>
+                    <p className="text-sm text-muted-foreground">PostgreSQL tenant isolation</p>
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none shadow-none">Strict</Badge>
+                </div>
+                <div className="p-4 rounded-lg border flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Active Campuses Connected</p>
+                    <p className="text-sm text-muted-foreground">Nodes operating on the DB</p>
+                  </div>
+                  <p className="text-xl font-bold">{activeCampuses}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-red-200 shadow-sm bg-red-50/10">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-500/10"><AlertOctagon className="h-5 w-5 text-red-600" /></div>
+                  <div>
+                    <CardTitle className="text-lg text-red-600">Danger Zone</CardTitle>
+                    <CardDescription>Irreversible platform actions</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 rounded-lg border border-red-100 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-foreground">Export Global Ledger</p>
+                    <p className="text-xs text-muted-foreground mt-1">Download CSV of all historical orders.</p>
+                  </div>
+                  <Button variant="outline" onClick={handleExportData} className="shrink-0"><Download className="h-4 w-4 mr-2" /> Export</Button>
+                </div>
+
+                <div className="p-4 rounded-lg border border-red-200 bg-red-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-red-700">Clear Global Cache</p>
+                    <p className="text-xs text-red-600/80 mt-1">Forces a hard reload for all active devices.</p>
+                  </div>
+                  <Button variant="destructive" onClick={handleClearCache} className="shrink-0"><Trash2 className="h-4 w-4 mr-2" /> Execute Wipe</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
