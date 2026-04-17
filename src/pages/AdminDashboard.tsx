@@ -36,6 +36,7 @@ import {
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
+import { useCampusBouncer } from '@/hooks/useCampusBouncer'; // 🌟 IMPORTED THE BOUNCER
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -43,6 +44,9 @@ export default function AdminDashboard() {
   const { logout: authLogout } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // 🌟 DEPLOYED THE SECURITY BOUNCER
+  useCampusBouncer();
   
   const { isPrinterConnected, printTicket } = usePrinter();
   
@@ -70,7 +74,7 @@ export default function AdminDashboard() {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSettlementInfoOpen, setIsSettlementInfoOpen] = useState(false); 
-  const [showHolidayExample, setShowHolidayExample] = useState(false); // 🌟 STATE FOR ACCORDION
+  const [showHolidayExample, setShowHolidayExample] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   
   const [settlements, setSettlements] = useState<any[]>([]);
@@ -134,7 +138,6 @@ export default function AdminDashboard() {
     fetchProfile();
   }, []);
 
-  // 🌟 FETCH SETTLEMENTS & LISTEN FOR INSTANT PAYOUT NOTIFICATIONS
   useEffect(() => {
     if (!profileData?.campus_id) return;
     
@@ -151,10 +154,8 @@ export default function AdminDashboard() {
       }
     };
     
-    // Initial fetch
     fetchSettlements();
 
-    // Set up Realtime Radar for new settlements
     const settlementChannel = supabase
       .channel('realtime-settlements')
       .on(
@@ -287,10 +288,18 @@ export default function AdminDashboard() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // 🌟 MEMORY-WIPING LOGOUT ADDED
   const handleSignOut = async () => {
-    pinLogout();
-    await authLogout();
-    navigate("/auth?logout=true");
+    if (pinLogout) pinLogout();
+    if (authLogout) await authLogout();
+    await supabase.auth.signOut();
+    
+    localStorage.removeItem('campus_code');
+    localStorage.removeItem('campus_name');
+    localStorage.removeItem('campus_id');
+    localStorage.removeItem('selected_campus');
+    
+    navigate("/"); 
   };
 
   const lowStockItems = menuItems
@@ -306,14 +315,10 @@ export default function AdminDashboard() {
   const formatSettlementDates = (settledDateStr: string) => {
     if (!settledDateStr) return { depositDate: 'Pending', salesDate: 'N/A' };
     const settledDate = new Date(settledDateStr);
-    
     const depositDate = settledDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
-    
     const salesDateObj = new Date(settledDate);
     salesDateObj.setDate(salesDateObj.getDate() - 2);
-    
     const salesDate = salesDateObj.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
-    
     return { depositDate, salesDate };
   };
 
@@ -543,20 +548,18 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {/* 🌟 PAYOUTS & SETTLEMENTS SECTION WITH NEW BUTTON */}
             <div className="mt-8">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <Landmark className="h-6 w-6 text-primary" /> 
                   Recent Bank Payouts
                 </h2>
-                {/* 🌟 BUTTON THAT OPENS TIMELINE */}
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={() => {
                     setIsSettlementInfoOpen(true);
-                    setShowHolidayExample(false); // Reset accordion on open
+                    setShowHolidayExample(false); 
                   }}
                   className="gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 bg-blue-50/50"
                 >
@@ -564,7 +567,6 @@ export default function AdminDashboard() {
                 </Button>
               </div>
 
-              {/* SETTLEMENTS LIST */}
               <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
                 <div className="grid grid-cols-3 bg-muted/50 p-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
                   <div className="col-span-2">Payout Details</div>
@@ -619,7 +621,6 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
 
-        {/* 🌟 NEW: THE CLEAN RAZORPAY TIMELINE DIALOG */}
         <Dialog open={isSettlementInfoOpen} onOpenChange={setIsSettlementInfoOpen}>
           <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden">
             <div className="px-6 pt-6 pb-6">
@@ -645,12 +646,9 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Main Timeline Graphic */}
               <div className="relative flex justify-between items-start mb-10 px-2">
-                {/* Connecting Dashed Line */}
                 <div className="absolute top-4 left-14 right-14 h-[2px] bg-border border-dashed border-t-2 z-0"></div>
 
-                {/* Day 0 */}
                 <div className="relative z-10 flex flex-col items-center w-1/3">
                   <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
                     <CheckCircle className="h-4 w-4" />
@@ -659,7 +657,6 @@ export default function AdminDashboard() {
                   <p className="text-xs text-center text-muted-foreground px-2">Payment received from students</p>
                 </div>
 
-                {/* Day 1 */}
                 <div className="relative z-10 flex flex-col items-center w-1/3">
                   <div className="bg-background border border-border rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -667,7 +664,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Day 2 */}
                 <div className="relative z-10 flex flex-col items-center w-1/3">
                   <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
                     <CheckCircle className="h-4 w-4" />
@@ -677,9 +673,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* 🌟 ACCORDION: Warning Alert & Example */}
               <div className="bg-amber-900/5 rounded-lg border border-amber-900/10 transition-all duration-300">
-                {/* Clickable Header */}
                 <div 
                   className="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-900/10 rounded-lg transition-colors"
                   onClick={() => setShowHolidayExample(!showHolidayExample)}
@@ -695,11 +689,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Expanded Timeline Content */}
                 {showHolidayExample && (
                   <div className="px-2 pb-6 pt-2 animate-in slide-in-from-top-2">
                     <div className="relative flex justify-between items-start px-2 mt-4">
-                      {/* Connecting Dashed Line for 4 nodes */}
                       <div className="absolute top-4 left-10 right-10 h-[2px] bg-amber-900/20 border-dashed border-t-2 z-0"></div>
 
                       <div className="relative z-10 flex flex-col items-center w-1/4">
@@ -740,7 +732,6 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* EDIT PROFILE DIALOG */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>

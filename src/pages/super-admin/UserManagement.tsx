@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, Search, Shield, UserCog, MoreHorizontal, RefreshCw,
-  Mail, Calendar, Building2, Loader2, Key, UserPlus, Trash2
+  Mail, Calendar, Building2, Loader2, Key, UserPlus, Trash2, Globe
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -77,11 +77,18 @@ export function UserManagement() {
         .select('*')
         .order('created_at', { ascending: false });
 
+      // 🌟 FIX: THE CEO BYPASS
+      // If a campus is selected, fetch users for that campus OR anyone who is a super_admin!
       if (filters.campusId) {
         const campus = campuses.find(c => c.id === filters.campusId);
-        if (campus) query = query.eq('campus_code', campus.code);
+        if (campus) {
+          query = query.or(`campus_code.eq.${campus.code},role.eq.super_admin`);
+        }
       }
-      if (roleFilter !== 'all') query = query.eq('role', roleFilter as AppRole);
+      
+      if (roleFilter !== 'all') {
+        query = query.eq('role', roleFilter as AppRole);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -91,9 +98,9 @@ export function UserManagement() {
         user_id: row.user_id || '',
         full_name: row.full_name,
         email: row.email,
-        phone: null,
+        phone: row.phone, 
         campus_id: row.campus_id || '',
-        created_at: row.created_at || '',
+        created_at: row.created_at || new Date().toISOString(),
         role: (row.role || 'student') as AppRole,
         campus_name: row.campus_name,
         campus_code: row.campus_code
@@ -283,8 +290,18 @@ export function UserManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          <span>{user.campus_name || user.campus_code || 'N/A'}</span>
+                          {/* 🌟 NEW: THE CEO UI UPGRADE */}
+                          {user.role === 'super_admin' ? (
+                            <>
+                              <Globe className="h-4 w-4 text-purple-500" />
+                              <span className="font-semibold text-purple-600 tracking-tight">Global (All Campuses)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              <span>{user.campus_name || user.campus_code || 'N/A'}</span>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>

@@ -37,9 +37,12 @@ export default function MyOrders() {
   };
 
   useEffect(() => { fetchOrders(); const ch = supabase.channel('my-orders-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders()).subscribe(); return () => { supabase.removeChannel(ch); }; }, [user]);
+  
+  // Keep the interval for UI updates, but don't rely on it for critical logic
   useEffect(() => { const i = setInterval(() => setCurrentTime(Date.now()), 1000); return () => clearInterval(i); }, []);
 
-  const getRemainingSeconds = (c: string) => Math.max(0, Math.floor((PAYMENT_TIMEOUT_MS - (currentTime - new Date(c).getTime())) / 1000));
+  // FIX: Absolute real-world time check for remaining seconds
+  const getRemainingSeconds = (c: string) => Math.max(0, Math.floor((PAYMENT_TIMEOUT_MS - (Date.now() - new Date(c).getTime())) / 1000));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const checkIsExpired = (o: Order) => o.status === 'expired' || (o.rejection_reason?.includes('Not collected') ?? false);
 
@@ -48,7 +51,6 @@ export default function MyOrders() {
     processingExpiryIds.current.add(id);
     try { 
       await supabase.from('orders').update({ status: 'failed' as const, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 10 minutes expired' }).eq('id', id); 
-      // 🔥 FIX: Removed the annoying toast.info('Order expired'); It now happens silently!
     } catch { 
       processingExpiryIds.current.delete(id); 
     }
@@ -56,10 +58,14 @@ export default function MyOrders() {
 
   useEffect(() => {
     if (isLoading || !orders.length) return;
+    
+    // FIX: Re-sync real world time when app wakes up or component re-renders
+    const realWorldTime = Date.now();
+    
     orders.forEach(o => { 
-      // 🔥 FIX: Optimized so it doesn't constantly try to update already-failed orders
       const needsUpdate = (o.status === 'pending' || o.payment_status === 'pending') && o.payment_status !== 'not_confirmed';
-      const isTimedOut = (currentTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
+      // FIX: Use realWorldTime, not the potentially frozen state variable
+      const isTimedOut = (realWorldTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
 
       if (needsUpdate && isTimedOut) {
         expirePendingOrder(o.id); 
@@ -69,11 +75,15 @@ export default function MyOrders() {
 
   const getStatusConfig = (o: Order) => {
     const isExpired = checkIsExpired(o);
+    // 🟢 NEW: Check if Admin explicitly cancelled it to override the status badge
+    const isAdminCancelled = o.rejection_reason?.includes('Admin');
+    
     if (o.status === 'confirmed' && (o.payment_status === 'confirmed' || o.payment_status === 'completed')) return { label: 'Ready for Pickup', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
     if (o.status === 'pending' && o.payment_status === 'pending') return { label: 'Payment Pending', className: 'bg-orange-50 text-orange-600 border-orange-200' };
-    if (!isExpired && (o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed')) return { label: 'Payment Failed', className: 'bg-red-50 text-red-600 border-red-200' };
     if (o.status === 'collected') return { label: 'Collected', className: 'bg-blue-50 text-blue-600 border-blue-200' };
-    if (isExpired) return { label: 'Expired', className: 'bg-gray-100 text-gray-600 border-gray-200' };
+    if (isExpired || isAdminCancelled) return { label: 'Cancelled', className: 'bg-gray-100 text-gray-600 border-gray-200' };
+    if (!isExpired && !isAdminCancelled && (o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed')) return { label: 'Payment Failed', className: 'bg-red-50 text-red-600 border-red-200' };
+    
     return { label: 'Processing', className: 'bg-yellow-50 text-yellow-600 border-yellow-200' };
   };
 
@@ -105,19 +115,28 @@ export default function MyOrders() {
           </div>
         ) : orders.map((order) => {
           const sc = getStatusConfig(order);
-          const rem = getRemainingSeconds(order.created_at);
-          const timedOut = (currentTime - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
+          const timedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
+          const rem = timedOut ? 0 : getRemainingSeconds(order.created_at);
+          
           const isOk = order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed');
           const isPending = order.status === 'pending' && order.payment_status === 'pending' && !timedOut;
           const isCollected = order.status === 'collected';
-          const isExp = checkIsExpired(order);
-          const isFailed = !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed');
+          
+          // 🟢 THE FIX: Check if the student already paid, or if the Admin manually cancelled it
+          const isPaid = order.payment_status === 'confirmed' || order.payment_status === 'completed';
+          const isAdminCancelled = order.rejection_reason?.includes('Admin') || (order.status === 'failed' && isPaid);
+          
+          // Treat Admin Cancellations exactly like Expired orders (Gray box, NO retry button)
+          const isExp = checkIsExpired(order) || isAdminCancelled;
+          
+          // Payment Failed only shows if it wasn't cancelled by Admin
+          const isFailed = !isOk && !isCollected && !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed' || timedOut);
 
           const goToReceipt = () => navigate(`/order/${order.id}`);
           const isRetrying = retryingOrderIds.has(order.id);
           const handleRetry = (e: React.MouseEvent) => { 
             e.stopPropagation(); 
-            if (isRetrying) return;
+            if (isRetrying || timedOut) return; 
             setRetryingOrderIds(prev => new Set(prev).add(order.id));
             navigate(`/payment?order_id=${order.id}&amount=${order.total}&mode=retry`); 
           };
@@ -202,11 +221,15 @@ export default function MyOrders() {
                   </div>
                 )}
 
+                {/* 🟢 DYNAMIC TITLE: Says "Order Cancelled" if admin force-cancelled it */}
                 {isExp && (
                   <div onClick={goToReceipt} className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
                     <div className="flex items-center gap-3">
                       <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm"><Ban className="h-6 w-6 text-gray-500" /></div>
-                      <div><p className="font-bold text-sm text-gray-700">Order Expired</p><p className="text-xs font-medium text-gray-500">Tap to view details</p></div>
+                      <div>
+                        <p className="font-bold text-sm text-gray-700">{isAdminCancelled ? 'Order Cancelled' : 'Order Expired'}</p>
+                        <p className="text-xs font-medium text-gray-500">Tap to view details</p>
+                      </div>
                     </div>
                     <ChevronRight className="h-5 w-5 text-gray-400" />
                   </div>

@@ -40,9 +40,33 @@ export default function Checkout() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [ordersPaused, setOrdersPaused] = useState(false);
   const [pauseReason, setPauseReason] = useState('');
+  
+  // NEW: State to hold the dynamic platform fee
+  const [platformFee, setPlatformFee] = useState<number>(0);
 
   const lastSubmitRef = useRef<number>(0);
   const SUBMIT_COOLDOWN_MS = 2000;
+
+  // NEW: Fetch the dynamic platform fee from Supabase whenever cart changes
+  useEffect(() => {
+    const fetchFee = async () => {
+      if (totalPrice > 0) {
+        const { data, error } = await supabase
+          .rpc('calculate_platform_fee', { cart_total: totalPrice });
+        
+        if (!error && data !== null) {
+          setPlatformFee(data);
+        }
+      } else {
+        setPlatformFee(0);
+      }
+    };
+    
+    fetchFee();
+  }, [totalPrice]);
+
+  // NEW: Calculate the absolute final amount including the fee
+  const finalAmountToPay = totalPrice + platformFee;
 
   // Check kill switch
   useEffect(() => {
@@ -158,16 +182,18 @@ export default function Checkout() {
         return; 
       }
 
+      // UPDATED: Pass finalAmountToPay to your order creation logic
       const order = await createOrder({ 
         items: cart, 
-        total: totalPrice, 
+        total: finalAmountToPay, 
         paymentMethod: "razorpay", 
         customerName: user.fullName, 
         customerEmail: user.email 
       });      
 
       if (order) { 
-        navigate(`/payment?order_id=${order.id}&amount=${totalPrice}`, {
+        // UPDATED: Pass finalAmountToPay to Razorpay so the fee is charged
+        navigate(`/payment?order_id=${order.id}&amount=${finalAmountToPay}`, {
           state: {
             customerName: user.fullName,
             customerEmail: user.email,
@@ -295,7 +321,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Bill Summary */}
+          {/* Bill Summary - UPDATED TO SHOW PLATFORM FEE */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Receipt size={15} />
@@ -306,14 +332,20 @@ export default function Checkout() {
                 <span className="text-muted-foreground">Item Total</span>
                 <span className="font-medium">₹{totalPrice}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Taxes & Charges</span>
-                <span className="text-green-600 text-xs font-medium px-2 py-0.5 bg-green-500/10 rounded-full">FREE</span>
+              <div className="flex justify-between text-sm items-center">
+                <span className="text-muted-foreground">Platform Fee</span>
+                {platformFee > 0 ? (
+                  <span className="text-primary text-xs font-bold px-2 py-0.5 bg-primary/10 rounded-full">
+                    + ₹{platformFee}
+                  </span>
+                ) : (
+                  <Loader2 className="animate-spin w-4 h-4 text-muted-foreground" />
+                )}
               </div>
               <Separator className="my-1.5" />
               <div className="flex justify-between items-center">
                 <span className="font-bold text-base">To Pay</span>
-                <span className="font-bold text-lg text-primary">₹{totalPrice}</span>
+                <span className="font-bold text-lg text-primary">₹{finalAmountToPay}</span>
               </div>
             </div>
           </section>
@@ -335,12 +367,12 @@ export default function Checkout() {
         </PullToRefresh>
       </main>
 
-      {/* Sticky Bottom Actions */}
+      {/* Sticky Bottom Actions - UPDATED TO SHOW FINAL AMOUNT */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50 safe-bottom">
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
-            <p className="text-xl font-black text-foreground">₹{totalPrice}</p>
+            <p className="text-xl font-black text-foreground">₹{finalAmountToPay}</p>
           </div>
           <motion.div className="flex-[1.5]" whileTap={!isOffline && !ordersPaused ? { scale: 0.98 } : {}}>
             <Button

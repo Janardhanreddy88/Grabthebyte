@@ -7,10 +7,22 @@ const corsHeaders = {
 
 interface CreatePaymentRequest {
   orderId: string;
-  amount: number;
+  amount: number; // Final amount paid by student (Item Total + Platform Fee)
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
+}
+
+// 🌟 REVERSE-ENGINEERED PLATFORM FEE CALCULATOR (FLAT FEES) 🌟
+function getFeeFromFinalAmount(finalAmountINR: number): number {
+  // Tier 1: Item <= ₹40, Fee = ₹2 -> Max final amount = ₹42
+  if (finalAmountINR <= 42) return 2;
+  
+  // Tier 2: Item <= ₹100, Fee = ₹5 -> Max final amount = ₹105
+  if (finalAmountINR <= 105) return 5;
+  
+  // Tier 3: Item > ₹100, Fee = ₹6
+  return 6;
 }
 
 Deno.serve(async (req) => {
@@ -45,7 +57,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create a client purely to verify the user's token
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -76,7 +87,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse the request body
     const { orderId, amount, customerName, customerEmail, customerPhone }: CreatePaymentRequest = await req.json();
 
     if (!orderId || !amount || !customerEmail) {
@@ -86,13 +96,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use the Service Role client to bypass RLS for backend operations
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // Verify order exists, is pending, AND grab the user_id to verify ownership
+    // 🌟 1. GET ORDER DETAILS (Now fetching campus_id)
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, status, payment_status, order_number, user_id")
+      .select("id, status, payment_status, order_number, user_id, campus_id")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -114,7 +123,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Allow retry for pending payments
     if (order.payment_status === "completed") {
       return new Response(JSON.stringify({ error: "Payment already completed for this order" }), {
         status: 400,
@@ -122,8 +130,62 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Encode keys for Razorpay Basic Auth
+    // 🌟 2. GET CAMPUS ROUTING DETAILS
+    let razorpayAccountId = null;
+    if (order.campus_id) {
+      const { data: campus } = await supabaseAdmin
+        .from("campuses")
+        .select("razorpay_account_id")
+        .eq("id", order.campus_id)
+        .maybeSingle();
+      
+      if (campus && campus.razorpay_account_id) {
+        razorpayAccountId = campus.razorpay_account_id;
+      }
+    }
+
     const basicAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
+
+    // 🌟 3. CALCULATE THE SPLIT IN PAISA
+    const finalPaidINR = amount; 
+    const totalAmountPaisa = Math.round(finalPaidINR * 100);
+    
+    const razorpayPayload: any = {
+      amount: totalAmountPaisa, 
+      currency: "INR",
+      receipt: orderId,
+      notes: {
+        order_number: order.order_number,
+        customer_email: customerEmail,
+      }
+    };
+
+    // 🌟 4. THE MAGIC: INJECT ROUTE TRANSFERS
+    if (razorpayAccountId) {
+      const platformFeeINR = getFeeFromFinalAmount(finalPaidINR); 
+      const platformFeePaisa = Math.round(platformFeeINR * 100);  
+      
+      // Canteen gets the Final Amount MINUS the Platform Fee
+      const canteenSharePaisa = totalAmountPaisa - platformFeePaisa; 
+
+      console.log(`Student Paid: ₹${finalPaidINR} | Routing ₹${canteenSharePaisa/100} to ${razorpayAccountId} | Keeping ₹${platformFeePaisa/100} fee.`);
+
+      razorpayPayload.transfers = [
+        {
+          account: razorpayAccountId,
+          amount: canteenSharePaisa,
+          currency: "INR",
+          notes: {
+            brand: "GrabTheByte Settlement",
+            order: order.order_number
+          },
+          linked_account_notes: ["brand", "order"],
+          on_hold: 0 // Settles according to default T+2 schedule
+        }
+      ];
+    } else {
+      console.log(`No linked account found for campus ${order.campus_id}. Keeping 100% in Master Account.`);
+    }
 
     // Create Razorpay order - Production API
     const razorpayResponse = await fetch("https://api.razorpay.com/v1/orders", {
@@ -132,15 +194,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "Authorization": `Basic ${basicAuth}`,
       },
-      body: JSON.stringify({
-        amount: Math.round(amount * 100), // Razorpay requires amount in Paisa (₹1 = 100 paisa)
-        currency: "INR",
-        receipt: orderId, // Store your internal Supabase order ID here
-        notes: {
-          order_number: order.order_number,
-          customer_email: customerEmail,
-        }
-      }),
+      body: JSON.stringify(razorpayPayload),
     });
 
     const razorpayData = await razorpayResponse.json();

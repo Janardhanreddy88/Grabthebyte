@@ -21,12 +21,16 @@ import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
 import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, Package, Settings } from "lucide-react";
+import { useCampusBouncer } from "@/hooks/useCampusBouncer"; // 🌟 IMPORTED THE BOUNCER
 
 export default function Menu() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { totalItems } = useCart();
   const { campus } = useCampus();
+
+  // 🌟 DEPLOYED THE SECURITY BOUNCER
+  useCampusBouncer();
   
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -41,8 +45,14 @@ export default function Menu() {
     refetch,
   } = useMenuItems();
 
-  const handleSignOut = () => {
-    navigate("/auth?logout=true");
+  // 🌟 UPDATED MANUAL LOGOUT TO MATCH NEW ARCHITECTURE
+  const handleSignOut = async () => {
+    if (logout) await logout();
+    localStorage.removeItem('campus_code');
+    localStorage.removeItem('campus_name');
+    localStorage.removeItem('campus_id');
+    localStorage.removeItem('selected_campus');
+    navigate("/");
   };
 
   const handlePullRefresh = useCallback(async () => {

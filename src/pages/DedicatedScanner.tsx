@@ -14,6 +14,7 @@ import {
   QrCode, Store, User 
 } from 'lucide-react';
 import jsQR from 'jsqr';
+import { useCampusBouncer } from '@/hooks/useCampusBouncer'; // 🌟 IMPORTED THE BOUNCER
 
 // ─── Audio Feedback ───
 const playSuccessSound = () => {
@@ -69,6 +70,9 @@ export default function KioskScanner() {
   const { verifyQrCode, verifyByCollectionToken } = useOrdersContext();
   const { logout } = useAuth();
   const { isPrinterConnected, isConnecting, connectPrinter, disconnectPrinter, printTicket } = usePrinter();
+
+  // 🌟 DEPLOYED THE SECURITY BOUNCER
+  useCampusBouncer();
 
   const isFromAdmin = location.state?.fromAdmin || false;
 
@@ -136,6 +140,16 @@ export default function KioskScanner() {
     };
     fetchProfile();
   }, []);
+
+  // 🌟 MEMORY-WIPING LOGOUT FOR KIOSK
+  const handleSignOut = async () => {
+    if (logout) await logout();
+    localStorage.removeItem('campus_code');
+    localStorage.removeItem('campus_name');
+    localStorage.removeItem('campus_id');
+    localStorage.removeItem('selected_campus');
+    navigate('/');
+  };
 
   // 🌟 AGGRESSIVE AUTO-CONNECT TRIGGER 🌟
   useEffect(() => {
@@ -465,7 +479,7 @@ export default function KioskScanner() {
         <div className="absolute top-0 left-0 right-0 p-6 flex justify-end">
           <Button 
             variant="ghost" 
-            onClick={() => { logout(); navigate('/auth'); }} 
+            onClick={handleSignOut} 
             className="text-slate-400 hover:text-white hover:bg-red-500/20 rounded-full font-medium transition-all"
           >
             <LogOut className="w-4 h-4 mr-2" /> Sign Out

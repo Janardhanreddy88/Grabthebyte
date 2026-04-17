@@ -15,6 +15,7 @@ interface OrderData {
   payment_status: string;
   rejection_reason: string | null;
   total: number; 
+  platform_fee: number; // 🟢 NEW: Added platform fee to interface
   created_at: string; 
   collection_token: string; 
   campus: { name: string } | null; 
@@ -33,9 +34,10 @@ export default function OrderDetails() {
     if (!orderId) { navigate('/my-orders'); return; }
     
     const fetchOrderDetails = async () => {
+      // 🟢 NEW: Added platform_fee to the select query
       const { data, error } = await supabase
         .from('orders')
-        .select(`id, order_number, status, payment_status, rejection_reason, total, created_at, collection_token, campus:campuses(name), order_items(name, quantity, price)`)
+        .select(`id, order_number, status, payment_status, rejection_reason, total, platform_fee, created_at, collection_token, campus:campuses(name), order_items(name, quantity, price)`)
         .eq('id', orderId)
         .maybeSingle();
 
@@ -47,6 +49,7 @@ export default function OrderDetails() {
           payment_status: data.payment_status || 'pending',
           rejection_reason: data.rejection_reason,
           total: Number(data.total), 
+          platform_fee: Number(data.platform_fee) || 0, // 🟢 NEW: Fetch the fee
           created_at: data.created_at, 
           collection_token: data.collection_token || data.id,
           campus: data.campus as { name: string } | null,
@@ -63,6 +66,9 @@ export default function OrderDetails() {
   if (!order) return <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center text-muted-foreground gap-4">Order not found. <Button onClick={() => navigate('/my-orders')}>Back to Orders</Button></div>;
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  
+  // 🟢 NEW: Smart fee calculation. If DB doesn't have it, it does the math (Total - Subtotal)
+  const displayFee = order.platform_fee > 0 ? order.platform_fee : Math.max(0, order.total - subtotal);
 
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
@@ -186,9 +192,15 @@ export default function OrderDetails() {
                     <span>Item Total</span>
                     <span className="text-gray-900">₹{subtotal}</span>
                   </div>
+                  
+                  {/* 🟢 NEW: Honest Platform Fee Logic */}
                   <div className="flex justify-between items-center text-gray-500 font-medium">
                     <span>Platform Fee</span>
-                    <span className="text-emerald-600 text-[10px] font-black tracking-wider px-2 py-0.5 bg-emerald-50 rounded-md border border-emerald-100/50">FREE</span>
+                    {displayFee > 0 ? (
+                      <span className="text-gray-900 font-bold">₹{displayFee}</span>
+                    ) : (
+                      <span className="text-emerald-600 text-[10px] font-black tracking-wider px-2 py-0.5 bg-emerald-50 rounded-md border border-emerald-100/50">FREE</span>
+                    )}
                   </div>
                 </div>
 
@@ -221,8 +233,8 @@ export default function OrderDetails() {
             </motion.div>
           )}
 
-          {/* 🟢 NEW: RETRY PAYMENT BUTTONS */}
-          {isPaymentFailed && (
+          {/* 🟢 NEW: Added `!isTimedOut` condition to completely hide the retry button if time is up */}
+          {isPaymentFailed && !isTimedOut && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
                 onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
