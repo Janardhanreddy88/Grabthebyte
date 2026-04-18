@@ -7,7 +7,7 @@ const corsHeaders = {
 
 interface CreatePaymentRequest {
   orderId: string;
-  amount: number; // Final amount paid by student (Item Total + Platform Fee)
+  amount: number; // Ignored for security
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
@@ -15,18 +15,12 @@ interface CreatePaymentRequest {
 
 // 🌟 REVERSE-ENGINEERED PLATFORM FEE CALCULATOR (FLAT FEES) 🌟
 function getFeeFromFinalAmount(finalAmountINR: number): number {
-  // Tier 1: Item <= ₹40, Fee = ₹2 -> Max final amount = ₹42
   if (finalAmountINR <= 42) return 2;
-  
-  // Tier 2: Item <= ₹100, Fee = ₹5 -> Max final amount = ₹105
   if (finalAmountINR <= 105) return 5;
-  
-  // Tier 3: Item > ₹100, Fee = ₹6
   return 6;
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -38,23 +32,14 @@ Deno.serve(async (req) => {
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SECRET_KEY = Deno.env.get("SB_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-      throw new Error("Razorpay credentials not configured in Supabase Vault");
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET || !SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SECRET_KEY) {
+      throw new Error("Missing required Environment Variables in Vault.");
     }
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SECRET_KEY) {
-      throw new Error("Supabase credentials not configured");
-    }
-
-    // =====================================================================
     // 🛡️ SECURITY PHASE 1: JWT AUTHENTICATION
-    // =====================================================================
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized: Missing Auth Header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing Auth Header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -62,72 +47,59 @@ Deno.serve(async (req) => {
     });
 
     const { data: { user }, error: authError } = await authClient.auth.getUser();
-
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized: Invalid or Expired Token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized: Invalid Token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // =====================================================================
-    // 🛡️ SECURITY PHASE 2: RATE LIMITING (Max 5 attempts per minute)
-    // =====================================================================
+    // 🛡️ SECURITY PHASE 2: RATE LIMITING
     const ONE_MINUTE_AGO = new Date(Date.now() - 60000).toISOString();
-    const { count, error: rateError } = await authClient
+    const { count } = await authClient
       .from('orders')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .gte('created_at', ONE_MINUTE_AGO);
 
-    if (count && count >= 5) {
-      return new Response(JSON.stringify({ error: "Too many payment requests. Please wait a minute." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (count && count >= 6) {
+      return new Response(JSON.stringify({ error: "Too many payment requests. Please wait a minute." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { orderId, amount, customerName, customerEmail, customerPhone }: CreatePaymentRequest = await req.json();
+    const { orderId, customerEmail }: CreatePaymentRequest = await req.json();
 
-    if (!orderId || !amount || !customerEmail) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!orderId || !customerEmail) {
+      return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // 🌟 1. GET ORDER DETAILS (Now fetching campus_id)
+    // 🌟 1. GET SECURE ORDER DETAILS (Now fetching razorpay_order_id for Idempotency check)
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, status, payment_status, order_number, user_id, campus_id")
+      .select("id, status, payment_status, order_number, user_id, campus_id, total, razorpay_order_id")
       .eq("id", orderId)
       .maybeSingle();
 
     if (orderError || !order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Order not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // =====================================================================
     // 🛡️ SECURITY PHASE 3: OWNERSHIP VERIFICATION
-    // =====================================================================
     if (order.user_id !== user.id) {
-      console.warn(`User ${user.id} attempted to pay for Order ${orderId} belonging to ${order.user_id}`);
-      return new Response(JSON.stringify({ error: "Unauthorized: You do not own this order" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (order.payment_status === "completed") {
-      return new Response(JSON.stringify({ error: "Payment already completed for this order" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Payment already completed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // =====================================================================
+    // 🛡️ FIX 1: IDEMPOTENCY (PREVENT DOUBLE CHARGES)
+    // =====================================================================
+    if (order.razorpay_order_id && order.payment_status === "pending") {
+      console.log(`Idempotency Check Passed: Returning existing Razorpay session ${order.razorpay_order_id} for order ${orderId}`);
+      return new Response(
+        JSON.stringify({ success: true, razorpayOrderId: order.razorpay_order_id, orderId: orderId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // 🌟 2. GET CAMPUS ROUTING DETAILS
@@ -144,14 +116,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    const basicAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
-
-    // 🌟 3. CALCULATE THE SPLIT IN PAISA
-    const finalPaidINR = amount; 
-    const totalAmountPaisa = Math.round(finalPaidINR * 100);
+    // 🌟 3. SERVER-SIDE MATH (THE ₹1 EXPLOIT FIX)
+    const foodTotalINR = order.total;
+    let platformFeeINR = 0;
     
+    if (foodTotalINR <= 40) { platformFeeINR = 2; }
+    else if (foodTotalINR <= 100) { platformFeeINR = 5; }
+    else { platformFeeINR = 6; }
+
+    const finalChargeINR = foodTotalINR + platformFeeINR; 
+    const finalChargePaisa = Math.round(finalChargeINR * 100);
+    const canteenSharePaisa = Math.round(foodTotalINR * 100); 
+    const platformFeePaisa = Math.round(platformFeeINR * 100);
+
     const razorpayPayload: any = {
-      amount: totalAmountPaisa, 
+      amount: finalChargePaisa, 
       currency: "INR",
       receipt: orderId,
       notes: {
@@ -160,40 +139,28 @@ Deno.serve(async (req) => {
       }
     };
 
-    // 🌟 4. THE MAGIC: INJECT ROUTE TRANSFERS
+    // 🌟 4. ROUTE TRANSFERS & FIX 2: THE BLACKHOLE ALERT
     if (razorpayAccountId) {
-      const platformFeeINR = getFeeFromFinalAmount(finalPaidINR); 
-      const platformFeePaisa = Math.round(platformFeeINR * 100);  
-      
-      // Canteen gets the Final Amount MINUS the Platform Fee
-      const canteenSharePaisa = totalAmountPaisa - platformFeePaisa; 
-
-      console.log(`Student Paid: ₹${finalPaidINR} | Routing ₹${canteenSharePaisa/100} to ${razorpayAccountId} | Keeping ₹${platformFeePaisa/100} fee.`);
-
       razorpayPayload.transfers = [
         {
           account: razorpayAccountId,
-          amount: canteenSharePaisa,
+          amount: canteenSharePaisa, 
           currency: "INR",
-          notes: {
-            brand: "GrabTheByte Settlement",
-            order: order.order_number
-          },
+          notes: { brand: "GrabTheByte Settlement", order: order.order_number },
           linked_account_notes: ["brand", "order"],
-          on_hold: 0 // Settles according to default T+2 schedule
+          on_hold: 0 
         }
       ];
     } else {
-      console.log(`No linked account found for campus ${order.campus_id}. Keeping 100% in Master Account.`);
+      console.error(`🚨 ALARM: No linked account found for campus ${order.campus_id}. Keeping 100% in Master Account.`);
+      // Inject an alert directly into Razorpay so it screams at you in the dashboard!
+      razorpayPayload.notes.WARNING = "UNROUTED_FUNDS_MISSING_CAMPUS_ID";
     }
 
-    // Create Razorpay order - Production API
+    const basicAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
     const razorpayResponse = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Basic ${basicAuth}`,
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Basic ${basicAuth}` },
       body: JSON.stringify(razorpayPayload),
     });
 
@@ -201,13 +168,9 @@ Deno.serve(async (req) => {
 
     if (!razorpayResponse.ok) {
       console.error("Razorpay API error:", razorpayData);
-      return new Response(JSON.stringify({ error: "Failed to create payment session", details: razorpayData }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Failed to create payment session", details: razorpayData }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Update order with the brand new Razorpay order ID
     const { error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
@@ -217,27 +180,14 @@ Deno.serve(async (req) => {
       })
       .eq("id", orderId);
 
-    if (updateError) {
-      console.error("Order update error:", updateError);
-    }
+    if (updateError) console.error("Order update error:", updateError);
 
-    console.log("Razorpay session created:", { orderId, razorpayOrderId: razorpayData.id });
-
-    // Send the Razorpay Order ID back to the React frontend
     return new Response(
-      JSON.stringify({
-        success: true,
-        razorpayOrderId: razorpayData.id,
-        orderId: orderId,
-      }),
+      JSON.stringify({ success: true, razorpayOrderId: razorpayData.id, orderId: orderId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
-    console.error("Create payment error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: errorMessage }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

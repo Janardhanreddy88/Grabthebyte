@@ -4,6 +4,7 @@ import { useCart } from "@/context/CartContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { ImageWithFallback } from "@/components/ImageWithFallback"; // 🌟 IMPORTED YOUR MASTERPIECE!
 
 // 🌟 Production Grade: Handle both JS camelCase and DB snake_case
 interface MenuItem extends BaseMenuItem { 
@@ -57,15 +58,17 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
           </div>
         )}
 
-        <img 
+        {/* 🌟 UPGRADED: The Skeleton Loader is now active! */}
+        <ImageWithFallback 
           src={item.image || "/placeholder.svg"} 
           alt={item.name} 
           loading="lazy"
+          containerClassName="w-full h-full"
           className={cn(
             "w-full h-full object-cover transition-transform duration-500",
             !isSoldOut && "group-hover:scale-105"
           )}
-          onError={(e) => { e.currentTarget.src = "/placeholder.svg"; }} 
+          fallbackIcon={true}
         />
         
         {/* 🔥 OVERLAY LOGIC */}

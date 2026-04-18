@@ -32,16 +32,43 @@ export default function MyOrders() {
       if (!user) return;
       const { data, error } = await supabase.from('orders').select(`*, campus:campus_public_info(name), order_items(name, quantity, price)`).eq('user_id', user.id).order('created_at', { ascending: false });
       if (error) throw error;
-      setOrders((data || []).map((o: any) => ({ id: o.id, order_number: o.order_number, total: o.total || o.amount, status: o.status, payment_status: o.payment_status || 'pending', created_at: o.created_at, campus: o.campus, items: o.order_items || [], rejection_reason: o.rejection_reason, collection_token: o.collection_token })));
+      
+      setOrders((data || []).map((o: any) => {
+        const items = o.order_items || [];
+        const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+        const dbTotal = o.total || o.amount || 0;
+        
+        // 🌟 DYNAMIC FEE CALCULATION FIX
+        let fee = 0;
+        if (o.platform_fee > 0) fee = o.platform_fee;
+        else if (dbTotal > subtotal) fee = dbTotal - subtotal;
+        else {
+          if (subtotal > 0 && subtotal <= 42) fee = 2;
+          else if (subtotal <= 105) fee = 5;
+          else if (subtotal > 105) fee = 6;
+        }
+        const grandTotal = subtotal + fee;
+
+        return { 
+          id: o.id, 
+          order_number: o.order_number, 
+          total: grandTotal, // 🌟 Now uses the real Grand Total!
+          status: o.status, 
+          payment_status: o.payment_status || 'pending', 
+          created_at: o.created_at, 
+          campus: o.campus, 
+          items: items, 
+          rejection_reason: o.rejection_reason, 
+          collection_token: o.collection_token 
+        };
+      }));
     } catch { toast.error('Failed to load orders'); } finally { setIsLoading(false); setIsRefetching(false); }
   };
 
   useEffect(() => { fetchOrders(); const ch = supabase.channel('my-orders-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders()).subscribe(); return () => { supabase.removeChannel(ch); }; }, [user]);
   
-  // Keep the interval for UI updates, but don't rely on it for critical logic
   useEffect(() => { const i = setInterval(() => setCurrentTime(Date.now()), 1000); return () => clearInterval(i); }, []);
 
-  // FIX: Absolute real-world time check for remaining seconds
   const getRemainingSeconds = (c: string) => Math.max(0, Math.floor((PAYMENT_TIMEOUT_MS - (Date.now() - new Date(c).getTime())) / 1000));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const checkIsExpired = (o: Order) => o.status === 'expired' || (o.rejection_reason?.includes('Not collected') ?? false);
@@ -58,15 +85,10 @@ export default function MyOrders() {
 
   useEffect(() => {
     if (isLoading || !orders.length) return;
-    
-    // FIX: Re-sync real world time when app wakes up or component re-renders
     const realWorldTime = Date.now();
-    
     orders.forEach(o => { 
       const needsUpdate = (o.status === 'pending' || o.payment_status === 'pending') && o.payment_status !== 'not_confirmed';
-      // FIX: Use realWorldTime, not the potentially frozen state variable
       const isTimedOut = (realWorldTime - new Date(o.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
-
       if (needsUpdate && isTimedOut) {
         expirePendingOrder(o.id); 
       }
@@ -75,7 +97,6 @@ export default function MyOrders() {
 
   const getStatusConfig = (o: Order) => {
     const isExpired = checkIsExpired(o);
-    // 🟢 NEW: Check if Admin explicitly cancelled it to override the status badge
     const isAdminCancelled = o.rejection_reason?.includes('Admin');
     
     if (o.status === 'confirmed' && (o.payment_status === 'confirmed' || o.payment_status === 'completed')) return { label: 'Ready for Pickup', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
@@ -122,14 +143,10 @@ export default function MyOrders() {
           const isPending = order.status === 'pending' && order.payment_status === 'pending' && !timedOut;
           const isCollected = order.status === 'collected';
           
-          // 🟢 THE FIX: Check if the student already paid, or if the Admin manually cancelled it
           const isPaid = order.payment_status === 'confirmed' || order.payment_status === 'completed';
           const isAdminCancelled = order.rejection_reason?.includes('Admin') || (order.status === 'failed' && isPaid);
           
-          // Treat Admin Cancellations exactly like Expired orders (Gray box, NO retry button)
           const isExp = checkIsExpired(order) || isAdminCancelled;
-          
-          // Payment Failed only shows if it wasn't cancelled by Admin
           const isFailed = !isOk && !isCollected && !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed' || timedOut);
 
           const goToReceipt = () => navigate(`/order/${order.id}`);
@@ -152,6 +169,7 @@ export default function MyOrders() {
                     </div>
                     <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
                   </div>
+                  {/* 🌟 Grand Total dynamically displayed here */}
                   <span className="font-black text-lg text-gray-900">₹{order.total}</span>
                 </div>
                 
@@ -166,7 +184,6 @@ export default function MyOrders() {
                   ))}
                 </div>
 
-                {/* ACTION BOXES */}
                 {isOk && !isCollected && !isExp && (
                   <div onClick={goToReceipt} className="bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform shadow-sm hover:shadow">
                     <div className="flex items-center gap-3">
@@ -221,7 +238,6 @@ export default function MyOrders() {
                   </div>
                 )}
 
-                {/* 🟢 DYNAMIC TITLE: Says "Order Cancelled" if admin force-cancelled it */}
                 {isExp && (
                   <div onClick={goToReceipt} className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
                     <div className="flex items-center gap-3">

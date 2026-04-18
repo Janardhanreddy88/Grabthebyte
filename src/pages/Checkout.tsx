@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/Logo";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { useToast } from "@/hooks/use-toast";
 import { useStockCheck } from "@/hooks/useStockCheck";
@@ -41,36 +41,16 @@ export default function Checkout() {
   const [ordersPaused, setOrdersPaused] = useState(false);
   const [pauseReason, setPauseReason] = useState('');
   
-  // NEW: State to hold the dynamic platform fee
-  const [platformFee, setPlatformFee] = useState<number>(0);
+  // 🌟 FIX 3: Hard lock to prevent double-clicks bypassing React state
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const lastSubmitRef = useRef<number>(0);
-  const SUBMIT_COOLDOWN_MS = 2000;
-
-  // NEW: Fetch the dynamic platform fee from Supabase whenever cart changes
-  useEffect(() => {
-    const fetchFee = async () => {
-      if (totalPrice > 0) {
-        const { data, error } = await supabase
-          .rpc('calculate_platform_fee', { cart_total: totalPrice });
-        
-        if (!error && data !== null) {
-          setPlatformFee(data);
-        }
-      } else {
-        setPlatformFee(0);
-      }
-    };
-    
-    fetchFee();
-  }, [totalPrice]);
-
-  // NEW: Calculate the absolute final amount including the fee
+  // 🌟 FIX 1: Zero-Latency Client-Side Fee Calculation (No more Database DDoS!)
+  const platformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
   const finalAmountToPay = totalPrice + platformFee;
 
-  // Check kill switch
+  // 🌟 FIX 2: Connection-Friendly Kill Switch Check (No live websocket drain)
   useEffect(() => {
-    const checkPause = async () => {
+    const checkPauseOnLoad = async () => {
       const { data } = await supabase
         .from('platform_settings')
         .select('orders_paused, orders_paused_reason')
@@ -80,18 +60,7 @@ export default function Checkout() {
         setPauseReason(data.orders_paused_reason ?? '');
       }
     };
-    checkPause();
-
-    // Real-time kill switch listener
-    const ch = supabase
-      .channel('checkout-kill-switch')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'platform_settings' }, (payload) => {
-        const d = payload.new as any;
-        setOrdersPaused(d.orders_paused ?? false);
-        setPauseReason(d.orders_paused_reason ?? '');
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    checkPauseOnLoad();
   }, []);
 
   // Real-time network listener
@@ -133,28 +102,42 @@ export default function Checkout() {
   }
 
   const handlePlaceOrder = async () => {
-    if (ordersPaused) {
-      toast({ title: "Orders Paused", description: pauseReason || "Kitchen is overwhelmed. Try again shortly.", variant: "destructive" });
-      return;
-    }
+    // Immediate lock against double taps
+    if (isProcessing) return;
+    setIsProcessing(true);
+
     if (isOffline) {
       toast({ title: "No Connection", description: "Internet required to place order.", variant: "destructive" });
+      setIsProcessing(false);
       return;
     }
 
     if (!user) {
       toast({ title: "Login Required", description: "You must be logged in.", variant: "destructive" });
       navigate("/auth");
+      setIsProcessing(false);
       return;
     }
-    const now = Date.now();
-    if (now - lastSubmitRef.current < SUBMIT_COOLDOWN_MS) return;
-    lastSubmitRef.current = now;
 
     setIsCheckingStock(true);
     setStockError(null);
 
     try {
+      // 🌟 Verify the kill-switch one last time right before payment
+      const { data: currentSettings } = await supabase
+        .from('platform_settings')
+        .select('orders_paused, orders_paused_reason')
+        .single();
+        
+      if (currentSettings?.orders_paused) {
+        setOrdersPaused(true);
+        setPauseReason(currentSettings.orders_paused_reason ?? '');
+        toast({ title: "Orders Paused", description: currentSettings.orders_paused_reason || "Kitchen is overwhelmed. Try again shortly.", variant: "destructive" });
+        setIsProcessing(false);
+        setIsCheckingStock(false);
+        return;
+      }
+
       const result = await checkStock(cart);
       
       if (!result.success) {
@@ -179,20 +162,20 @@ export default function Checkout() {
           variant: "destructive",
         });
         
+        setIsProcessing(false);
         return; 
       }
 
-      // UPDATED: Pass finalAmountToPay to your order creation logic
+      // Create the order
       const order = await createOrder({ 
         items: cart, 
-        total: finalAmountToPay, 
+        total: finalAmountToPay, // Passed to backend, but backend ignores it for security!
         paymentMethod: "razorpay", 
         customerName: user.fullName, 
         customerEmail: user.email 
       });      
 
       if (order) { 
-        // UPDATED: Pass finalAmountToPay to Razorpay so the fee is charged
         navigate(`/payment?order_id=${order.id}&amount=${finalAmountToPay}`, {
           state: {
             customerName: user.fullName,
@@ -202,15 +185,17 @@ export default function Checkout() {
         });
       } else { 
         toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
+        setIsProcessing(false);
       }
     } catch {
       toast({ title: "Error", description: "Something went wrong.", variant: "destructive" });
+      setIsProcessing(false);
     } finally {
       setIsCheckingStock(false);
     }
   };
 
-  const isLoading = isCheckingStock || isCreating;
+  const isLoading = isCheckingStock || isCreating || isProcessing;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -321,7 +306,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Bill Summary - UPDATED TO SHOW PLATFORM FEE */}
+          {/* Bill Summary */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Receipt size={15} />
@@ -334,13 +319,9 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between text-sm items-center">
                 <span className="text-muted-foreground">Platform Fee</span>
-                {platformFee > 0 ? (
-                  <span className="text-primary text-xs font-bold px-2 py-0.5 bg-primary/10 rounded-full">
-                    + ₹{platformFee}
-                  </span>
-                ) : (
-                  <Loader2 className="animate-spin w-4 h-4 text-muted-foreground" />
-                )}
+                <span className="text-primary text-xs font-bold px-2 py-0.5 bg-primary/10 rounded-full">
+                  + ₹{platformFee}
+                </span>
               </div>
               <Separator className="my-1.5" />
               <div className="flex justify-between items-center">
@@ -367,7 +348,7 @@ export default function Checkout() {
         </PullToRefresh>
       </main>
 
-      {/* Sticky Bottom Actions - UPDATED TO SHOW FINAL AMOUNT */}
+      {/* Sticky Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50 safe-bottom">
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">

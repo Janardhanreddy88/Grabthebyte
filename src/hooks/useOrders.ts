@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Order, CartItem } from '@/types/canteen';
 import { useOrdersContext } from '@/context/OrdersContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
+import { useAuth } from '@/context/AuthContext'; // 🌟 Added AuthContext
 import { z } from 'zod';
 
-// Input validation schema
 const createOrderParamsSchema = z.object({
   items: z.array(z.object({
     id: z.string(),
@@ -27,48 +27,29 @@ interface CreateOrderParams {
   customerEmail?: string;
 }
 
-interface UseOrdersReturn {
-  orders: Order[];
-  activeOrders: Order[];
-  isLoading: boolean;
-  error: string | null;
-  createOrder: (params: CreateOrderParams) => Promise<Order | null>;
-  isCreating: boolean;
-  refetch: () => Promise<void>;
-}
-
-export function useOrders(): UseOrdersReturn {
+export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
   const { addOrder } = useOrdersContext();
   const { campus } = useCampus();
+  const { user } = useAuth(); // 🌟 Get user directly from context
 
   const fetchOrders = useCallback(async () => {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session?.user) {
+    if (!user) {
       setOrders([]);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
-    setError(null);
-
     try {
       const { data, error: fetchError } = await supabase
         .from('orders')
-        .select(`
-          *,
-          order_items (
-            id,
-            name,
-            price,
-            quantity
-          )
-        `)
-        .eq('user_id', session.session.user.id)
+        .select(`*, order_items (id, name, price, quantity)`)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -77,41 +58,59 @@ export function useOrders(): UseOrdersReturn {
       const transformedOrders: Order[] = (data || []).map(order => ({
         id: order.id,
         items: (order.order_items || []).map((item: any) => ({
-          id: item.id,
+          id: item.menu_item_id,
           name: item.name,
-          description: '',
           price: Number(item.price),
+          quantity: item.quantity,
+          // 🌟 FIX: Adding dummy values for CartItem compatibility
+          description: '', 
           image: '',
           category: '',
           isVeg: true,
-          isAvailable: true,
-          quantity: item.quantity,
+          isAvailable: true
         })),
         total: Number(order.total),
         status: order.status as Order['status'],
-        qrCode: order.order_number,
+        qrCode: order.order_number || '',
         createdAt: new Date(order.created_at),
-        isUsed: order.is_used,
+        isUsed: !!order.is_used,
         customerName: order.customer_name || undefined,
         customerEmail: order.customer_email || undefined,
       }));
-
       setOrders(transformedOrders);
     } catch (err) {
-      console.error('Error fetching orders:', err);
-      setError('Failed to load orders. Please try again.');
+      setError('Failed to load orders');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
+
+  // 🌟 FIX 2: Real-time Listener (Update UI when Kitchen confirms order)
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user-order-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          setOrders(current => 
+            current.map(o => o.id === payload.new.id ? { ...o, status: payload.new.status, isUsed: payload.new.is_used } : o)
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
   const createOrder = useCallback(async (params: CreateOrderParams): Promise<Order | null> => {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session?.user || !campus?.id) {
+    if (!user || !campus?.id) {
       setError('Please login to place an order');
       return null;
     }
@@ -121,20 +120,9 @@ export function useOrders(): UseOrdersReturn {
     
     try {
       // 1. Validate Input
-      const validationResult = createOrderParamsSchema.safeParse(params);
-      if (!validationResult.success) {
-        setError(validationResult.error.errors[0]?.message || 'Invalid order data');
-        return null;
-      }
+      createOrderParamsSchema.parse(params);
 
-      // 2. Fetch User Profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('user_id', session.session.user.id)
-        .maybeSingle();
-
-      // 3. Format payload for Database Vault
+      // 🌟 FIX 1: No more Profile SELECT. Use 'user' from AuthContext!
       const rpcItems = params.items.map(item => ({
         menu_item_id: item.id,
         name: item.name,
@@ -142,23 +130,18 @@ export function useOrders(): UseOrdersReturn {
         quantity: item.quantity,
       }));
 
-      // 4. Hit the Titanium Vault (Atomic Checkout)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic' as any, {
-        p_user_id: session.session.user.id,
+      // 2. Atomic Checkout
+      const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic', {
+        p_user_id: user.id,
         p_campus_id: campus.id,
         p_total: params.total,
-        p_customer_name: params.customerName || profile?.full_name || 'Guest',
-        p_customer_email: params.customerEmail || profile?.email || session.session.user.email,
+        p_customer_name: params.customerName || user.fullName || 'Guest',
+        p_customer_email: params.customerEmail || user.email,
         p_items: rpcItems
       });
 
-      // 5. Catch Database Race Condition Blocks
-      if (rpcError) {
-        // This grabs the exact error message we wrote in SQL (e.g., "Sold out! Someone just grabbed the last...")
-        throw new Error(rpcError.message || "Someone just grabbed the last one! Stock is empty.");
-      }
+      if (rpcError) throw new Error(rpcError.message);
 
-      // 6. Build Local State Object
       const rpcResult = rpcData as any;
       const newOrder: Order = {
         id: rpcResult.order_id,
@@ -168,36 +151,26 @@ export function useOrders(): UseOrdersReturn {
         qrCode: rpcResult.order_number || '',
         createdAt: new Date(),
         isUsed: false,
-        customerName: params.customerName || profile?.full_name || 'Guest',
-        customerEmail: params.customerEmail || profile?.email || session.session.user.email,
+        customerName: params.customerName || user.fullName || 'Guest',
+        customerEmail: params.customerEmail || user.email,
       };
 
-      // 7. Update UI State
       addOrder(newOrder);
       setOrders(prev => [newOrder, ...prev]);
       return newOrder;
       
     } catch (err: any) {
-      console.error('Checkout Vault Error:', err);
-      // Pushes the exact error directly to Checkout.tsx so it shows up in the Red Toast!
-      setError(err.message || 'Failed to secure your order. Please try again.');
+      setError(err.message || 'Failed to place order');
       return null;
     } finally {
       setIsCreating(false);
     }
-  }, [campus?.id, addOrder]);
-
-  // Helper to filter out old or completed orders
-  const isOrderOlderThan48Hours = (createdAt: Date) => {
-    const now = new Date();
-    const fortyEightHoursMs = 48 * 60 * 60 * 1000;
-    return now.getTime() - createdAt.getTime() > fortyEightHoursMs;
-  };
+  }, [campus?.id, user, addOrder]);
 
   const activeOrders = orders.filter(order => 
     order.status !== 'collected' && 
     !order.isUsed && 
-    !isOrderOlderThan48Hours(order.createdAt)
+    (new Date().getTime() - order.createdAt.getTime()) < (48 * 60 * 60 * 1000)
   );
 
   return {

@@ -21,15 +21,12 @@ async function verifySignature(rawBody: string, signature: string, secretKey: st
   return computedSignature === signature;
 }
 
-// 📲 🌟 NEW: OneSignal Helper for Settlements!
+// 📲 OneSignal Helper for Settlements!
 async function sendSettlementNotification(campusId: string, amount: number) {
   const appId = Deno.env.get("ONESIGNAL_APP_ID");
   const restKey = Deno.env.get("ONESIGNAL_REST_API_KEY");
 
-  if (!appId || !restKey || !campusId) {
-    console.warn("OneSignal config missing, skipping push notification.");
-    return;
-  }
+  if (!appId || !restKey || !campusId) return;
 
   try {
     await fetch("https://onesignal.com/api/v1/notifications", {
@@ -46,7 +43,6 @@ async function sendSettlementNotification(campusId: string, amount: number) {
         contents: { en: `₹${amount.toFixed(2)} has been deposited to your bank account.` },
       })
     });
-    console.log(`✅ OneSignal Push sent to Campus Admin: ${campusId}`);
   } catch (err) {
     console.error("[OneSignal Error] Failed to dispatch settlement push:", err);
   }
@@ -64,50 +60,47 @@ Deno.serve(async (req) => {
       throw new Error("Credentials not configured");
     }
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+
     const signature = req.headers.get("x-razorpay-signature");
-    if (!signature) return new Response(JSON.stringify({ message: "Missing signature" }), { status: 200, headers: corsHeaders });
+    if (!signature) {
+       // 🌟 FIX 3: Log Security Events so you aren't flying blind!
+       await supabase.from("payment_webhooks").insert({ event_type: "SECURITY_BREACH", payload: { error: "Missing signature" } });
+       return new Response(JSON.stringify({ message: "Missing signature" }), { status: 200, headers: corsHeaders });
+    }
 
     const rawBody = await req.text();
     const isValid = await verifySignature(rawBody, signature, RAZORPAY_WEBHOOK_SECRET);
 
     if (!isValid) {
       console.error("Invalid Signature!");
+      await supabase.from("payment_webhooks").insert({ event_type: "SECURITY_BREACH", payload: { error: "Invalid signature attempt" } });
       return new Response(JSON.stringify({ message: "Invalid Signature" }), { status: 200, headers: corsHeaders });
     }
 
     const payload = JSON.parse(rawBody);
     const eventType = payload.event;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
-
     console.log(`🔔 Webhook Event Received: ${eventType}`);
 
     // ==========================================================
-    // 🏢 LANE 1: SETTLEMENT AUTOMATION (Fixed & Upgraded)
+    // 🏢 LANE 1: SETTLEMENT AUTOMATION 
     // ==========================================================
     if (eventType === "settlement.processed") {
       const settlementData = payload.payload?.settlement?.entity;
       if (!settlementData) return new Response(JSON.stringify({ message: "No settlement entity" }), { status: 200 });
 
-      // 🌟 FIX 1: The real linked account ID is at the root of the Razorpay webhook!
       const linkedAccountId = payload.account_id; 
       const utr = settlementData.utr;
-      const amountInINR = settlementData.amount / 100; // Razorpay sends amount in paise
+      const amountInINR = settlementData.amount / 100; 
 
-      console.log(`🤑 Processing Settlement -> Account: ${linkedAccountId}, UTR: ${utr}, Amount: ₹${amountInINR}`);
+      if (!linkedAccountId) return new Response(JSON.stringify({ message: "Missing Account ID" }), { status: 200 });
 
-      if (!linkedAccountId) {
-         console.error("Missing linkedAccountId in webhook!");
-         return new Response(JSON.stringify({ message: "Missing Account ID" }), { status: 200 });
-      }
-
-      // 🌟 FIX 2: Look up the Campus ID so we can attach the money to the right canteen
       const { data: campus } = await supabase
         .from('campuses')
         .select('id')
         .eq('razorpay_account_id', linkedAccountId)
         .maybeSingle();
 
-      // 🌟 FIX 3: INSERT the brand new record so it actually shows up on your dashboard!
       const { error: settlementError } = await supabase
         .from('settlements')
         .insert({ 
@@ -119,31 +112,36 @@ Deno.serve(async (req) => {
           settled_at: new Date().toISOString()
         });
 
-      if (settlementError) {
-        console.error("Settlement Insert Error:", settlementError);
-      } else {
-        console.log(`✅ Successfully inserted settlement for UTR: ${utr}`);
-        
-        // 📲 🌟 NEW: FIRE THE BACKGROUND PUSH NOTIFICATION!
-        if (campus?.id) {
-          await sendSettlementNotification(campus.id, amountInINR);
-        }
+      if (!settlementError && campus?.id) {
+        await sendSettlementNotification(campus.id, amountInINR);
       }
 
       return new Response(JSON.stringify({ success: true, type: "settlement" }), { status: 200, headers: corsHeaders });
     }
 
     // ==========================================================
-    // 🍕 LANE 2: ORDER PAYMENTS (Your Existing Logic)
+    // 🍕 LANE 2: ORDER PAYMENTS
     // ==========================================================
     
-    // Safely extract IDs for Orders
     const razorpayOrderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id;
     const razorpayPaymentId = payload.payload?.payment?.entity?.id;
 
     if (!razorpayOrderId) return new Response(JSON.stringify({ message: "No order_id found" }), { status: 200, headers: corsHeaders });
 
-    // 6. LOG WEBHOOK
+    // 🌟 FIX 4: Idempotency (Prevent double processing)
+    const { data: existingWebhook } = await supabase
+      .from("payment_webhooks")
+      .select("id")
+      .eq("razorpay_payment_id", razorpayPaymentId)
+      .eq("event_type", eventType)
+      .maybeSingle();
+
+    if (existingWebhook) {
+      console.log(`Duplicate webhook ignored: ${razorpayPaymentId}`);
+      return new Response(JSON.stringify({ success: true, message: "Already processed" }), { status: 200, headers: corsHeaders });
+    }
+
+    // LOG WEBHOOK
     await supabase.from("payment_webhooks").insert({
       razorpay_order_id: razorpayOrderId,
       razorpay_payment_id: razorpayPaymentId,
@@ -151,7 +149,7 @@ Deno.serve(async (req) => {
       payload: payload,
     });
 
-    // 7. GET ORDER
+    // GET ORDER
     const { data: order } = await supabase
       .from("orders")
       .select("id, status, payment_status")
@@ -160,37 +158,43 @@ Deno.serve(async (req) => {
 
     if (!order) return new Response(JSON.stringify({ message: "Order not found" }), { status: 200, headers: corsHeaders });
 
-    // 🛡️ Guard against late webhooks on already-resolved orders
-    if (order.payment_status === "completed" || order.status === "confirmed" || order.status === "collected") {
-      return new Response(JSON.stringify({ success: true, message: "Order already completed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (order.payment_status === "completed" || order.status === "confirmed" || order.status === "collected" || order.status === "failed") {
+      return new Response(JSON.stringify({ success: true, message: "Order already locked" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (order.status === "failed") {
-      return new Response(JSON.stringify({ success: true, message: "Order already failed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // 8. STATUS LOGIC
-    let newPaymentStatus = order.payment_status;
-    let newOrderStatus = order.status;
-
+    // 🌟 FIX 1 & 2: STATUS LOGIC + PHANTOM STOCK FIX
     if (eventType === "payment.captured" || eventType === "order.paid") {
-      newPaymentStatus = "completed";
-      newOrderStatus = "confirmed";
-    } else if (eventType === "payment.failed") {
-      newPaymentStatus = "failed";
-    }
-
-    // 9. UPDATE DATABASE
-    if (newPaymentStatus !== order.payment_status) {
+      // 🏎️ Optimistic Lock: Only update if it is STILL pending!
       await supabase
         .from("orders")
         .update({
-          status: newOrderStatus,
-          payment_status: newPaymentStatus,
+          status: "confirmed",
+          payment_status: "completed",
           razorpay_payment_id: razorpayPaymentId,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", order.id); 
+        .eq("id", order.id)
+        .eq("payment_status", "pending"); 
+
+    } else if (eventType === "payment.failed") {
+      // 🏎️ Optimistic Lock
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "cancelled", // Make sure this matches your DB enum!
+          payment_status: "failed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id)
+        .eq("payment_status", "pending");
+
+      // 👻 INJECTING THE STOCK FIX: If the payment actually failed, release the stock!
+      if (!error) {
+        console.log(`Payment failed. Releasing stock for order: ${order.id}`);
+        await supabase.rpc('restore_order_stock', {
+          p_order_id: order.id
+        });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, type: "order" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

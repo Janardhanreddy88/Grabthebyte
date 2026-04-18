@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { CheckCircle2, Home, Receipt, Loader2, MapPin, XCircle, Clock, ShoppingBag, ArrowLeft, Ban, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Receipt, Loader2, MapPin, XCircle, Clock, ShoppingBag, ArrowLeft, Ban, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Separator } from '@/components/ui/separator';
@@ -15,7 +15,7 @@ interface OrderData {
   payment_status: string;
   rejection_reason: string | null;
   total: number; 
-  platform_fee: number; // 🟢 NEW: Added platform fee to interface
+  platform_fee: number;
   created_at: string; 
   collection_token: string; 
   campus: { name: string } | null; 
@@ -34,7 +34,6 @@ export default function OrderDetails() {
     if (!orderId) { navigate('/my-orders'); return; }
     
     const fetchOrderDetails = async () => {
-      // 🟢 NEW: Added platform_fee to the select query
       const { data, error } = await supabase
         .from('orders')
         .select(`id, order_number, status, payment_status, rejection_reason, total, platform_fee, created_at, collection_token, campus:campuses(name), order_items(name, quantity, price)`)
@@ -49,7 +48,7 @@ export default function OrderDetails() {
           payment_status: data.payment_status || 'pending',
           rejection_reason: data.rejection_reason,
           total: Number(data.total), 
-          platform_fee: Number(data.platform_fee) || 0, // 🟢 NEW: Fetch the fee
+          platform_fee: Number(data.platform_fee) || 0,
           created_at: data.created_at, 
           collection_token: data.collection_token || data.id,
           campus: data.campus as { name: string } | null,
@@ -67,8 +66,18 @@ export default function OrderDetails() {
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   
-  // 🟢 NEW: Smart fee calculation. If DB doesn't have it, it does the math (Total - Subtotal)
-  const displayFee = order.platform_fee > 0 ? order.platform_fee : Math.max(0, order.total - subtotal);
+  // 🌟 DYNAMIC FEE & TOTAL FIX
+  let displayFee = 0;
+  if (order.platform_fee > 0) {
+    displayFee = order.platform_fee;
+  } else if (order.total > subtotal) {
+    displayFee = order.total - subtotal;
+  } else {
+    if (subtotal > 0 && subtotal <= 42) displayFee = 2;
+    else if (subtotal <= 105) displayFee = 5;
+    else if (subtotal > 105) displayFee = 6;
+  }
+  const grandTotal = subtotal + displayFee;
 
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
@@ -193,7 +202,6 @@ export default function OrderDetails() {
                     <span className="text-gray-900">₹{subtotal}</span>
                   </div>
                   
-                  {/* 🟢 NEW: Honest Platform Fee Logic */}
                   <div className="flex justify-between items-center text-gray-500 font-medium">
                     <span>Platform Fee</span>
                     {displayFee > 0 ? (
@@ -213,7 +221,8 @@ export default function OrderDetails() {
                       {isPaid ? 'Paid Securely' : 'Amount Due'}
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-gray-900 tracking-tighter">₹{order.total}</span>
+                  {/* 🌟 Now correctly displays the Grand Total */}
+                  <span className="text-2xl font-black text-gray-900 tracking-tighter">₹{grandTotal}</span>
                 </div>
               </div>
             </div>
@@ -233,11 +242,10 @@ export default function OrderDetails() {
             </motion.div>
           )}
 
-          {/* 🟢 NEW: Added `!isTimedOut` condition to completely hide the retry button if time is up */}
           {isPaymentFailed && !isTimedOut && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${grandTotal}`); }}
                 disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-700 text-white"
               >
@@ -249,7 +257,7 @@ export default function OrderDetails() {
           {normalizedStatus === 'pending' && !isTimedOut && !isPaid && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
-                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${order.total}`); }}
+                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${grandTotal}`); }}
                 disabled={actionLoading}
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 text-white"
               >
