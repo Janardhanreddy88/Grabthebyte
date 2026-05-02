@@ -13,7 +13,9 @@ import {
   Users,
   History,
   BarChart3,
-  Shield
+  Shield,
+  Tag, 
+  Receipt // 🦅 IMPORTED THE RECEIPT ICON
 } from 'lucide-react';
 import { NotificationBell } from '@/components/super-admin/NotificationBell';
 import { Button } from '@/components/ui/button';
@@ -41,13 +43,15 @@ interface SuperAdminLayoutProps {
   children: ReactNode;
 }
 
+// 🦅 ADDED OFFER PAYOUTS TO THE SIDEBAR
 const navItems = [
   { path: '/super-admin', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/super-admin/orders', icon: ShoppingBag, label: 'Orders' },
   { path: '/super-admin/settlements', icon: Wallet, label: 'Settlements' },
   { path: '/super-admin/campuses', icon: Building2, label: 'Campuses' },
   { path: '/super-admin/users', icon: Users, label: 'Users' },
-  
+  { path: '/super-admin/offers', icon: Tag, label: 'Offers & Marketing' }, 
+  { path: '/super-admin/offer-payouts', icon: Receipt, label: 'Offer Payouts' }, // 🦅 ADDED HERE
   { path: '/super-admin/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/super-admin/operations', icon: Shield, label: 'Operations' },
   { path: '/super-admin/audit-logs', icon: History, label: 'Audit Logs' },

@@ -14,13 +14,24 @@ export interface CartItem extends MenuItem {
   quantity: number;
 }
 
-// Simplified token system order status:
-// - pending: Awaiting payment (10 min timeout)
-// - confirmed: Payment verified, QR code active
-// - collected: Scanned at counter, order complete
-// - expired: Not collected within 5 hours
-// - failed: Payment failed or 10-min timeout exceeded
-export type OrderStatus = 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed';
+// 🌟 UPDATED TOKEN SYSTEM ORDER STATUSES:
+// - pending: Awaiting payment completion
+// - confirmed: Payment verified, QR code active for student
+// - collected: Scanned at counter, food handed over, order complete
+// - expired: Not collected within the 5-hour time limit
+// - failed: Payment failed, dropped out, or payment timeout exceeded
+// - cancelled: Force-killed by Super Admin (Kill Switch)
+// - rejected: Canteen refused the order (Out of stock, closing early, etc.)
+// - refunded: Money has been successfully routed back to the student
+export type OrderStatus = 
+  | 'pending' 
+  | 'confirmed' 
+  | 'collected' 
+  | 'expired' 
+  | 'failed' 
+  | 'cancelled' 
+  | 'rejected' 
+  | 'refunded';
 
 export interface Order {
   id: string;
@@ -33,7 +44,6 @@ export interface Order {
   customerName?: string;
   customerEmail?: string;
 }
-
 
 export interface Category {
   id: string;

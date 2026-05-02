@@ -60,6 +60,9 @@ const UserManagement = lazy(() => import("./pages/super-admin/UserManagement").t
 const AuditLogs = lazy(() => import("./pages/super-admin/AuditLogs").then(m => ({ default: m.AuditLogs })));
 const Analytics = lazy(() => import("./pages/super-admin/Analytics").then(m => ({ default: m.Analytics })));
 const Operations = lazy(() => import("./pages/super-admin/Operations").then(m => ({ default: m.Operations })));
+// 🦅 NEW: OFFERS DASHBOARDS IMPORTS
+const AdminOffers = lazy(() => import("./pages/super-admin/AdminOffers")); 
+const OfferSettlements = lazy(() => import("./pages/super-admin/OfferSettlements").then(m => ({ default: m.OfferSettlements }))); // 🦅 ADDED HERE
 import { SuperAdminLayout } from "@/components/super-admin/SuperAdminLayout";
 
 const queryClient = new QueryClient({
@@ -165,6 +168,10 @@ const App = () => (
                                   <Route path="/super-admin/audit-logs" element={<SuperAdminRoute><SuperAdminLayout><AuditLogs /></SuperAdminLayout></SuperAdminRoute>} />
                                   <Route path="/super-admin/analytics" element={<SuperAdminRoute><SuperAdminLayout><Analytics /></SuperAdminLayout></SuperAdminRoute>} />
                                   <Route path="/super-admin/operations" element={<SuperAdminRoute><SuperAdminLayout><Operations /></SuperAdminLayout></SuperAdminRoute>} />
+                                  
+                                  {/* 🦅 NEW: OFFERS DASHBOARD ROUTES */}
+                                  <Route path="/super-admin/offers" element={<SuperAdminRoute><SuperAdminLayout><AdminOffers /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/offer-payouts" element={<SuperAdminRoute><SuperAdminLayout><OfferSettlements /></SuperAdminLayout></SuperAdminRoute>} /> {/* 🦅 ADDED HERE */}
                                   
                                   <Route path="*" element={<NotFound />} />
                                 </Routes>

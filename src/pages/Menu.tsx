@@ -21,7 +21,7 @@ import { useCart } from "@/context/CartContext";
 import { useCampus } from "@/context/CampusContext";
 import { Button } from "@/components/ui/button";
 import { UtensilsCrossed, LayoutDashboard, MapPin, Clock, Package, Settings } from "lucide-react";
-import { useCampusBouncer } from "@/hooks/useCampusBouncer"; // 🌟 IMPORTED THE BOUNCER
+import { useCampusBouncer } from "@/hooks/useCampusBouncer"; 
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -29,13 +29,12 @@ export default function Menu() {
   const { totalItems } = useCart();
   const { campus } = useCampus();
 
-  // 🌟 DEPLOYED THE SECURITY BOUNCER
   useCampusBouncer();
   
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
-    items, // 🔥 RAW UNFILTERED DATA FROM DATABASE
+    items, 
     canteenClosed,
     nextOpenTime,
     isLoading,
@@ -45,7 +44,6 @@ export default function Menu() {
     refetch,
   } = useMenuItems();
 
-  // 🌟 UPDATED MANUAL LOGOUT TO MATCH NEW ARCHITECTURE
   const handleSignOut = async () => {
     if (logout) await logout();
     localStorage.removeItem('campus_code');
@@ -59,8 +57,6 @@ export default function Menu() {
     await refetch();
   }, [refetch]);
 
-  // 1. 🔥 THE CATEGORY BYPASS (Production Grade) 🔥
-  // We force everything to lowercase and trim spaces to ensure matches even on fresh installs
   const safeFilteredItems = (items || []).filter((item) => {
     if (selectedCategory === "all") return true;
     
@@ -70,7 +66,6 @@ export default function Menu() {
     return dbCategory === targetCategory;
   });
 
-  // 2. SEARCH LOGIC
   const baseItems = searchQuery
     ? safeFilteredItems.filter(
         (item) =>
@@ -79,19 +74,13 @@ export default function Menu() {
       )
     : safeFilteredItems;
 
-  // 3. 🔥 THE "NO-HIDE" SORTING LOGIC 🔥
-  // This ensures items show up as "Unavailable" even if the DB value is null/missing
   const searchedItems = [...baseItems].sort((a: any, b: any) => {
-    // We treat ONLY strict 'true' as available. 
-    // If the database sends 'null', 'undefined', or 'false', we force it to FALSE.
     const aAvail = a.isAvailable === true || a.is_available === true;
     const bAvail = b.isAvailable === true || b.is_available === true;
 
     if (aAvail === bAvail) {
-      return a.name.localeCompare(b.name); // Alpha sort
+      return a.name.localeCompare(b.name); 
     }
-    // Available (Green/Buyable) items float to the top
-    // Unavailable (Gray/Null) items sink to the bottom
     return aAvail ? -1 : 1; 
   });
 
@@ -146,6 +135,7 @@ export default function Menu() {
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-6">
             <PullToRefresh onRefresh={handlePullRefresh}>
             <div className="p-3 lg:p-6 space-y-5 lg:space-y-6">
+              
               <HeroBanner />
 
               {/* Search Bar */}

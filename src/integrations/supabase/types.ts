@@ -397,6 +397,63 @@ export type Database = {
           },
         ]
       }
+offers: {
+        Row: {
+          id: string
+          promo_code: string
+          discount_type: "flat" | "percentage" // 🦅 STRICT TYPE
+          discount_value: number
+          max_discount_amount: number | null
+          min_order_value: number
+          sponsored_by: "platform" | "canteen" // 🦅 STRICT TYPE
+          current_uses: number
+          max_global_uses: number | null
+          max_uses_per_user: number | null
+          valid_from: string | null
+          valid_until: string | null
+          is_active: boolean
+          created_at: string
+          campus_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          target_item_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+        }
+        Insert: {
+          id?: string
+          promo_code: string
+          discount_type: "flat" | "percentage"
+          discount_value: number
+          max_discount_amount?: number | null
+          min_order_value?: number
+          sponsored_by?: "platform" | "canteen"
+          current_uses?: number
+          max_global_uses?: number | null
+          max_uses_per_user?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+          is_active?: boolean
+          created_at?: string
+          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+        }
+        Update: {
+          id?: string
+          promo_code?: string
+          discount_type?: "flat" | "percentage"
+          discount_value?: number
+          max_discount_amount?: number | null
+          min_order_value?: number
+          sponsored_by?: "platform" | "canteen"
+          current_uses?: number
+          max_global_uses?: number | null
+          max_uses_per_user?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+          is_active?: boolean
+          created_at?: string
+          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block '?'
+          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -452,6 +509,8 @@ export type Database = {
           customer_email: string | null
           customer_name: string | null
           customer_phone: string | null
+          discount_amount: number | null // 🦅 ADDED HERE
+          discount_sponsor: string | null // 🦅 ADDED HERE
           id: string
           is_used: boolean
           notes: string | null
@@ -459,6 +518,7 @@ export type Database = {
           payment_method: string | null
           payment_status: string | null
           platform_fee: number | null
+          promo_code: string | null // 🦅 ADDED HERE
           qr_code: string | null
           razorpay_order_id: string | null
           razorpay_payment_id: string | null
@@ -471,6 +531,8 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          discount_amount?: number | null // ✅ Added '?'
+          discount_sponsor?: string | null // ✅ Added '?'
           amount?: number | null
           campus_id: string
           collection_token?: string | null
@@ -486,6 +548,7 @@ export type Database = {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
+          promo_code?: string | null // 🦅 ADDED HERE
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
@@ -498,6 +561,8 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+         discount_amount?: number | null // ✅ Added '?'
+          discount_sponsor?: string | null // ✅ Added '?'
           amount?: number | null
           campus_id?: string
           collection_token?: string | null
@@ -513,6 +578,7 @@ export type Database = {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
+          promo_code?: string | null // 🦅 ADDED HERE
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
@@ -1101,17 +1167,18 @@ export type Database = {
         }
         Returns: undefined
       }
-      place_order_atomic: {
-        Args: {
-          p_campus_id: string
-          p_customer_email: string
-          p_customer_name: string
-          p_items: Json
-          p_total: number
-          p_user_id: string
+place_order_atomic: {
+          Args: {
+            p_user_id: string
+            p_campus_id: string
+            p_customer_name: string
+            p_customer_email: string
+            p_customer_phone?: string | null
+            p_promo_code?: string | null
+            p_items: Json
+          }
+          Returns: Json
         }
-        Returns: Json
-      }
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
@@ -1121,7 +1188,8 @@ export type Database = {
     Enums: {
       app_role: "student" | "admin" | "kiosk" | "super_admin"
       day_of_week: "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
-      order_status: "pending" | "confirmed" | "collected" | "expired" | "failed"
+      // 🌟 UPDATED WITH YOUR NEW VALUES 🌟
+      order_status: "pending" | "confirmed" | "collected" | "expired" | "failed" | "cancelled" | "rejected" | "refunded"
       time_period: "breakfast" | "lunch" | "snacks" | "dinner"
     }
     CompositeTypes: {
@@ -1252,7 +1320,8 @@ export const Constants = {
     Enums: {
       app_role: ["student", "admin", "kiosk", "super_admin"],
       day_of_week: ["mon", "tue", "wed", "thu", "fri", "sat"],
-      order_status: ["pending", "confirmed", "collected", "expired", "failed"],
+      // 🌟 UPDATED THE CONSTANT ARRAY AS WELL 🌟
+      order_status: ["pending", "confirmed", "collected", "expired", "failed", "cancelled", "rejected", "refunded"],
       time_period: ["breakfast", "lunch", "snacks", "dinner"],
     },
   },

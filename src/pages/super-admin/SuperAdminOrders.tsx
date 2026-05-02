@@ -3,7 +3,7 @@ import {
   ShoppingBag, RefreshCw, Search, Eye, Clock, CheckCircle,
   XCircle, Package, Calendar, Download, Landmark, Ban, CheckSquare, ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
+// 🌟 IMPORTING YOUR NEW SUPER ADMIN REFUND HOOK
+import { useProcessRefund } from '@/hooks/useSuperAdminData'; 
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format, startOfToday, startOfYesterday, endOfYesterday } from 'date-fns';
@@ -46,11 +48,13 @@ interface Order {
 
 export function SuperAdminOrders() {
   const { filters } = useSuperAdmin();
+  // 🌟 INITIALIZING THE REFUND HOOK
+  const processRefund = useProcessRefund();
+  
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   
-  // 🟢 UPGRADE 2: Pagination & Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -62,22 +66,26 @@ export function SuperAdminOrders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Global Stats state to track totals across ALL pages
   const [globalStats, setGlobalStats] = useState({ total: 0, confirmed: 0, failed: 0, collected: 0, revenue: 0, profit: 0 });
 
-  // Debounce search query to prevent DB spam
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Reset page to 1 when filters change
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, statusFilter, dateFilter, filters.campusId]);
 
+  const calculatePlatformFee = (rawFoodTotal: number) => {
+    if (rawFoodTotal <= 0) return 0;
+    if (rawFoodTotal <= 42) return 2;
+    if (rawFoodTotal <= 105) return 5;
+    return 6;
+  };
+
   const fetchGlobalStats = useCallback(async () => {
-    let query = supabase.from('orders').select('total, platform_fee, commission_amount, status');
+    let query = supabase.from('orders').select('total, status');
     if (dateFilter === 'today') query = query.gte('created_at', startOfToday().toISOString());
     else if (dateFilter === 'yesterday') {
       query = query.gte('created_at', startOfYesterday().toISOString()).lte('created_at', endOfYesterday().toISOString());
@@ -86,20 +94,32 @@ export function SuperAdminOrders() {
 
     const { data } = await query;
     if (data) {
+      let totalRevenue = 0;
+      let totalProfit = 0;
+      
+      const validOrders = data.filter(o => !['failed', 'expired', 'cancelled', 'rejected', 'refunded'].includes(o.status.toLowerCase()));
+      
+      validOrders.forEach(o => {
+        const rawTotal = Number(o.total) || 0;
+        const fee = calculatePlatformFee(rawTotal);
+        totalRevenue += (rawTotal + fee);
+        totalProfit += fee;
+      });
+
       setGlobalStats({
         total: data.length,
         confirmed: data.filter(o => o.status === 'confirmed').length,
-        failed: data.filter(o => ['failed', 'expired'].includes(o.status)).length,
+        failed: data.filter(o => ['failed', 'expired', 'cancelled', 'rejected'].includes(o.status.toLowerCase())).length,
         collected: data.filter(o => o.status === 'collected').length,
-        revenue: data.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + o.total, 0),
-        profit: data.filter(o => !['failed', 'expired'].includes(o.status)).reduce((s, o) => s + (o.platform_fee || o.commission_amount || 0), 0),
+        revenue: totalRevenue,
+        profit: totalProfit,
       });
     }
   }, [dateFilter, filters.campusId]);
 
   const fetchOrders = useCallback(async () => {
     setIsLoading(true);
-    fetchGlobalStats(); // Update header stats
+    fetchGlobalStats(); 
     
     let query = supabase
       .from('orders')
@@ -119,12 +139,10 @@ export function SuperAdminOrders() {
     if (filters.campusId) query = query.eq('campus_id', filters.campusId);
     if (statusFilter !== 'all') query = query.eq('status', statusFilter as any);
     
-    // Server-side search
     if (debouncedSearch) {
       query = query.or(`order_number.ilike.%${debouncedSearch}%,customer_name.ilike.%${debouncedSearch}%,customer_email.ilike.%${debouncedSearch}%`);
     }
 
-    // 🟢 UPGRADE 2: True Pagination execution
     query = query.range((page - 1) * pageSize, page * pageSize - 1);
 
     const { data, count, error } = await query;
@@ -140,15 +158,29 @@ export function SuperAdminOrders() {
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
+  const getPaymentBadge = (paymentStatus: string | null) => {
+    const status = (paymentStatus || 'pending').toLowerCase();
+    if (status === 'completed' || status === 'paid' || status === 'confirmed') {
+      return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none px-2 py-0.5 text-[10px] uppercase">Paid</Badge>;
+    }
+    if (status === 'failed') {
+      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100 border-none px-2 py-0.5 text-[10px] uppercase">Failed</Badge>;
+    }
+    return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-none px-2 py-0.5 text-[10px] uppercase">Pending</Badge>;
+  };
+
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Clock; label: string }> = {
       pending: { variant: 'secondary', icon: Clock, label: 'Pending' },
       confirmed: { variant: 'default', icon: CheckCircle, label: 'Confirmed' },
       collected: { variant: 'outline', icon: Package, label: 'Collected' },
       failed: { variant: 'destructive', icon: XCircle, label: 'Failed' },
-      expired: { variant: 'destructive', icon: XCircle, label: 'Expired' },
+      expired: { variant: 'destructive', icon: Clock, label: 'Expired' },
+      cancelled: { variant: 'destructive', icon: Ban, label: 'Cancelled' },
+      rejected: { variant: 'destructive', icon: Ban, label: 'Rejected' },
+      refunded: { variant: 'destructive', icon: RefreshCw, label: 'Refunded' },
     };
-    const config = configs[status] || configs.pending;
+    const config = configs[status?.toLowerCase()] || configs.pending;
     const Icon = config.icon;
     return <Badge variant={config.variant} className="gap-1"><Icon className="h-3 w-3" />{config.label}</Badge>;
   };
@@ -166,7 +198,6 @@ export function SuperAdminOrders() {
     else setSelectedIds(new Set(orders.map(o => o.id)));
   };
 
-  // 🟢 UPGRADE 1: Bulk Mark Collected Function
   const handleBulkMarkCollected = async () => {
     if (selectedIds.size === 0) return;
     setIsUpdating(true);
@@ -185,14 +216,13 @@ export function SuperAdminOrders() {
     }
   };
 
-  // 🟢 UPGRADE 3: Admin Kill Switch (FIXED REASON LOGIC)
   const handleCancelOrder = async (id: string) => {
     setIsUpdating(true);
     const { error } = await supabase
       .from('orders')
       .update({ 
-        status: 'failed', 
-        rejection_reason: 'Cancelled by Admin. Refund will be processed.', // 🟢 The fix!
+        status: 'cancelled', 
+        rejection_reason: 'Cancelled by Admin. Refund will be processed.', 
         notes: 'Cancelled by Super Admin' 
       })
       .eq('id', id);
@@ -209,13 +239,15 @@ export function SuperAdminOrders() {
 
   const exportCSV = () => {
     const exportOrders = selectedIds.size > 0 ? orders.filter(o => selectedIds.has(o.id)) : orders;
-    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Grand Total (GMV)', 'Platform Fee', 'Canteen Payout', 'Status', 'Payment', 'Date'];
+    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Food Total', 'Platform Fee', 'Grand Total (GMV)', 'Payment Status', 'Order Status', 'Date'];
     const rows = exportOrders.map(o => {
-      const fee = o.platform_fee || o.commission_amount || 0;
-      const payout = o.total - fee;
+      const rawFoodTotal = Number(o.total) || 0;
+      const dynamicFee = calculatePlatformFee(rawFoodTotal);
+      const grandTotal = rawFoodTotal + dynamicFee;
+
       return [
         o.order_number, o.customer_name || '', o.customer_email || '',
-        o.campus?.code || '', o.total, fee, payout, o.status, o.payment_status || '',
+        o.campus?.code || '', rawFoodTotal, dynamicFee, grandTotal, o.payment_status || 'pending', o.status,
         format(new Date(o.created_at), 'yyyy-MM-dd HH:mm')
       ];
     });
@@ -241,15 +273,12 @@ export function SuperAdminOrders() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          
-          {/* 🟢 BULK ACTION BUTTON */}
           {selectedIds.size > 0 && (
             <Button variant="default" size="sm" onClick={handleBulkMarkCollected} disabled={isUpdating} className="bg-green-600 hover:bg-green-700 text-white shadow-sm border border-green-700">
               {isUpdating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckSquare className="h-4 w-4 mr-1" />} 
               Mark {selectedIds.size} Collected
             </Button>
           )}
-
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Export Page {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
           </Button>
@@ -259,15 +288,13 @@ export function SuperAdminOrders() {
         </div>
       </div>
 
-      {/* Global Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Total (All Pages)</div><div className="text-2xl font-bold">{globalStats.total}</div></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Confirmed</div><div className="text-2xl font-bold text-blue-600">{globalStats.confirmed}</div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Failed/Expired</div><div className="text-2xl font-bold text-destructive">{globalStats.failed}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Failed/Cancelled</div><div className="text-2xl font-bold text-destructive">{globalStats.failed}</div></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-sm text-muted-foreground">Collected</div><div className="text-2xl font-bold text-green-600">{globalStats.collected}</div></CardContent></Card>
       </div>
 
-      {/* Table */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -289,6 +316,7 @@ export function SuperAdminOrders() {
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="collected">Collected</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
@@ -321,14 +349,18 @@ export function SuperAdminOrders() {
                     <TableHead>Campus</TableHead>
                     <TableHead>Amount (GMV)</TableHead>
                     <TableHead>Platform Fee</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Payment</TableHead> 
+                    <TableHead>Order Status</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => {
-                    const fee = order.platform_fee || order.commission_amount || 0;
+                    const rawFoodTotal = Number(order.total) || 0;
+                    const dynamicFee = calculatePlatformFee(rawFoodTotal);
+                    const grandTotal = rawFoodTotal + dynamicFee;
+                    
                     return (
                       <TableRow key={order.id} className={cn(selectedIds.has(order.id) && "bg-primary/5")}>
                         <TableCell>
@@ -342,19 +374,25 @@ export function SuperAdminOrders() {
                           </div>
                         </TableCell>
                         <TableCell><Badge variant="outline">{order.campus?.code || 'N/A'}</Badge></TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(order.total)}</TableCell>
+                        
+                        <TableCell className="font-semibold">{formatCurrency(grandTotal)}</TableCell>
                         
                         <TableCell>
-                          {fee > 0 ? (
+                          {dynamicFee > 0 ? (
                             <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs border border-green-100">
-                              +{formatCurrency(fee)}
+                              +{formatCurrency(dynamicFee)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground text-xs">₹0</span>
                           )}
                         </TableCell>
 
+                        <TableCell>
+                          {getPaymentBadge(order.payment_status)}
+                        </TableCell>
+
                         <TableCell>{getStatusBadge(order.status)}</TableCell>
+                        
                         <TableCell className="text-sm text-muted-foreground">{format(new Date(order.created_at), 'MMM d, h:mm a')}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => setSelectedOrder(order)}>
@@ -367,7 +405,6 @@ export function SuperAdminOrders() {
                 </TableBody>
               </Table>
               
-              {/* 🟢 UPGRADE 2: Pagination Controls */}
               <div className="flex items-center justify-between p-4 border-t border-gray-100 bg-gray-50/50">
                 <div className="text-sm text-muted-foreground font-medium">
                   Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} orders
@@ -387,119 +424,152 @@ export function SuperAdminOrders() {
         </CardContent>
       </Card>
 
-      {/* Order Detail Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => { if (!open) setSelectedOrder(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Order #{selectedOrder?.order_number}</DialogTitle>
             <DialogDescription>Full financial and order details</DialogDescription>
           </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Customer</p>
-                  <p className="font-medium">{selectedOrder.customer_name || 'Unknown'}</p>
-                  <p className="text-sm text-muted-foreground">{selectedOrder.customer_email}</p>
-                  {selectedOrder.customer_phone && <p className="text-sm text-muted-foreground">{selectedOrder.customer_phone}</p>}
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Campus</p>
-                  <p className="font-medium">{selectedOrder.campus?.name}</p>
-                  <p className="text-xs text-muted-foreground">{selectedOrder.campus?.code}</p>
-                </div>
-              </div>
+          {selectedOrder && (() => {
+            const rawFoodTotal = Number(selectedOrder.total) || 0;
+            const dynamicFee = calculatePlatformFee(rawFoodTotal);
+            const grandTotal = rawFoodTotal + dynamicFee;
+            
+            const isPaid = selectedOrder.payment_status?.toLowerCase() === 'completed' || 
+                           selectedOrder.payment_status?.toLowerCase() === 'confirmed' || 
+                           selectedOrder.payment_status?.toLowerCase() === 'paid';
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Order Status</p>
-                  <div className="mt-1">{getStatusBadge(selectedOrder.status)}</div>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Payment</p>
-                  <Badge variant="outline" className="mt-1">{selectedOrder.payment_status || 'N/A'}</Badge>
-                </div>
-              </div>
-
-              {selectedOrder.razorpay_payment_id && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Razorpay Payment ID</p>
-                  <p className="font-mono text-xs bg-gray-50 p-1.5 rounded border inline-block mt-1">{selectedOrder.razorpay_payment_id}</p>
-                </div>
-              )}
-
-              {/* Financial Breakdown Section */}
-              <div>
-                <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
-                  <Landmark size={14} /> Financial Breakdown
-                </p>
-                <div className="space-y-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                  {selectedOrder.order_items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm text-gray-600">
-                      <span>{item.name} × {item.quantity}</span>
-                      <span>{formatCurrency(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                  
-                  <div className="border-t border-dashed border-gray-200 my-2 pt-2"></div>
-                  
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Food Subtotal</span>
-                    <span>{formatCurrency(selectedOrder.total - (selectedOrder.platform_fee || selectedOrder.commission_amount || 0))}</span>
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Customer</p>
+                    <p className="font-medium">{selectedOrder.customer_name || 'Unknown'}</p>
+                    <p className="text-sm text-muted-foreground">{selectedOrder.customer_email}</p>
+                    {selectedOrder.customer_phone && <p className="text-sm text-muted-foreground">{selectedOrder.customer_phone}</p>}
                   </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-green-700">Platform Fee (Profit)</span>
-                    <span className="font-bold text-green-700">+{formatCurrency(selectedOrder.platform_fee || selectedOrder.commission_amount || 0)}</span>
-                  </div>
-
-                  <div className="border-t border-gray-200 my-2 pt-2"></div>
-
-                  <div className="flex justify-between font-black text-base">
-                    <span>Grand Total (Paid)</span>
-                    <span>{formatCurrency(selectedOrder.total)}</span>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Campus</p>
+                    <p className="font-medium">{selectedOrder.campus?.name}</p>
+                    <p className="text-xs text-muted-foreground">{selectedOrder.campus?.code}</p>
                   </div>
                 </div>
-              </div>
 
-              {selectedOrder.notes && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Notes</p>
-                  <p className="text-sm bg-yellow-50 p-2 rounded border border-yellow-100 text-yellow-800 mt-1">{selectedOrder.notes}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Order Status</p>
+                    <div className="mt-1">{getStatusBadge(selectedOrder.status)}</div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Payment</p>
+                    <div className="mt-1">{getPaymentBadge(selectedOrder.payment_status)}</div>
+                  </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-4 text-xs bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <div>
-                  <p className="text-muted-foreground font-semibold">Created</p>
-                  <p>{format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground font-semibold">Last Updated</p>
-                  <p>{format(new Date(selectedOrder.updated_at), 'MMM d, yyyy h:mm a')}</p>
-                </div>
-              </div>
+                {selectedOrder.razorpay_payment_id && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Razorpay Payment ID</p>
+                    <p className="font-mono text-xs bg-gray-50 p-1.5 rounded border inline-block mt-1">{selectedOrder.razorpay_payment_id}</p>
+                  </div>
+                )}
 
-              {/* 🟢 UPGRADE 3: Admin Kill Switch */}
-              {selectedOrder.status !== 'failed' && selectedOrder.status !== 'expired' && selectedOrder.status !== 'collected' && (
-                <div className="pt-2">
-                  <Button 
-                    variant="destructive" 
-                    className="w-full bg-red-600 hover:bg-red-700 font-bold shadow-sm" 
-                    onClick={() => handleCancelOrder(selectedOrder.id)}
-                    disabled={isUpdating}
-                  >
-                    {isUpdating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
-                    Force Cancel & Expire Order
-                  </Button>
-                  <p className="text-[10px] text-center text-muted-foreground mt-2">
-                    Warning: This instantly marks the order as failed. Use only for customer disputes or out-of-stock items.
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                    <Landmark size={14} /> Financial Breakdown
                   </p>
-                </div>
-              )}
+                  <div className="space-y-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    {selectedOrder.order_items?.map((item) => (
+                      <div key={item.id} className="flex justify-between text-sm text-gray-600">
+                        <span>{item.name} × {item.quantity}</span>
+                        <span>{formatCurrency(item.price * item.quantity)}</span>
+                      </div>
+                    ))}
+                    
+                    <div className="border-t border-dashed border-gray-200 my-2 pt-2"></div>
+                    
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Food Subtotal</span>
+                      <span>{formatCurrency(rawFoodTotal)}</span>
+                    </div>
+                    
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium text-green-700">Platform Fee (Profit)</span>
+                      <span className="font-bold text-green-700">+{formatCurrency(dynamicFee)}</span>
+                    </div>
 
-            </div>
-          )}
+                    <div className="border-t border-gray-200 my-2 pt-2"></div>
+
+                    <div className="flex justify-between font-black text-base">
+                      <span>Grand Total (Paid)</span>
+                      <span>{formatCurrency(grandTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedOrder.notes && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Notes</p>
+                    <p className="text-sm bg-yellow-50 p-2 rounded border border-yellow-100 text-yellow-800 mt-1">{selectedOrder.notes}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 text-xs bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div>
+                    <p className="text-muted-foreground font-semibold">Created</p>
+                    <p>{format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground font-semibold">Last Updated</p>
+                    <p>{format(new Date(selectedOrder.updated_at), 'MMM d, yyyy h:mm a')}</p>
+                  </div>
+                </div>
+
+                {/* 🌟 ACTION BUTTONS AREA */}
+                <div className="pt-2 flex flex-col gap-3">
+                  
+                  {/* 🌟 NEW: REFUND BUTTON (Only visible if paid and not yet refunded) */}
+                  {isPaid && selectedOrder.status !== 'refunded' && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 font-bold shadow-sm"
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to issue a full refund for this order via Razorpay?')) {
+                          toast.promise(processRefund.mutateAsync(selectedOrder.id), {
+                            loading: 'Processing secure refund...',
+                            success: 'Refund issued successfully!',
+                            error: (err) => `Refund failed: ${err.message}`
+                          });
+                        }
+                      }}
+                      disabled={processRefund.isPending || isUpdating}
+                    >
+                      {processRefund.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                      Issue Full Refund
+                    </Button>
+                  )}
+
+                  {/* EXISTING: CANCEL BUTTON */}
+                  {selectedOrder.status !== 'failed' && selectedOrder.status !== 'expired' && selectedOrder.status !== 'collected' && selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'refunded' && (
+                    <div>
+                      <Button 
+                        variant="destructive" 
+                        className="w-full bg-red-600 hover:bg-red-700 font-bold shadow-sm" 
+                        onClick={() => handleCancelOrder(selectedOrder.id)}
+                        disabled={isUpdating || processRefund.isPending}
+                      >
+                        {isUpdating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+                        Force Cancel & Expire Order
+                      </Button>
+                      <p className="text-[10px] text-center text-muted-foreground mt-2">
+                        Warning: This instantly marks the order as cancelled. Use only for customer disputes or out-of-stock items.
+                      </p>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight, ShoppingBag, RefreshCw, AlertCircle, Timer, Ban, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, ChevronRight, ShoppingBag, RefreshCw, AlertCircle, Timer, Ban, Loader2, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,7 +14,18 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface OrderItem { name: string; quantity: number; price: number; }
-interface Order { id: string; order_number: string; total: number; status: string; payment_status: string; created_at: string; items: OrderItem[]; campus: { name: string }; rejection_reason?: string; collection_token: string; }
+interface Order { 
+  id: string; 
+  order_number: string; 
+  total: number; 
+  status: string; 
+  payment_status: string; 
+  created_at: string; 
+  items: OrderItem[]; 
+  campus: { name: string }; 
+  rejection_reason?: string; 
+  collection_token: string; 
+}
 
 export default function MyOrders() {
   const navigate = useNavigate();
@@ -38,7 +49,6 @@ export default function MyOrders() {
         const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
         const dbTotal = o.total || o.amount || 0;
         
-        // 🌟 DYNAMIC FEE CALCULATION FIX
         let fee = 0;
         if (o.platform_fee > 0) fee = o.platform_fee;
         else if (dbTotal > subtotal) fee = dbTotal - subtotal;
@@ -52,9 +62,9 @@ export default function MyOrders() {
         return { 
           id: o.id, 
           order_number: o.order_number, 
-          total: grandTotal, // 🌟 Now uses the real Grand Total!
-          status: o.status, 
-          payment_status: o.payment_status || 'pending', 
+          total: grandTotal, 
+          status: o.status?.toLowerCase(), 
+          payment_status: o.payment_status?.toLowerCase() || 'pending', 
           created_at: o.created_at, 
           campus: o.campus, 
           items: items, 
@@ -65,19 +75,27 @@ export default function MyOrders() {
     } catch { toast.error('Failed to load orders'); } finally { setIsLoading(false); setIsRefetching(false); }
   };
 
-  useEffect(() => { fetchOrders(); const ch = supabase.channel('my-orders-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders()).subscribe(); return () => { supabase.removeChannel(ch); }; }, [user]);
+  useEffect(() => { 
+    fetchOrders(); 
+    const ch = supabase.channel('my-orders-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
+      .subscribe(); 
+    return () => { supabase.removeChannel(ch); }; 
+  }, [user]);
   
-  useEffect(() => { const i = setInterval(() => setCurrentTime(Date.now()), 1000); return () => clearInterval(i); }, []);
+  useEffect(() => { 
+    const i = setInterval(() => setCurrentTime(Date.now()), 1000); 
+    return () => clearInterval(i); 
+  }, []);
 
   const getRemainingSeconds = (c: string) => Math.max(0, Math.floor((PAYMENT_TIMEOUT_MS - (Date.now() - new Date(c).getTime())) / 1000));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-  const checkIsExpired = (o: Order) => o.status === 'expired' || (o.rejection_reason?.includes('Not collected') ?? false);
 
   const expirePendingOrder = useCallback(async (id: string) => {
     if (processingExpiryIds.current.has(id)) return;
     processingExpiryIds.current.add(id);
     try { 
-      await supabase.from('orders').update({ status: 'failed' as const, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 10 minutes expired' }).eq('id', id); 
+      await supabase.from('orders').update({ status: 'failed' as any, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 10 minutes expired' }).eq('id', id); 
     } catch { 
       processingExpiryIds.current.delete(id); 
     }
@@ -96,14 +114,17 @@ export default function MyOrders() {
   }, [orders, currentTime, expirePendingOrder]);
 
   const getStatusConfig = (o: Order) => {
-    const isExpired = checkIsExpired(o);
-    const isAdminCancelled = o.rejection_reason?.includes('Admin');
-    
+    const isActuallyFailedPayment = o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed';
+
     if (o.status === 'confirmed' && (o.payment_status === 'confirmed' || o.payment_status === 'completed')) return { label: 'Ready for Pickup', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
     if (o.status === 'pending' && o.payment_status === 'pending') return { label: 'Payment Pending', className: 'bg-orange-50 text-orange-600 border-orange-200' };
     if (o.status === 'collected') return { label: 'Collected', className: 'bg-blue-50 text-blue-600 border-blue-200' };
-    if (isExpired || isAdminCancelled) return { label: 'Cancelled', className: 'bg-gray-100 text-gray-600 border-gray-200' };
-    if (!isExpired && !isAdminCancelled && (o.status === 'failed' || o.payment_status === 'not_confirmed' || o.payment_status === 'failed')) return { label: 'Payment Failed', className: 'bg-red-50 text-red-600 border-red-200' };
+    if (o.status === 'refunded') return { label: 'Refunded', className: 'bg-purple-50 text-purple-600 border-purple-200' };
+    if (o.status === 'expired') return { label: 'Expired', className: 'bg-gray-100 text-gray-600 border-gray-200' };
+    
+    if (isActuallyFailedPayment) return { label: 'Payment Failed', className: 'bg-red-50 text-red-600 border-red-200' };
+    
+    if (o.status === 'cancelled' || o.status === 'rejected') return { label: 'Cancelled', className: 'bg-red-50 text-red-600 border-red-200' };
     
     return { label: 'Processing', className: 'bg-yellow-50 text-yellow-600 border-yellow-200' };
   };
@@ -142,14 +163,14 @@ export default function MyOrders() {
           const isOk = order.status === 'confirmed' && (order.payment_status === 'confirmed' || order.payment_status === 'completed');
           const isPending = order.status === 'pending' && order.payment_status === 'pending' && !timedOut;
           const isCollected = order.status === 'collected';
-          
-          const isPaid = order.payment_status === 'confirmed' || order.payment_status === 'completed';
-          const isAdminCancelled = order.rejection_reason?.includes('Admin') || (order.status === 'failed' && isPaid);
-          
-          const isExp = checkIsExpired(order) || isAdminCancelled;
-          const isFailed = !isOk && !isCollected && !isExp && (order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed' || timedOut);
+          const isExpired = order.status === 'expired'; 
+          const isRefunded = order.status === 'refunded'; 
+
+          const isFailedPayment = order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed' || (order.status === 'pending' && timedOut);
+          const isCancelled = !isFailedPayment && (order.status === 'cancelled' || order.status === 'rejected');
 
           const goToReceipt = () => navigate(`/order/${order.id}`);
+          
           const isRetrying = retryingOrderIds.has(order.id);
           const handleRetry = (e: React.MouseEvent) => { 
             e.stopPropagation(); 
@@ -161,30 +182,43 @@ export default function MyOrders() {
           return (
             <div key={order.id} className="bg-white rounded-[1.5rem] border border-black/[0.04] shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden">
               <div className="p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="font-black text-base text-gray-900">#{order.order_number}</span>
-                      <Badge variant="outline" className={cn("font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 shadow-sm", sc.className)}>{sc.label}</Badge>
+                {/* 🌟 PERFECT FIT LAYOUT STARTS HERE */}
+                <div className="flex justify-between items-start mb-3 gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 w-full">
+                      {/* Scaled text-[13px] on mobile so it fits, shrink-0 to prevent disappearing */}
+                      <span className={cn("font-black text-[13px] sm:text-base shrink-0", (isCancelled || isRefunded || isExpired || isFailedPayment) ? "text-gray-400 line-through decoration-1" : "text-gray-900")}>
+                        #{order.order_number}
+                      </span>
+                      {/* Scaled text-[9px] on mobile, whitespace-nowrap, shrink-0 */}
+                      <Badge variant="outline" className={cn("font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-1.5 py-0.5 shadow-sm whitespace-nowrap shrink-0", sc.className)}>
+                        {sc.label}
+                      </Badge>
                     </div>
-                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5"><Clock size={12} />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
+                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5 truncate"><Clock size={12} className="shrink-0" />{format(new Date(order.created_at), 'h:mm a')} • {order.campus?.name || 'Campus'}</p>
                   </div>
-                  {/* 🌟 Grand Total dynamically displayed here */}
-                  <span className="font-black text-lg text-gray-900">₹{order.total}</span>
+                  <span className={cn("font-black text-base sm:text-lg shrink-0", (isCancelled || isRefunded || isExpired || isFailedPayment) ? "text-gray-300 line-through" : "text-gray-900")}>
+                    ₹{order.total}
+                  </span>
                 </div>
+                {/* 🌟 PERFECT FIT LAYOUT ENDS HERE */}
                 
                 <Separator className="my-3 border-gray-100" />
                 
                 <div className="space-y-1.5 mb-4">
                   {order.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-gray-600 font-medium">{item.quantity} × {item.name}</span>
-                      <span className="font-bold text-gray-900">₹{item.price * item.quantity}</span>
+                      <span className={cn("font-medium", (isCancelled || isRefunded || isExpired || isFailedPayment) ? "text-gray-400" : "text-gray-600")}>
+                        {item.quantity} × {item.name}
+                      </span>
+                      <span className={cn("font-bold", (isCancelled || isRefunded || isExpired || isFailedPayment) ? "text-gray-300 line-through" : "text-gray-900")}>
+                        ₹{item.price * item.quantity}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                {isOk && !isCollected && !isExp && (
+                {isOk && (
                   <div onClick={goToReceipt} className="bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform shadow-sm hover:shadow">
                     <div className="flex items-center gap-3">
                       <div className="bg-white p-1.5 rounded-xl border border-emerald-100 shadow-sm"><QRCodeSVG value={order.collection_token || order.id} size={38} /></div>
@@ -204,7 +238,46 @@ export default function MyOrders() {
                   </div>
                 )}
 
-                {isFailed && (
+                {isRefunded && (
+                  <div onClick={goToReceipt} className="bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded-xl border border-purple-100 shadow-sm"><RefreshCw className="h-6 w-6 text-purple-500" /></div>
+                      <div>
+                        <p className="font-bold text-sm text-purple-700">Order Refunded</p>
+                        <p className="text-xs font-medium text-purple-600/80 line-clamp-1">{order.rejection_reason || "Refund processed to your bank."}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-purple-400" />
+                  </div>
+                )}
+
+                {isCancelled && (
+                  <div onClick={goToReceipt} className="bg-red-50/50 p-3.5 rounded-2xl border border-red-100 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded-xl border border-red-100 shadow-sm"><Landmark className="h-6 w-6 text-red-500" /></div>
+                      <div>
+                        <p className="font-bold text-sm text-red-700">Order Cancelled</p>
+                        <p className="text-xs font-medium text-red-600/80 line-clamp-1">{order.rejection_reason || "Cancelled by Canteen Admin."}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-red-400" />
+                  </div>
+                )}
+
+                {isExpired && (
+                  <div onClick={goToReceipt} className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm"><Ban className="h-6 w-6 text-gray-500" /></div>
+                      <div>
+                        <p className="font-bold text-sm text-gray-700">Order Expired</p>
+                        <p className="text-[10px] font-medium text-gray-500 line-clamp-1">Not collected. Initiating refund...</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </div>
+                )}
+
+                {isFailedPayment && (
                   <div 
                     className={cn("bg-red-50/50 rounded-2xl border border-red-100 shadow-sm transition-transform", timedOut ? "p-3.5 flex items-center justify-between cursor-pointer active:scale-[0.98]" : "p-4")} 
                     onClick={timedOut ? goToReceipt : undefined}
@@ -238,23 +311,10 @@ export default function MyOrders() {
                   </div>
                 )}
 
-                {isExp && (
-                  <div onClick={goToReceipt} className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm"><Ban className="h-6 w-6 text-gray-500" /></div>
-                      <div>
-                        <p className="font-bold text-sm text-gray-700">{isAdminCancelled ? 'Order Cancelled' : 'Order Expired'}</p>
-                        <p className="text-xs font-medium text-gray-500">Tap to view details</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
-                  </div>
-                )}
-
                 {isPending && (
                   <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-200 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
+                      <div className="bg-white p-1 rounded-full"><AlertCircle className="h-5 w-5 text-orange-600 shrink-0" /></div>
                       <div className="w-full">
                         <div className="flex items-center justify-between">
                           <p className="font-bold text-sm text-orange-700">Payment Pending</p>

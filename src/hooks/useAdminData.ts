@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
 import { z } from 'zod';
 
-// Validation schemas (CLEANED: No more time periods or days!)
+// Validation schemas
 const menuItemCreateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200, 'Name too long').trim(),
   price: z.number().positive('Price must be positive').max(999999, 'Price too high'),
@@ -29,10 +29,10 @@ const menuItemUpdateSchema = z.object({
   description: z.string().max(1000).optional(),
 });
 
-// Simplified token system - no preparing/ready states
-const orderStatusSchema = z.enum(['pending', 'confirmed', 'collected', 'expired', 'failed']);
+// 🌟 UPDATED: Added new database statuses
+const orderStatusSchema = z.enum(['pending', 'confirmed', 'collected', 'expired', 'failed', 'cancelled', 'rejected', 'refunded']);
 
-// Types matching Supabase schema (CLEANED)
+// Types matching Supabase schema
 interface MenuItem {
   id: string;
   campus_id: string;
@@ -54,8 +54,8 @@ interface Order {
   campus_id: string;
   user_id: string | null;
   order_number: string;
-  // Token system uses simplified statuses: pending -> confirmed -> collected (or cancelled)
-  status: 'pending' | 'confirmed' | 'collected' | 'cancelled';
+  // 🌟 UPDATED: Full list of statuses
+  status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' | 'cancelled' | 'rejected' | 'refunded';
   total: number;
   qr_code: string | null;
   is_used: boolean;
@@ -64,6 +64,7 @@ interface Order {
   payment_method: string | null;
   payment_status: string | null;
   notes: string | null;
+  rejection_reason: string | null; // 🌟 ADDED
   created_at: string;
   updated_at: string;
 }
@@ -85,7 +86,7 @@ interface OrderStats {
   chartData: { day: string; revenue: number; orders: number }[];
 }
 
-// Fetch menu items for the current campus (CLEANED)
+// Fetch menu items for the current campus
 export function useAdminMenuItems() {
   const { campus } = useCampus();
 
@@ -102,7 +103,6 @@ export function useAdminMenuItems() {
 
       if (error) throw error;
 
-      // Transform to match the expected format
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
@@ -120,7 +120,7 @@ export function useAdminMenuItems() {
   });
 }
 
-// Create a new menu item (CLEANED)
+// Create a new menu item
 export function useCreateMenuItem() {
   const queryClient = useQueryClient();
   const { campus } = useCampus();
@@ -139,7 +139,6 @@ export function useCreateMenuItem() {
     }) => {
       if (!campus?.id) throw new Error('No campus selected');
 
-      // Validate input
       const validationResult = menuItemCreateSchema.safeParse(item);
       if (!validationResult.success) {
         throw new Error(validationResult.error.errors[0]?.message || 'Invalid menu item data');
@@ -174,7 +173,7 @@ export function useCreateMenuItem() {
   });
 }
 
-// Update an existing menu item (CLEANED)
+// Update an existing menu item
 export function useUpdateMenuItem() {
   const queryClient = useQueryClient();
 
@@ -191,7 +190,6 @@ export function useUpdateMenuItem() {
       is_available?: boolean;
       description?: string;
     }) => {
-      // Validate input
       const validationResult = menuItemUpdateSchema.safeParse(update);
       if (!validationResult.success) {
         throw new Error(validationResult.error.errors[0]?.message || 'Invalid update data');
@@ -286,26 +284,29 @@ export function useAdminOrders() {
         user_name: order.customer_name || 'Guest',
         is_used: order.is_used,
         qr_code: order.qr_code,
+        // 🌟 FIX: Pass these down to the UI so the Detective Logic works!
+        notes: order.notes,
+        rejection_reason: order.rejection_reason,
+        payment_status: order.payment_status,
       }));
     },
     enabled: !!campus?.id,
-    refetchInterval: 5000, // Auto-refresh every 5 seconds for real-time updates
+    refetchInterval: 5000, 
   });
 }
 
-// Update order status (simplified token system)
+// Update order status
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
+  // 🌟 UPDATED: Accept all valid statuses
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' }) => {
-      // Validate status
+    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' | 'cancelled' | 'rejected' | 'refunded' }) => {
       const statusResult = orderStatusSchema.safeParse(status);
       if (!statusResult.success) {
         throw new Error('Invalid order status');
       }
 
-      // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(id)) {
         throw new Error('Invalid order ID');
@@ -327,13 +328,12 @@ export function useUpdateOrderStatus() {
   });
 }
 
-// Mark order token as used (for old tokens brought by customers)
+// Mark order token as used
 export function useMarkTokenUsed() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(id)) {
         throw new Error('Invalid order ID');
@@ -372,7 +372,6 @@ export function useOrderStats() {
         };
       }
 
-      // Get orders from last 7 days
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -381,23 +380,21 @@ export function useOrderStats() {
         .select('total, created_at, status')
         .eq('campus_id', campus.id)
         .gte('created_at', sevenDaysAgo.toISOString())
-        .neq('status', 'failed');
+        // 🌟 UPDATED: Filter out all dead order types from revenue calculations
+        .not('status', 'in', '("failed","expired","cancelled","rejected","refunded")');
 
       if (error) throw error;
 
       const ordersList = orders || [];
       
-      // Calculate stats
       const totalRevenue = ordersList.reduce((sum, o) => sum + Number(o.total), 0);
       const totalOrders = ordersList.length;
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
-      // Today's orders
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayOrders = ordersList.filter(o => new Date(o.created_at) >= today).length;
 
-      // Chart data by day
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const chartData: { day: string; revenue: number; orders: number }[] = [];
 
@@ -433,13 +430,11 @@ export function useOrderStats() {
   });
 }
 
-// Utility to reset admin data (for testing)
 export function useResetAdminData() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      // This doesn't actually delete data, just invalidates caches
       return Promise.resolve();
     },
     onSuccess: () => {

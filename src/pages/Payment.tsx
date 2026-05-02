@@ -16,9 +16,8 @@ declare global {
   }
 }
 
-type PaymentState = 'loading' | 'initiating' | 'processing' | 'verifying';
+type PaymentState = 'loading' | 'initiating' | 'processing' | 'verifying' | 'error';
 
-/** Ensures the Razorpay checkout script is ready (uses preloaded cache) */
 const ensureRazorpayScript = (): Promise<boolean> => {
   if (window.Razorpay) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -26,7 +25,6 @@ const ensureRazorpayScript = (): Promise<boolean> => {
     if (existing) {
       existing.addEventListener('load', () => resolve(true));
       existing.addEventListener('error', () => resolve(false));
-      // If already loaded but Razorpay not on window yet, give it a tick
       if ((existing as HTMLScriptElement).getAttribute('data-loaded')) resolve(!!window.Razorpay);
       return;
     }
@@ -48,8 +46,6 @@ export default function Payment() {
 
   const orderId = searchParams.get('order_id');
   const amount = searchParams.get('amount');
-
-  // Customer data passed from Checkout via navigation state
   const navState = location.state as { customerName?: string; customerEmail?: string; customerPhone?: string } | null;
 
   const [paymentState, setPaymentState] = useState<PaymentState>("loading");
@@ -67,49 +63,58 @@ export default function Payment() {
 
   const initiatePayment = useCallback(async () => {
     if (!orderId || !amount || !user || paymentInitiated.current) return;
+    
     paymentInitiated.current = true;
     setPaymentState('initiating');
 
     try {
-      // Use navigation state for customer info, only fall back to DB if missing
       const customerName = navState?.customerName || user.fullName || "Customer";
       const customerEmail = navState?.customerEmail || user.email || "";
-      let rawPhone = navState?.customerPhone || user.phone || (user as any)?.user_metadata?.phone || "";
-      let cleanPhone = String(rawPhone).replace(/\D/g, '');
+      
+      let rawPhone = navState?.customerPhone;
+      
+      if (!rawPhone || rawPhone === 'null' || rawPhone === 'undefined') {
+        const { data: profile } = await supabase
+          .from('profiles') 
+          .select('*')
+          .eq('user_id', user.id) // 🌟 CHANGED 'id' to 'user_id' HERE!
+          .maybeSingle(); 
+
+        rawPhone = profile?.phone || user.phone || (user as any)?.user_metadata?.phone || "";
+      }
+
+      let cleanPhone = String(rawPhone || '').replace(/\D/g, '');
       if (cleanPhone.length > 10 && cleanPhone.startsWith('91')) cleanPhone = cleanPhone.substring(2);
 
-      // 🚀 OPTIMIZATION: Run edge function + script load + order number fetch in PARALLEL
+      // 🌟 THE STRICT CHECK: If no phone, show error and throw back to cart!
+      if (!cleanPhone || cleanPhone.length < 10) {
+        toast({ 
+          title: "Phone Number Required", 
+          description: "Please update your profile with a valid phone number to checkout securely.", 
+          variant: "destructive" 
+        });
+        
+        paymentInitiated.current = false;
+        setPaymentState('error'); 
+        
+        // Throw them back to the cart gracefully after 2.5 seconds
+        setTimeout(() => navigate(-1), 2500); 
+        return; 
+      }
+
       const [paymentResult, scriptLoaded, orderData] = await Promise.all([
-        // 1. Create Razorpay session via Edge Function
         supabase.functions.invoke('create-payment', {
           body: { orderId, amount: parseFloat(amount), customerName, customerEmail, customerPhone: cleanPhone }
         }),
-        // 2. Ensure Razorpay SDK is ready (likely already cached from preload)
         Capacitor.isNativePlatform() ? Promise.resolve(true) : ensureRazorpayScript(),
-        // 3. Fetch order number for display (lightweight query)
         supabase.from('orders').select('order_number').eq('id', orderId).maybeSingle(),
       ]);
 
-      // Set order number for header display
-      if (orderData.data?.order_number) {
-        setOrderNumber(orderData.data.order_number);
-      }
+      if (orderData.data?.order_number) setOrderNumber(orderData.data.order_number);
 
-      // 🛡️ ROBUST ERROR HANDLING: Check edge function result
-      if (paymentResult.error) {
-        const errMsg = paymentResult.error?.message || 'Failed to create payment session. Please try again.';
-        throw new Error(errMsg);
-      }
-
-      if (!paymentResult.data?.razorpayOrderId) {
-        const serverError = paymentResult.data?.error || 'Razorpay session could not be created. Please try again.';
-        throw new Error(serverError);
-      }
-
-      // Check Razorpay script loaded (web only)
-      if (!Capacitor.isNativePlatform() && !scriptLoaded) {
-        throw new Error("Payment gateway failed to load. Check your internet connection and try again.");
-      }
+      if (paymentResult.error) throw new Error(paymentResult.error?.message || 'Failed to create payment session.');
+      if (!paymentResult.data?.razorpayOrderId) throw new Error(paymentResult.data?.error || 'Razorpay session could not be created.');
+      if (!Capacitor.isNativePlatform() && !scriptLoaded) throw new Error("Payment gateway failed to load.");
 
       const currentRzpOrderId = paymentResult.data.razorpayOrderId;
       const currentKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
@@ -153,7 +158,7 @@ export default function Payment() {
         image: "/pwa-192x192.png",
         order_id: currentRzpOrderId,
         prefill: { name: customerName, email: customerEmail, contact: cleanPhone },
-        theme: { color: "#E50914" }
+        theme: { color: "#EA580C" }
       };
 
       if (Capacitor.isNativePlatform()) {
@@ -237,17 +242,28 @@ export default function Payment() {
           
           <div className="p-2">
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} className="relative w-20 h-20 mb-6">
-                <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full"></div>
-              </motion.div>
+              
+              {paymentState === "error" ? (
+                 <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+              ) : (
+                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} className="relative w-20 h-20 mb-6">
+                  <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
+                  <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full"></div>
+                </motion.div>
+              )}
+
               <h2 className="text-xl font-bold mb-2">
-                {paymentState === "verifying" ? "Verifying Payment" : "Processing"}
+                {paymentState === "verifying" ? "Verifying Payment" : 
+                 paymentState === "error" ? "Profile Incomplete" : "Processing"}
               </h2>
+              
               <p className="text-sm text-muted-foreground max-w-[250px]">
-                {paymentState === "verifying" ? "Please wait while we confirm your transaction securely." : "Please do not close this window or press the back button."}
+                {paymentState === "verifying" ? "Please wait while we confirm your transaction securely." : 
+                 paymentState === "error" ? "Redirecting you back to complete your profile..." : 
+                 "Please do not close this window or press the back button."}
               </p>
-              {paymentState === "processing" && (
+              
+              {(paymentState === "processing" || paymentState === "error") && (
                 <Button variant="ghost" size="sm" onClick={handleRetry} className="mt-6 gap-2 text-muted-foreground">
                   <RefreshCw size={14} /> Re-open Payment
                 </Button>

@@ -7,17 +7,10 @@ const corsHeaders = {
 
 interface CreatePaymentRequest {
   orderId: string;
-  amount: number; // Ignored for security
+  amount: number; // Ignored for security!
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
-}
-
-// 🌟 REVERSE-ENGINEERED PLATFORM FEE CALCULATOR (FLAT FEES) 🌟
-function getFeeFromFinalAmount(finalAmountINR: number): number {
-  if (finalAmountINR <= 42) return 2;
-  if (finalAmountINR <= 105) return 5;
-  return 6;
 }
 
 Deno.serve(async (req) => {
@@ -71,10 +64,10 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // 🌟 1. GET SECURE ORDER DETAILS (Now fetching razorpay_order_id for Idempotency check)
+    // 🌟 1. GET SECURE ORDER DETAILS (🦅 FIX: Added discount_amount to the query!)
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, status, payment_status, order_number, user_id, campus_id, total, razorpay_order_id")
+      .select("id, status, payment_status, order_number, user_id, campus_id, total, discount_amount, razorpay_order_id, promo_code")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -92,10 +85,9 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================================
-    // 🛡️ FIX 1: IDEMPOTENCY (PREVENT DOUBLE CHARGES)
+    // 🛡️ IDEMPOTENCY (PREVENT DOUBLE CHARGES)
     // =====================================================================
     if (order.razorpay_order_id && order.payment_status === "pending") {
-      console.log(`Idempotency Check Passed: Returning existing Razorpay session ${order.razorpay_order_id} for order ${orderId}`);
       return new Response(
         JSON.stringify({ success: true, razorpayOrderId: order.razorpay_order_id, orderId: orderId }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -116,18 +108,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 🌟 3. SERVER-SIDE MATH (THE ₹1 EXPLOIT FIX)
-    const foodTotalINR = order.total;
-    let platformFeeINR = 0;
+    // =====================================================================
+    // 🌟 3. SERVER-SIDE MATH (THE GROSS-UP PROFIT SHIELD)
+    // =====================================================================
+    const discountedSubtotal = order.total;
     
-    if (foodTotalINR <= 40) { platformFeeINR = 2; }
-    else if (foodTotalINR <= 100) { platformFeeINR = 5; }
-    else { platformFeeINR = 6; }
+    // 🦅 THE FIX: Reconstruct the raw cart size to protect your fee tier
+    const rawItemTotal = discountedSubtotal + (order.discount_amount || 0);
 
-    const finalChargeINR = foodTotalINR + platformFeeINR; 
+    let basePlatformFeeINR = 0;
+    if (rawItemTotal <= 40) { basePlatformFeeINR = 2; }
+    else if (rawItemTotal <= 100) { basePlatformFeeINR = 5; }
+    else { basePlatformFeeINR = 6; }
+
+    const targetBankAmount = discountedSubtotal + basePlatformFeeINR; 
+
+    const rawFinalTotal = targetBankAmount / 0.975;
+    const finalChargeINR = Math.round(rawFinalTotal * 100) / 100;
     const finalChargePaisa = Math.round(finalChargeINR * 100);
-    const canteenSharePaisa = Math.round(foodTotalINR * 100); 
-    const platformFeePaisa = Math.round(platformFeeINR * 100);
+    
+    const canteenSharePaisa = Math.round(discountedSubtotal * 100); 
+    const exactHandlingFeeINR = Math.round((finalChargeINR - discountedSubtotal) * 100) / 100;
 
     const razorpayPayload: any = {
       amount: finalChargePaisa, 
@@ -136,10 +137,11 @@ Deno.serve(async (req) => {
       notes: {
         order_number: order.order_number,
         customer_email: customerEmail,
+        promo_applied: order.promo_code ? order.promo_code : "NONE"
       }
     };
 
-    // 🌟 4. ROUTE TRANSFERS & FIX 2: THE BLACKHOLE ALERT
+    // 🌟 4. ROUTE TRANSFERS & THE BLACKHOLE ALERT
     if (razorpayAccountId) {
       razorpayPayload.transfers = [
         {
@@ -153,7 +155,6 @@ Deno.serve(async (req) => {
       ];
     } else {
       console.error(`🚨 ALARM: No linked account found for campus ${order.campus_id}. Keeping 100% in Master Account.`);
-      // Inject an alert directly into Razorpay so it screams at you in the dashboard!
       razorpayPayload.notes.WARNING = "UNROUTED_FUNDS_MISSING_CAMPUS_ID";
     }
 
@@ -171,12 +172,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Failed to create payment session", details: razorpayData }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // 🌟 5. LOCK IN THE HISTORICAL ACCOUNTING FEE
     const { error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
         razorpay_order_id: razorpayData.id,
         payment_status: "pending",
         updated_at: new Date().toISOString(),
+        platform_fee: exactHandlingFeeINR, 
       })
       .eq("id", orderId);
 

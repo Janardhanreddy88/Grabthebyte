@@ -85,21 +85,42 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-foreground">5. Data Retention</h2>
+              <h2 className="text-lg font-semibold text-foreground">5. Cookies and Local Storage</h2>
+              <p>
+                To enhance your experience, our application uses strictly necessary cookies and local device storage. This allows us to keep you logged into your account securely and remember the items in your cart if you accidentally close the app. By using our services, you consent to the use of these essential functional tracking technologies.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-foreground">6. Marketing and Communications</h2>
+              <p>
+                We may use your registered email address or phone number to send operational updates (such as order confirmations and receipts). Occasionally, we may send promotional messages regarding discounts, new canteen additions, or campus events. You have the right to opt out of promotional communications at any time by contacting support.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-foreground">7. Age of Consent</h2>
+              <p>
+                Our services are intended for use by college students and faculty. By using GrabTheByte, you represent that you are at least 18 years of age, or if you are a minor, that you are using the platform under the supervision and with the explicit consent of a parent or legal guardian.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-foreground">8. Data Retention</h2>
               <p>
                 We retain your order history and profile information as long as you are a registered user of GrabTheByte. You may request the deletion of your account by contacting our Grievance Officer. Upon deletion, we may retain transaction logs for financial auditing purposes as required by Indian tax laws.
               </p>
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-foreground">6. Your Rights</h2>
+              <h2 className="text-lg font-semibold text-foreground">9. Your Rights</h2>
               <p>
                 You have the right to access, correct, or delete your personal data stored with us. You can update your profile directly within the app or contact support for assistance.
               </p>
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-foreground">7. Grievance Officer</h2>
+              <h2 className="text-lg font-semibold text-foreground">10. Grievance Officer</h2>
               <p>
                 In accordance with the Information Technology Act 2000 and rules made there under, the name and contact details of the Grievance Officer are provided below:
               </p>
@@ -107,7 +128,7 @@ export default function PrivacyPolicy() {
                 <p><strong>Name:</strong> Mr. Bareddy Janardhan Reddy</p>
                 <p><strong>Designation:</strong> Founder</p>
                 <p><strong>Company:</strong> GrabTheByte</p>
-                <p><strong>Address:</strong> 29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh</p>
+                <p><strong>Address:</strong> Flat No. 1-36, Bhojanam, Near Govt School, Bandi Atmakur, Nandyal, Andhra Pradesh - 518533</p>
                 <p><strong>Email:</strong> support@grabthebyte.com</p>
                 <p><strong>Operating Hours:</strong> Mon - Fri (10:00 AM - 6:00 PM)</p>
               </div>

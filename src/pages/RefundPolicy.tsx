@@ -38,16 +38,14 @@ export default function RefundPolicy() {
               <li>
                 <strong className="text-foreground">Cancellation Policy:</strong> 
                 <p>
-                  You can cancel your order via the platform ONLY if the status is <strong>"Pending"</strong> (i.e., the partner canteen has not yet accepted or started preparing your food). 
-                  <br/>
-                  Once the order status changes to <strong>"Preparing"</strong> or <strong>"Ready"</strong>, the order cannot be cancelled through the platform as the independent canteen has already utilized ingredients.
+                  Once a payment is successful, the order is immediately transmitted to the partner canteen for preparation. Therefore, <strong>cancellations by users/students are not permitted under any circumstances</strong>. Please review your cart carefully before completing the payment.
                 </p>
               </li>
               
               <li>
                 <strong className="text-foreground">Refunds for Cancelled Orders:</strong> 
                 <p>
-                  If you successfully cancel an order while it is still in the "Pending" stage, 100% of the transaction amount will be refunded to your original payment source.
+                  Refunds are <strong>only provided if an order is explicitly cancelled by the Canteen Admin</strong> (for example, if an item becomes unexpectedly out of stock or the canteen is unable to fulfill the order). If the Admin cancels your order, 100% of the transaction amount will be automatically refunded to your original payment source.
                 </p>
               </li>
 
@@ -61,7 +59,7 @@ export default function RefundPolicy() {
               <li>
                 <strong className="text-foreground">Refund Timeline:</strong> 
                 <p>
-                   All refunds (for cancellations or failed transactions) are processed through our payment gateway (Razorpay) and will be credited to your original method of payment (UPI/Bank Account) within <strong>5-7 working days</strong>.
+                   All eligible refunds (for Admin cancellations or failed transactions) are processed through our payment gateway (Razorpay) and will be credited to your original method of payment (UPI/Bank Account) within <strong>5-7 working days</strong>.
                 </p>
               </li>
               

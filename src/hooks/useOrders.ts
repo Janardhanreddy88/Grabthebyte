@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Order, CartItem } from '@/types/canteen';
 import { useOrdersContext } from '@/context/OrdersContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useCampus } from '@/context/CampusContext';
-import { useAuth } from '@/context/AuthContext'; // 🌟 Added AuthContext
+import { useAuth } from '@/context/AuthContext';
 import { z } from 'zod';
 
 const createOrderParamsSchema = z.object({
@@ -17,14 +17,18 @@ const createOrderParamsSchema = z.object({
   paymentMethod: z.string().min(1).max(50),
   customerName: z.string().max(100).optional(),
   customerEmail: z.string().email().max(255).optional().or(z.literal('')).or(z.undefined()),
+  customerPhone: z.string().optional(), 
+  promoCode: z.string().optional().nullable(),
 });
 
-interface CreateOrderParams {
+export interface CreateOrderParams {
   items: CartItem[];
   total: number;
   paymentMethod: string;
-  customerName?: string;
-  customerEmail?: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string; 
+  promoCode?: string | null;
 }
 
 export function useOrders() {
@@ -35,7 +39,7 @@ export function useOrders() {
   
   const { addOrder } = useOrdersContext();
   const { campus } = useCampus();
-  const { user } = useAuth(); // 🌟 Get user directly from context
+  const { user } = useAuth(); 
 
   const fetchOrders = useCallback(async () => {
     if (!user) {
@@ -46,9 +50,10 @@ export function useOrders() {
 
     setIsLoading(true);
     try {
+      // 🦅 FIX: Added platform_fee and discount_amount to the select query
       const { data, error: fetchError } = await supabase
         .from('orders')
-        .select(`*, order_items (id, name, price, quantity)`)
+        .select(`*, order_items (id, name, price, quantity), platform_fee, discount_amount, promo_code`)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -62,21 +67,25 @@ export function useOrders() {
           name: item.name,
           price: Number(item.price),
           quantity: item.quantity,
-          // 🌟 FIX: Adding dummy values for CartItem compatibility
           description: '', 
           image: '',
           category: '',
           isVeg: true,
           isAvailable: true
         })),
-        total: Number(order.total),
+        // 🦅 THE FIX: Add the platform/handling fee so the total matches their bank charge!
+        total: Number(order.total) + Number(order.platform_fee || 0), 
         status: order.status as Order['status'],
         qrCode: order.order_number || '',
         createdAt: new Date(order.created_at),
         isUsed: !!order.is_used,
         customerName: order.customer_name || undefined,
         customerEmail: order.customer_email || undefined,
+        // Optional: If you ever want to show a "You saved X" badge in the history!
+        // promoCode: order.promo_code,
+        // discountAmount: order.discount_amount,
       }));
+      
       setOrders(transformedOrders);
     } catch (err) {
       setError('Failed to load orders');
@@ -85,7 +94,6 @@ export function useOrders() {
     }
   }, [user]);
 
-  // 🌟 FIX 2: Real-time Listener (Update UI when Kitchen confirms order)
   useEffect(() => {
     if (!user) return;
 
@@ -119,10 +127,14 @@ export function useOrders() {
     setError(null);
     
     try {
-      // 1. Validate Input
       createOrderParamsSchema.parse(params);
 
-      // 🌟 FIX 1: No more Profile SELECT. Use 'user' from AuthContext!
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('phone, full_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
       const rpcItems = params.items.map(item => ({
         menu_item_id: item.id,
         name: item.name,
@@ -130,28 +142,29 @@ export function useOrders() {
         quantity: item.quantity,
       }));
 
-      // 2. Atomic Checkout
+      // 🦅 THE FIX: Atomic Checkout completely stripped of frontend price trust!
       const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic', {
         p_user_id: user.id,
         p_campus_id: campus.id,
-        p_total: params.total,
-        p_customer_name: params.customerName || user.fullName || 'Guest',
+        p_customer_name: userProfile?.full_name || params.customerName || user.fullName || 'Guest',
         p_customer_email: params.customerEmail || user.email,
+        p_customer_phone: userProfile?.phone || params.customerPhone || null, 
+        p_promo_code: params.promoCode || null,
         p_items: rpcItems
       });
-
+      
       if (rpcError) throw new Error(rpcError.message);
 
       const rpcResult = rpcData as any;
       const newOrder: Order = {
         id: rpcResult.order_id,
         items: params.items,
-        total: params.total,
+        total: params.total, // Using the discounted total
         status: 'pending',
         qrCode: rpcResult.order_number || '',
         createdAt: new Date(),
         isUsed: false,
-        customerName: params.customerName || user.fullName || 'Guest',
+        customerName: userProfile?.full_name || params.customerName || user.fullName || 'Guest',
         customerEmail: params.customerEmail || user.email,
       };
 
@@ -161,7 +174,9 @@ export function useOrders() {
       
     } catch (err: any) {
       setError(err.message || 'Failed to place order');
-      return null;
+      // 🦅 THE CRITICAL FIX: Throw the error instead of returning null! 
+      // This sends the exact database message ("Too late!", "All claimed!") directly to Checkout.tsx!
+      throw err; 
     } finally {
       setIsCreating(false);
     }

@@ -12,12 +12,16 @@ export interface BluetoothDevice {
   class?: number;
 }
 
+// 🦅 ADDED PROMO & FEE FIELDS TO THE PRINTER INTERFACE
 interface OrderData {
   orderNumber: string;
   items: { name: string; quantity: number; price: number }[];
-  totalAmount: number;
+  totalAmount: number; // The discounted food total
   customerName: string;
   createdAt: string;
+  promoCode?: string | null;
+  discountAmount?: number;
+  platformFee?: number;
 }
 
 interface PrinterContextType {
@@ -138,10 +142,37 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     });
     commands.push(...textEncoder.encode(`${separator}\n`));
 
-    commands.push(ESC, 0x61, 0x02); 
+    // =====================================================================
+    // 🌟 🦅 PRINTER MATH VAULT (PROMO CODES & FEES) 🦅 🌟
+    // =====================================================================
+    commands.push(ESC, 0x61, 0x02); // Align Right
+
+    const subtotal = orderData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    // Only show the breakdown if a promo code or fee exists
+    if (orderData.promoCode || orderData.platformFee) {
+      commands.push(...textEncoder.encode(`Subtotal: Rs.${subtotal}\n`));
+    }
+
+    if (orderData.promoCode) {
+      // Use passed discount amount, or fallback to math
+      const discount = orderData.discountAmount !== undefined 
+        ? orderData.discountAmount 
+        : Math.max(0, subtotal - orderData.totalAmount);
+      
+      commands.push(...textEncoder.encode(`Promo (${orderData.promoCode}): -Rs.${discount}\n`));
+    }
+
+    if (orderData.platformFee) {
+      commands.push(...textEncoder.encode(`Platform Fee: +Rs.${orderData.platformFee}\n`));
+    }
+
+    // Calculate final printed total
+    const finalToPay = orderData.platformFee ? (orderData.totalAmount + orderData.platformFee) : orderData.totalAmount;
+
     commands.push(ESC, 0x45, 0x01); 
     commands.push(GS, 0x21, 0x11); 
-    commands.push(...textEncoder.encode(`TOTAL: Rs.${orderData.totalAmount}\n`));
+    commands.push(...textEncoder.encode(`TOTAL: Rs.${finalToPay}\n`));
     commands.push(GS, 0x21, 0x00); 
     commands.push(ESC, 0x45, 0x00); 
 

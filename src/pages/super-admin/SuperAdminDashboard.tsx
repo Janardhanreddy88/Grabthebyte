@@ -81,7 +81,8 @@ interface RecentOrder {
 interface TopItem { name: string; count: number; }
 interface UserStats { total_users: number; admins: number; students: number; kiosk_users: number; }
 interface WeeklyData { day: string; gmv: number; profit: number; orders: number; }
-interface LedgerStats { total_gmv: number; platform_revenue: number; canteen_payout: number; pending_payout: number; }
+// 🌟 CHANGED: Swapped pending_payout for canteen_earnings
+interface LedgerStats { total_gmv: number; platform_revenue: number; canteen_earnings: number; }
 
 export function SuperAdminDashboard() {
   const { dashboardStats, platformSettings, isLoading, filters, campuses } = useSuperAdmin();
@@ -89,10 +90,9 @@ export function SuperAdminDashboard() {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([]);
-  const [ledgerStats, setLedgerStats] = useState<LedgerStats>({ total_gmv: 0, platform_revenue: 0, canteen_payout: 0, pending_payout: 0 });
+  const [ledgerStats, setLedgerStats] = useState<LedgerStats>({ total_gmv: 0, platform_revenue: 0, canteen_earnings: 0 });
   const [extraLoading, setExtraLoading] = useState(true);
   
-  // 🌟 NEW: Powerful Date Picker State (Defaults to Today)
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const formatCurrency = (value: number) => {
@@ -102,7 +102,6 @@ export function SuperAdminDashboard() {
   const fetchExtra = useCallback(async () => {
     setExtraLoading(true);
     try {
-      // 🌟 Step 1: Create 24-hour boundaries for the selected specific day
       const targetDate = new Date(selectedDate);
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
@@ -121,15 +120,20 @@ export function SuperAdminDashboard() {
       
       const { data: rawOrders } = await ordersQuery;
       const allOrders = rawOrders as RecentOrder[] || [];
-      const completedOrders = allOrders.filter(o => o.payment_status === 'completed');
+      
+      // Erase Cancelled/Failed orders from the math!
+      const invalidStatuses = ['cancelled', 'failed', 'expired', 'rejected', 'refunded'];
+      const completedOrders = allOrders.filter(o => 
+        o.payment_status === 'completed' && 
+        !invalidStatuses.includes(o.status?.toLowerCase() || '')
+      );
 
-      setRecentOrders(allOrders.slice(0, 8));
+      setRecentOrders(allOrders.slice(0, 8)); 
 
       let total_gmv = 0;
       let platform_revenue = 0;
       let total_canteen_earnings = 0; 
 
-      // 🌟 Step 2: Initialize an Hourly Map to make the line chart look awesome!
       const hourMap = new Map<string, { gmv: number; profit: number; orders: number }>();
       for (let i = 0; i <= 23; i++) {
         hourMap.set(i.toString(), { gmv: 0, profit: 0, orders: 0 });
@@ -139,7 +143,6 @@ export function SuperAdminDashboard() {
         const foodSubtotal = Number(order.total);
         let fee = 0;
         
-        // Exact fee tiers
         if (foodSubtotal > 0 && foodSubtotal <= 42) fee = 2;
         else if (foodSubtotal <= 105) fee = 5;
         else if (foodSubtotal > 105) fee = 6;
@@ -150,7 +153,6 @@ export function SuperAdminDashboard() {
         platform_revenue += fee; 
         total_canteen_earnings += foodSubtotal;
 
-        // Group into the specific hour of the day
         const orderHour = new Date(order.created_at).getHours().toString();
         if (hourMap.has(orderHour)) {
           const entry = hourMap.get(orderHour)!;
@@ -160,28 +162,21 @@ export function SuperAdminDashboard() {
         }
       });
 
-      // Calculate Pending Payouts for that specific day
-      let settledQuery = supabase.from('settlements').select('amount')
-        .eq('status', 'SETTLED')
-        .gte('created_at', startOfDay.toISOString())
-        .lte('created_at', endOfDay.toISOString());
+      // 🌟 THE FIX: Pass the raw Canteen Earnings directly to the UI
+      setLedgerStats({ 
+        total_gmv, 
+        platform_revenue, 
+        canteen_earnings: total_canteen_earnings 
+      });
 
-      if (filters.campusId) settledQuery = settledQuery.eq('campus_id', filters.campusId);
-      const { data: settledData } = await settledQuery;
-      
-      const totalSettled = (settledData || []).reduce((sum, s) => sum + Number(s.amount), 0);
-      const pending_payout = Math.max(0, total_canteen_earnings - totalSettled);
-
-      setLedgerStats({ total_gmv, platform_revenue, canteen_payout: total_canteen_earnings, pending_payout });
-
-      // Build Hourly Chart Array (Showing active canteen hours: 6 AM to 10 PM)
+      // Build Hourly Chart Array 
       const dayData: WeeklyData[] = [];
       for (let i = 6; i <= 22; i++) {
         const entry = hourMap.get(i.toString())!;
         const tempDate = new Date();
         tempDate.setHours(i);
         dayData.push({ 
-          day: format(tempDate, 'ha'), // Formats to '6AM', '7AM', etc.
+          day: format(tempDate, 'ha'),
           gmv: entry.gmv, 
           profit: entry.profit, 
           orders: entry.orders 
@@ -229,7 +224,7 @@ export function SuperAdminDashboard() {
     switch (status) {
       case 'confirmed': case 'ready': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'collected': return <Package className="h-4 w-4 text-muted-foreground" />;
-      case 'failed': case 'expired': case 'cancelled': return <XCircle className="h-4 w-4 text-destructive" />;
+      case 'failed': case 'expired': case 'cancelled': case 'rejected': return <XCircle className="h-4 w-4 text-destructive" />;
       default: return <Clock className="h-4 w-4 text-amber-500" />;
     }
   };
@@ -238,7 +233,7 @@ export function SuperAdminDashboard() {
     switch (status) {
       case 'confirmed': case 'ready': return 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400';
       case 'collected': return 'border-muted bg-muted text-muted-foreground';
-      case 'failed': case 'expired': case 'cancelled': return 'border-destructive/30 bg-destructive/10 text-destructive';
+      case 'failed': case 'expired': case 'cancelled': case 'rejected': return 'border-destructive/30 bg-destructive/10 text-destructive';
       default: return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400';
     }
   };
@@ -263,7 +258,6 @@ export function SuperAdminDashboard() {
           
           <div className="h-6 w-[1px] bg-gray-200 mx-1"></div>
           
-          {/* 🌟 NEW: The Native HTML Date Picker */}
           <div className="relative flex items-center bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors px-2 border border-gray-200 shadow-sm">
             <input 
               type="date" 
@@ -279,10 +273,11 @@ export function SuperAdminDashboard() {
         </div>
       </div>
 
+      {/* 🌟 REPLACED PENDING PAYOUTS WITH CANTEEN EARNINGS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Total GMV" value={formatCurrency(ledgerStats.total_gmv)} subtitle="Gross transaction volume" icon={IndianRupee} variant="primary" isLoading={extraLoading} />
         <StatCard title="Platform Revenue" value={formatCurrency(ledgerStats.platform_revenue)} subtitle="Your pure profit" icon={Landmark} variant="success" isLoading={extraLoading} />
-        <StatCard title="Pending Payouts" value={formatCurrency(ledgerStats.pending_payout)} subtitle="Owed to Canteens" icon={Wallet} variant={ledgerStats.pending_payout > 0 ? "warning" : "default"} isLoading={extraLoading} />
+        <StatCard title="Canteen Earnings" value={formatCurrency(ledgerStats.canteen_earnings)} subtitle="Food sales for this day" icon={Wallet} variant="warning" isLoading={extraLoading} />
         <StatCard title="Total Orders" value={extraLoading ? "..." : weeklyData.reduce((acc, curr) => acc + curr.orders, 0)} subtitle="Successful orders" icon={ShoppingBag} variant="default" isLoading={isLoading} />
       </div>
 

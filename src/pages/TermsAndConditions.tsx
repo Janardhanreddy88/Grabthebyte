@@ -39,7 +39,7 @@ export default function TermsAndConditions() {
             </p>
 
             <p>
-              3. The Platform is owned and operated by <strong>Bareddy Janardhan Reddy</strong>, an individual operating under the brand name <strong>GrabTheByte</strong>, with its registered office at <strong>29-178-32/D6, SBI Colony, Nandyal, Andhra Pradesh - 518501</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
+              3. The Platform is owned and operated by <strong>BAREDDY JANARDHAN REDDY</strong>, a proprietary organization operating under the brand name <strong>GRABTHEBYTE</strong>, with its registered office at <strong>Flat No. 1-36, Bhojanam, Near Govt School, Bandi Atmakur, Nandyal, Andhra Pradesh - 518533</strong> (hereinafter referred to as "Platform Owner", "we", "us", "our").
             </p>
 
             <p>
@@ -60,7 +60,8 @@ export default function TermsAndConditions() {
 
             <ul className="list-disc pl-6 space-y-2">
               <li>To access and use the Services, you agree to provide true, accurate and complete information to us during and after registration, and you shall be responsible for all acts done through the use of your registered account on the Platform.</li>
-              <li><strong>GrabTheByte acts strictly as a technology infrastructure provider (SaaS)</strong> facilitating digital queue management and ordering. We are not a restaurant, food manufacturer, or food handler.</li>
+              {/* 🛡️ NEW LIABILITY PROTECTION CLAUSE INJECTED HERE */}
+              <li><strong>Liability Disclaimer (Food Quality & Safety):</strong> GrabTheByte acts strictly as a technology infrastructure provider (SaaS) facilitating digital queue management and ordering. We only route the order. We are not a restaurant, food manufacturer, or food handler. The respective Canteen/Restaurant is 100% responsible and liable for food quality, preparation, hygiene, safety, and managing any dietary restrictions or food allergies. We expressly disclaim any liability for adverse reactions, illnesses, or issues arising from the consumption of food ordered through our Platform.</li>
               <li>Payments are processed securely through authorized third-party payment gateways (such as Razorpay). We do not store your payment credentials.</li>
               <li>Neither we nor any third parties provide any warranty or guarantee as to the accuracy, timeliness, performance, completeness or suitability of the information and materials offered on this website or through the Services, for any specific purpose. You acknowledge that such information and materials may contain inaccuracies or errors and we expressly exclude liability for any such inaccuracies or errors to the fullest extent permitted by law.</li>
               <li>Your use of our Services and the Platform is solely and entirely at your own risk and discretion for which we shall not be liable to you in any manner. You are required to independently assess and ensure that the Services meet your requirements.</li>
@@ -89,7 +90,7 @@ export default function TermsAndConditions() {
             </p>
 
             <p>
-              12. All concerns or communications relating to these Terms must be communicated to us using the contact information provided on this website.
+              12. All concerns or communications relating to these Terms must be communicated to us using our official registered contact details: Email at <strong>support@grabthebyte.com</strong> or Mobile at <strong>7993792683</strong>.
             </p>
           </div>
 

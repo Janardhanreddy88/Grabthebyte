@@ -24,22 +24,17 @@ export function Settlements() {
   const fetchSettlements = useCallback(async () => {
     setIsLoading(true);
     
-    // 🔍 Fetching logic with X-Ray error catching
     let query = supabase
       .from('settlements')
-      .select('*, campuses(name)') // Removed campus_code just in case it doesn't exist in your DB to prevent crashes!
+      .select('*, campuses(name)')
       .order('created_at', { ascending: false });
 
     if (filters.campusId) query = query.eq('campus_id', filters.campusId);
     
     if (selectedDate) {
-        // 🕰️ TIMEZONE FIX: Calculate exact local start and end of day
         const [year, month, day] = selectedDate.split('-').map(Number);
-        
         const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-        // .toISOString() automatically converts your local IST boundaries to perfect UTC
         query = query.gte('created_at', startDate.toISOString()).lte('created_at', endDate.toISOString());
     }
 
@@ -58,7 +53,6 @@ export function Settlements() {
   useEffect(() => {
     fetchSettlements();
 
-    // 🔥 REAL-TIME: If Razorpay settles while you are looking at the screen, it updates!
     const channel = supabase
       .channel('auto-settlements')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'settlements' }, () => {
@@ -70,12 +64,12 @@ export function Settlements() {
   }, [fetchSettlements]);
 
   const totalSettled = settlements
-    .filter(s => s.status === 'SETTLED')
-    .reduce((acc, curr) => acc + Number(curr.amount), 0);
+    .filter(s => s.status?.toUpperCase() === 'SETTLED' || s.status?.toUpperCase() === 'PROCESSED')
+    .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
   const totalPending = settlements
-    .filter(s => s.status === 'PENDING')
-    .reduce((acc, curr) => acc + Number(curr.amount), 0);
+    .filter(s => s.status?.toUpperCase() === 'PENDING' || s.status?.toUpperCase() === 'CREATED')
+    .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -142,7 +136,6 @@ export function Settlements() {
               <TableRow>
                 <TableHead>Campus</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Platform Fee</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Bank UTR / Ref</TableHead>
                 <TableHead className="text-right">Date</TableHead>
@@ -150,36 +143,39 @@ export function Settlements() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-10">Syncing with Razorpay...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-10">Syncing with Razorpay...</TableCell></TableRow>
               ) : settlements.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No transaction records found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground">No transaction records found.</TableCell></TableRow>
               ) : (
-                settlements.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <div className="font-bold">{s.campuses?.name || 'Unknown Campus'}</div>
-                    </TableCell>
-                    <TableCell className="font-bold text-gray-900">₹{s.amount}</TableCell>
-                    <TableCell className="text-emerald-600 font-medium">+₹{s.platform_fee}</TableCell>
-                    <TableCell>
-                      {s.status === 'SETTLED' ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Settled
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
-                          <Clock className="h-3 w-3 mr-1" /> Pending
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-[10px] text-muted-foreground">
-                      {s.utr_number || 'Processing...'}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {format(new Date(s.created_at), 'MMM d, h:mm a')}
-                    </TableCell>
-                  </TableRow>
-                ))
+                settlements.map((s) => {
+                  const isSettled = s.status?.toUpperCase() === 'SETTLED' || s.status?.toUpperCase() === 'PROCESSED';
+                  
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <div className="font-bold">{s.campuses?.name || 'Unknown Campus'}</div>
+                      </TableCell>
+                      <TableCell className="font-bold text-gray-900">₹{s.amount}</TableCell>
+                      <TableCell>
+                        {isSettled ? (
+                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none capitalize">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> {s.status?.toLowerCase() || 'Settled'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 capitalize">
+                            <Clock className="h-3 w-3 mr-1" /> {s.status?.toLowerCase() || 'Pending'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-[10px] text-muted-foreground">
+                        {s.utr_number || 'Processing...'}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {format(new Date(s.created_at), 'MMM d, h:mm a')}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

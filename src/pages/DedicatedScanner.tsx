@@ -308,12 +308,15 @@ export default function KioskScanner() {
           if (soundEnabled) playSuccessSound();
 
           if (isPrinterConnected && orderData) {
+            // 🦅 THE FIX: PASS PROMO AND FEE TO THE PRINTER
             printTicket({
               orderNumber: orderData.order_number,
               items: scannedOrder.items,
               totalAmount: scannedOrder.total,
               customerName: scannedOrder.customerName,
               createdAt: orderData.created_at,
+              promoCode: orderData.promo_code,
+              platformFee: orderData.platform_fee,
             });
           }
         } else {
@@ -347,9 +350,10 @@ export default function KioskScanner() {
             setResultMessage('Order expired.');
             if (soundEnabled) playErrorSound();
           } else if (order.status === 'confirmed') {
+            // 🦅 THE FIX: FETCH PROMO CODE ALONG WITH COLLECTION TOKEN
             const { data: tokenData } = await supabase
               .from('orders')
-              .select('collection_token')
+              .select('collection_token, promo_code, platform_fee')
               .eq('id', order.id)
               .maybeSingle();
 
@@ -376,12 +380,15 @@ export default function KioskScanner() {
                 if (soundEnabled) playSuccessSound();
 
                 if (isPrinterConnected) {
+                  // 🦅 THE FIX: PASS PROMO AND FEE TO THE PRINTER
                   printTicket({
                     orderNumber: order.qrCode,
                     items: scannedOrder.items,
                     totalAmount: order.total,
                     customerName: scannedOrder.customerName,
                     createdAt: order.createdAt.toISOString(),
+                    promoCode: tokenData.promo_code,
+                    platformFee: tokenData.platform_fee,
                   });
                 }
               } else {

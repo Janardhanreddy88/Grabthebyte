@@ -9,7 +9,9 @@ import {
   Plus,
   ArrowRight,
   WifiOff,
-  AlertOctagon
+  AlertOctagon,
+  Tag,
+  X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -22,15 +24,18 @@ import { useToast } from "@/hooks/use-toast";
 import { useStockCheck } from "@/hooks/useStockCheck";
 import { useAuth } from "@/context/AuthContext";
 import { useOrders } from "@/hooks/useOrders";
+import { useCampus } from "@/context/CampusContext"; 
 import { EmptyState } from "@/components/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { ImageWithFallback } from "@/components/ImageWithFallback";
 import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
 
 export default function Checkout() {
   const navigate = useNavigate();
   const { cart, totalPrice, totalItems, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
+  const { campus } = useCampus(); 
   const { createOrder, isCreating } = useOrders();
   const { toast } = useToast();
   const { checkStock } = useStockCheck();
@@ -41,14 +46,39 @@ export default function Checkout() {
   const [ordersPaused, setOrdersPaused] = useState(false);
   const [pauseReason, setPauseReason] = useState('');
   
-  // 🌟 FIX 3: Hard lock to prevent double-clicks bypassing React state
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 🌟 FIX 1: Zero-Latency Client-Side Fee Calculation (No more Database DDoS!)
-  const platformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
-  const finalAmountToPay = totalPrice + platformFee;
+  // PROMO CODE STATE VARIABLES
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState(0);
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+  const [promoMessage, setPromoMessage] = useState({ text: "", type: "" });
+  const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
-  // 🌟 FIX 2: Connection-Friendly Kill Switch Check (No live websocket drain)
+  // 🦅 THE BULLETPROOF PRICING LOGIC
+  // STEP 1: Lock in GrabTheByte's profit based on the RAW total (totalPrice), NOT discounted!
+  const basePlatformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
+  
+  // STEP 2: Calculate the discounted food cost
+  const discountedFoodCost = Math.max(0, totalPrice - appliedDiscount);
+  
+  // STEP 3: Calculate the final total including the 2.5% Razorpay fee
+  // targetBankAmount is what needs to hit your bank account (Food Cost + Your Fixed Profit)
+  const targetBankAmount = discountedFoodCost + basePlatformFee; 
+  const rawFinalTotal = cart.length === 0 ? 0 : (targetBankAmount / 0.975); // 0.975 accounts for exact 2.5% gross fee
+  const finalAmountToPay = Math.round(rawFinalTotal * 100) / 100;
+  
+  // STEP 4: Calculate the handling fee to show the user
+  const totalHandlingFee = cart.length === 0 ? 0 : Math.round((finalAmountToPay - discountedFoodCost) * 100) / 100;
+
+  useEffect(() => {
+    if (appliedPromoCode) {
+      removePromo();
+      toast({ title: "Cart Updated", description: "Promo code removed because your cart changed." });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalItems]); 
+
   useEffect(() => {
     const checkPauseOnLoad = async () => {
       const { data } = await supabase
@@ -63,7 +93,6 @@ export default function Checkout() {
     checkPauseOnLoad();
   }, []);
 
-  // Real-time network listener
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -75,34 +104,110 @@ export default function Checkout() {
     };
   }, []);
 
+  // 🦅 UPGRADED PROMO CODE ENGINE
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim()) return;
+    setIsCheckingPromo(true);
+    setPromoMessage({ text: "Checking...", type: "loading" });
+
+    try {
+      const { data: offer, error } = await (supabase as any)
+        .from("offers")
+        .select("*")
+        .eq("promo_code", promoCodeInput.toUpperCase().trim())
+        .eq("is_active", true)
+        .single();
+
+      if (error || !offer) {
+        setPromoMessage({ text: "Invalid or expired promo code.", type: "error" });
+        setAppliedDiscount(0);
+        setAppliedPromoCode(null);
+        return;
+      }
+
+      // 🦅 FRONTEND CAMPUS LOCK!
+      if (offer.campus_id && offer.campus_id !== campus?.id) {
+        setPromoMessage({ text: "This promo code is not valid at this canteen location.", type: "error" });
+        setAppliedDiscount(0);
+        setAppliedPromoCode(null);
+        return;
+      }
+
+      // 🦅 FRONTEND ITEM LOCK!
+      if (offer.target_item_id) {
+        const hasTargetItem = cart.some(item => item.id === offer.target_item_id);
+        if (!hasTargetItem) {
+          setPromoMessage({ text: "This promo code requires a specific item in your cart.", type: "error" });
+          setAppliedDiscount(0);
+          setAppliedPromoCode(null);
+          return;
+        }
+      }
+
+      if (totalPrice < offer.min_order_value) {
+        setPromoMessage({ text: `Add ₹${offer.min_order_value - totalPrice} more to unlock!`, type: "error" });
+        setAppliedDiscount(0);
+        setAppliedPromoCode(null);
+        return;
+      }
+
+      // 🦅 ACCURATE DISCOUNT BASE (Only target item price if locked!)
+      let discountBase = totalPrice;
+      if (offer.target_item_id) {
+        const targetItem = cart.find(item => item.id === offer.target_item_id);
+        if (targetItem) {
+           discountBase = targetItem.price * targetItem.quantity;
+        }
+      }
+
+      let finalDiscountAmount = 0;
+      if (offer.discount_type === "flat") {
+        finalDiscountAmount = offer.discount_value;
+      } else if (offer.discount_type === "percentage") {
+        finalDiscountAmount = discountBase * (offer.discount_value / 100);
+        if (offer.max_discount_amount !== null && finalDiscountAmount > offer.max_discount_amount) {
+          finalDiscountAmount = offer.max_discount_amount;
+        }
+      }
+
+      if (finalDiscountAmount > discountBase) finalDiscountAmount = discountBase;
+
+      setAppliedDiscount(finalDiscountAmount);
+      setAppliedPromoCode(offer.promo_code);
+      setPromoMessage({ text: `Awesome! ₹${finalDiscountAmount.toFixed(2)} saved.`, type: "success" });
+    } catch (error) {
+      setPromoMessage({ text: "Something went wrong.", type: "error" });
+    } finally {
+      setIsCheckingPromo(false);
+    }
+  };
+
+  const removePromo = () => {
+    setAppliedDiscount(0);
+    setAppliedPromoCode(null);
+    setPromoCodeInput("");
+    setPromoMessage({ text: "", type: "" });
+  };
+
   if (cart.length === 0) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <header className="flex-shrink-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/40 safe-top">
           <div className="flex items-center gap-3 px-4 h-14">
-            <button
-              onClick={() => navigate("/menu")}
-              className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors active:scale-95"
-            >
+            <button onClick={() => navigate("/menu")} className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors active:scale-95">
               <ArrowLeft size={18} />
             </button>
             <Logo size="sm" />
           </div>
         </header>
         <main className="flex-1 flex items-center justify-center p-5">
-          <EmptyState
-            icon={ShoppingBag}
-            title="Your cart is empty"
-            description="Add some items from the menu to checkout"
-            action={{ label: "Browse Menu", onClick: () => navigate("/menu") }}
-          />
+          <EmptyState icon={ShoppingBag} title="Your cart is empty" description="Add some items from the menu to checkout" action={{ label: "Browse Menu", onClick: () => navigate("/menu") }} />
         </main>
       </div>
     );
   }
 
   const handlePlaceOrder = async () => {
-    // Immediate lock against double taps
     if (isProcessing) return;
     setIsProcessing(true);
 
@@ -123,11 +228,7 @@ export default function Checkout() {
     setStockError(null);
 
     try {
-      // 🌟 Verify the kill-switch one last time right before payment
-      const { data: currentSettings } = await supabase
-        .from('platform_settings')
-        .select('orders_paused, orders_paused_reason')
-        .single();
+      const { data: currentSettings } = await supabase.from('platform_settings').select('orders_paused, orders_paused_reason').single();
         
       if (currentSettings?.orders_paused) {
         setOrdersPaused(true);
@@ -142,71 +243,58 @@ export default function Checkout() {
       
       if (!result.success) {
         let errorMessage = "";
-
         if (result.soldOutItems && result.soldOutItems.length > 0) {
           const soldOutNames = result.soldOutItems.map((i) => i.name).join(", ");
           errorMessage += `${soldOutNames} completely sold out. `;
           result.soldOutItems.forEach((item) => removeFromCart(item.id));
         }
-
         if (result.adjustedItems && result.adjustedItems.length > 0) {
           const adjustedNames = result.adjustedItems.map((adj) => `${adj.item.name} (Only ${adj.availableStock} left)`).join(", ");
           errorMessage += `Adjusted quantities for: ${adjustedNames}. `;
           result.adjustedItems.forEach((adj) => updateQuantity(adj.item.id, adj.availableStock));
         }
-
         setStockError("Cart updated due to stock changes. Please review and try again.");
-        toast({
-          title: "Cart Updated",
-          description: errorMessage.trim(),
-          variant: "destructive",
-        });
-        
+        toast({ title: "Cart Updated", description: errorMessage.trim(), variant: "destructive" });
         setIsProcessing(false);
         return; 
       }
 
-      // Create the order
+      const safePhone = user.phone || (user as any)?.user_metadata?.phone || "";
+
       const order = await createOrder({ 
         items: cart, 
-        total: finalAmountToPay, // Passed to backend, but backend ignores it for security!
+        total: finalAmountToPay, 
         paymentMethod: "razorpay", 
         customerName: user.fullName, 
-        customerEmail: user.email 
-      });      
+        customerEmail: user.email,
+        customerPhone: safePhone,
+        promoCode: appliedPromoCode
+      });
 
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${finalAmountToPay}`, {
-          state: {
-            customerName: user.fullName,
-            customerEmail: user.email,
-            customerPhone: user.phone || (user as any)?.user_metadata?.phone || "",
-          }
+          state: { customerName: user.fullName, customerEmail: user.email, customerPhone: safePhone }
         });
       } else { 
         toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
         setIsProcessing(false);
       }
-    } catch {
-      toast({ title: "Error", description: "Something went wrong.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Offer Rejected", description: error.message || "Something went wrong.", variant: "destructive" });
       setIsProcessing(false);
     } finally {
       setIsCheckingStock(false);
     }
   };
 
-  const isLoading = isCheckingStock || isCreating || isProcessing;
+  const isLoading = isCheckingStock || isCreating || isProcessing || isCheckingPromo;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40 safe-top">
         <div className="flex items-center justify-between px-3 h-12 max-w-2xl mx-auto w-full">
           <div className="flex items-center gap-3">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/menu")}
-              className="w-9 h-9 rounded-full bg-secondary text-foreground flex items-center justify-center"
-            >
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate("/menu")} className="w-9 h-9 rounded-full bg-secondary text-foreground flex items-center justify-center">
               <ArrowLeft size={16} />
             </motion.button>
             <span className="font-bold text-base">Checkout</span>
@@ -221,7 +309,7 @@ export default function Checkout() {
       <main className="flex-1 overflow-y-auto">
         <PullToRefresh onRefresh={async () => window.location.reload()}>
         <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
-          {/* Kill Switch Banner */}
+          
           {ordersPaused && (
             <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive">
               <AlertOctagon size={20} className="shrink-0" />
@@ -231,14 +319,10 @@ export default function Checkout() {
               </div>
             </div>
           )}
+
           <AnimatePresence>
             {stockError && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                 <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive">
                   <AlertCircle size={18} />
                   <p className="text-sm font-medium">{stockError}</p>
@@ -255,20 +339,9 @@ export default function Checkout() {
             </div>
             <div className="bg-card rounded-xl shadow-sm border border-border/50 divide-y divide-border/50 overflow-hidden">
               {cart.map((item) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-4 flex gap-3.5"
-                >
+                <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 flex gap-3.5">
                   <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
-                    <ImageWithFallback
-                      src={item.image || "/placeholder.svg"}
-                      alt={item.name}
-                      className="h-full w-full rounded-lg object-cover border border-border/50"
-                      fallbackIcon
-                      containerClassName="h-16 w-16 sm:h-20 sm:w-20"
-                    />
+                    <ImageWithFallback src={item.image || "/placeholder.svg"} alt={item.name} className="h-full w-full rounded-lg object-cover border border-border/50" fallbackIcon containerClassName="h-16 w-16 sm:h-20 sm:w-20" />
                     <div className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 rounded-full bg-foreground text-background text-[10px] font-bold flex items-center justify-center">
                       x{item.quantity}
                     </div>
@@ -276,26 +349,16 @@ export default function Checkout() {
                   <div className="flex-1 flex flex-col justify-between py-0.5">
                     <div className="flex justify-between items-start gap-2">
                       <h3 className="font-semibold text-sm leading-tight line-clamp-2">{item.name}</h3>
-                      <span className="font-bold text-sm whitespace-nowrap">₹{item.price * item.quantity}</span>
+                      <span className="font-bold text-sm whitespace-nowrap">₹{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-xs text-muted-foreground">₹{item.price} / item</p>
+                      <p className="text-xs text-muted-foreground">₹{item.price.toFixed(2)} / item</p>
                       <div className="flex items-center bg-secondary/50 rounded-lg p-0.5 gap-2 border border-border/50">
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="w-7 h-7 rounded bg-background flex items-center justify-center shadow-sm"
-                          disabled={isLoading}
-                        >
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded bg-background flex items-center justify-center shadow-sm" disabled={isLoading}>
                           <Minus size={13} />
                         </motion.button>
                         <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm"
-                          disabled={isLoading}
-                        >
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm" disabled={isLoading}>
                           <Plus size={13} />
                         </motion.button>
                       </div>
@@ -303,6 +366,42 @@ export default function Checkout() {
                   </div>
                 </motion.div>
               ))}
+            </div>
+          </section>
+
+          {/* NEW PROMO CODE SECTION */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-muted-foreground px-1">
+              <Tag size={15} />
+              <h2 className="text-xs font-semibold uppercase tracking-wider">Offers & Benefits</h2>
+            </div>
+            <div className="bg-card rounded-xl shadow-sm border border-border/50 p-3">
+              {!appliedPromoCode ? (
+                <div className="flex gap-2">
+                  <Input placeholder="Enter promo code" value={promoCodeInput} onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())} className="uppercase placeholder:normal-case font-semibold" disabled={isCheckingPromo} />
+                  <Button variant="secondary" onClick={handleApplyPromo} disabled={!promoCodeInput || isCheckingPromo}>
+                    {isCheckingPromo ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 text-green-700 px-3 py-2.5 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Tag size={16} />
+                    <div>
+                      <p className="font-bold text-sm uppercase">{appliedPromoCode}</p>
+                      <p className="text-xs font-medium">Code applied successfully</p>
+                    </div>
+                  </div>
+                  <button onClick={removePromo} className="p-1 hover:bg-green-100 rounded-md transition-colors">
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              {promoMessage.text && !appliedPromoCode && (
+                <p className={`text-xs font-medium mt-2 px-1 ${promoMessage.type === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {promoMessage.text}
+                </p>
+              )}
             </div>
           </section>
 
@@ -315,18 +414,26 @@ export default function Checkout() {
             <div className="bg-card rounded-xl shadow-sm border border-border/50 p-4 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Item Total</span>
-                <span className="font-medium">₹{totalPrice}</span>
+                <span className="font-medium">₹{totalPrice.toFixed(2)}</span>
               </div>
+              
+              {appliedDiscount > 0 && (
+                <div className="flex justify-between text-sm text-green-600 font-medium">
+                  <span>Item Discount ({appliedPromoCode})</span>
+                  <span>- ₹{appliedDiscount.toFixed(2)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between text-sm items-center">
-                <span className="text-muted-foreground">Platform Fee</span>
+                <span className="text-muted-foreground">Platform & Handling Fee</span>
                 <span className="text-primary text-xs font-bold px-2 py-0.5 bg-primary/10 rounded-full">
-                  + ₹{platformFee}
+                  + ₹{totalHandlingFee.toFixed(2)}
                 </span>
               </div>
               <Separator className="my-1.5" />
               <div className="flex justify-between items-center">
                 <span className="font-bold text-base">To Pay</span>
-                <span className="font-bold text-lg text-primary">₹{finalAmountToPay}</span>
+                <span className="font-bold text-lg text-primary">₹{finalAmountToPay.toFixed(2)}</span>
               </div>
             </div>
           </section>
@@ -353,7 +460,7 @@ export default function Checkout() {
         <div className="max-w-2xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
-            <p className="text-xl font-black text-foreground">₹{finalAmountToPay}</p>
+            <p className="text-xl font-black text-foreground">₹{finalAmountToPay.toFixed(2)}</p>
           </div>
           <motion.div className="flex-[1.5]" whileTap={!isOffline && !ordersPaused ? { scale: 0.98 } : {}}>
             <Button
@@ -372,7 +479,7 @@ export default function Checkout() {
               ) : isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="animate-spin" size={16} />
-                  {isCreating ? "Ordering..." : "Checking..."}
+                  {isCreating ? "Ordering..." : "Processing..."}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">

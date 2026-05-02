@@ -15,6 +15,8 @@ import { usePrinter } from "@/context/PrinterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils"; 
+import { format } from "date-fns"; 
 import {
   useAdminMenuItems,
   useCreateMenuItem,
@@ -31,12 +33,13 @@ import {
   LogOut, QrCode, LayoutDashboard, UtensilsCrossed, TrendingUp,
   Package, Users, User, Mail, Phone, Building2, BellRing, Printer, 
   BluetoothOff, Settings, Landmark, ShieldCheck, Edit, Lock, Info, CalendarClock, CheckCircle2,
-  CalendarDays, CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp, CornerDownRight
+  CalendarDays, CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp, CornerDownRight, Wallet, RefreshCw, Receipt, Loader2, Calendar as CalendarIcon
 } from "lucide-react";
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
-import { useCampusBouncer } from '@/hooks/useCampusBouncer'; // 🌟 IMPORTED THE BOUNCER
+import { useCampusBouncer } from '@/hooks/useCampusBouncer'; 
+import { Badge } from "@/components/ui/badge"; 
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -45,7 +48,6 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // 🌟 DEPLOYED THE SECURITY BOUNCER
   useCampusBouncer();
   
   const { isPrinterConnected, printTicket } = usePrinter();
@@ -77,7 +79,15 @@ export default function AdminDashboard() {
   const [showHolidayExample, setShowHolidayExample] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'profile' | 'settlements' | 'payments'>('profile');
+  
   const [settlements, setSettlements] = useState<any[]>([]);
+  
+  const [paymentsList, setPaymentsList] = useState<any[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  
+  // 🌟 NEW: Date Filter State (Defaults to Today)
+  const [paymentDateFilter, setPaymentDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -137,6 +147,53 @@ export default function AdminDashboard() {
     };
     fetchProfile();
   }, []);
+
+  // 🌟 UPGRADED FETCH QUERY: Now supports targeted daily filtering
+  const fetchPaymentsList = useCallback(async () => {
+    if (!profileData?.campus_id) return;
+    setIsLoadingPayments(true);
+    try {
+      let query = supabase
+        .from('orders')
+        .select('id, order_number, total, payment_status, status, notes, rejection_reason, created_at, customer_name, customer_phone, customer_email, razorpay_payment_id')
+        .eq('campus_id', profileData.campus_id)
+        .order('created_at', { ascending: false });
+
+      // Apply IST Date Filtering
+      if (paymentDateFilter) {
+        const [year, month, day] = paymentDateFilter.split('-').map(Number);
+        
+        // Start of selected day
+        const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        // End of selected day
+        const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+        query = query.gte('created_at', startDate.toISOString())
+                     .lte('created_at', endDate.toISOString());
+      } else {
+        // Fallback to latest 50 if they clear the calendar completely
+        query = query.limit(50);
+      }
+        
+      const { data, error } = await query;
+
+      if (error) throw error;
+      if (data) {
+        setPaymentsList(data);
+      }
+    } catch (err) {
+      console.error("Error fetching payments:", err);
+    } finally {
+      setIsLoadingPayments(false);
+    }
+  }, [profileData?.campus_id, paymentDateFilter]);
+
+  // Refetch when tab changes OR when the admin picks a new date
+  useEffect(() => {
+    if (activeSettingsTab === 'payments') {
+      fetchPaymentsList();
+    }
+  }, [activeSettingsTab, fetchPaymentsList]);
 
   useEffect(() => {
     if (!profileData?.campus_id) return;
@@ -264,13 +321,19 @@ export default function AdminDashboard() {
 
             queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
             queryClient.invalidateQueries({ queryKey: ["today-analytics"] });
+            
+            // Only trigger a ledger refresh if they are currently looking at "Today's" date
+            if (activeSettingsTab === 'payments') {
+               const todayStr = format(new Date(), 'yyyy-MM-dd');
+               if (paymentDateFilter === todayStr) fetchPaymentsList();
+            }
           }
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [profileData?.campus_id, queryClient, toast, playNotificationSound]);
+  }, [profileData?.campus_id, queryClient, toast, playNotificationSound, activeSettingsTab, fetchPaymentsList, paymentDateFilter]);
 
   const { data: menuItems = [], isLoading: menuLoading } = useAdminMenuItems();
   const { data: orders = [], isLoading: ordersLoading } = useAdminOrders();
@@ -288,7 +351,6 @@ export default function AdminDashboard() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // 🌟 MEMORY-WIPING LOGOUT ADDED
   const handleSignOut = async () => {
     if (pinLogout) pinLogout();
     if (authLogout) await authLogout();
@@ -442,330 +504,491 @@ export default function AdminDashboard() {
             />
           </TabsContent>
 
-          <TabsContent value="settings" className="space-y-6">
-            <div className="flex justify-end mb-2">
-              <Button onClick={handleOpenEdit} size="sm" className="gap-2 bg-primary text-primary-foreground">
-                <Edit size={16} /> Edit Profile
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Personal Details</CardTitle>
-                  <CardDescription>Your account contact information.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-                    <p className="font-semibold">{profileData?.full_name || 'Not provided'}</p>
-                  </div>
-                  <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Email Address</p>
-                    <p className="font-semibold">{profileData?.email || 'Not provided'}</p>
-                  </div>
-                  <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Phone Number</p>
-                    <p className="font-semibold">{profileData?.phone || 'Not provided'}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Landmark className="w-5 h-5 text-emerald-600" /> Bank & Campus
-                  </CardTitle>
-                  <CardDescription>Your registered campus and payout routing details.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  
-                  <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Campus Branch</p>
-                    <p className="font-semibold">{profileData?.campus_name || 'Not assigned'} ({profileData?.campus_code})</p>
-                    {profileData?.campus_id && (
-                      <p className="text-[11px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded-md w-fit mt-0.5 border border-border/50 select-all">
-                        ID: {profileData.campus_id}
-                      </p>
-                    )}
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                      Razorpay Linked Account <Lock size={12} className="text-muted-foreground" />
-                    </p>
-                    {profileData?.razorpay_account_id ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <p className="font-mono text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
-                          {profileData.razorpay_account_id}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="flex h-2 w-2 rounded-full bg-red-500"></span>
-                        <p className="text-sm text-red-600 font-medium">Bank Account Not Linked</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {profileData?.bank_account_number && (
-                    <div className="bg-muted/50 p-3 rounded-lg space-y-2 mt-2 border border-border/50 relative">
-                      <div className="absolute top-2 right-2">
-                        <Lock size={14} className="text-muted-foreground/50" />
-                      </div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Traditional Bank Info</p>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-xs">Account Name</p>
-                          <p className="font-medium truncate">{profileData.bank_account_name || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">IFSC Code</p>
-                          <p className="font-medium">{profileData.bank_ifsc || 'N/A'}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-muted-foreground text-xs">Account Number</p>
-                          <p className="font-mono font-medium">{profileData.bank_account_number}</p>
-                        </div>
-                        {profileData.upi_id && (
-                          <div className="col-span-2">
-                            <p className="text-muted-foreground text-xs">UPI ID</p>
-                            <p className="font-medium">{profileData.upi_id}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-[10px] text-center text-muted-foreground pt-2">
-                    To update your banking details, please contact GrabTheByte support.
-                  </p>
-
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="mt-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Landmark className="h-6 w-6 text-primary" /> 
-                  Recent Bank Payouts
-                </h2>
+          <TabsContent value="settings" className="mt-6">
+            <div className="flex flex-col lg:flex-row gap-6">
+              
+              <div className="w-full lg:w-64 shrink-0 space-y-2">
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => {
-                    setIsSettlementInfoOpen(true);
-                    setShowHolidayExample(false); 
-                  }}
-                  className="gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 bg-blue-50/50"
+                  variant={activeSettingsTab === 'profile' ? "default" : "ghost"} 
+                  className={cn("w-full justify-start gap-3 h-11", activeSettingsTab === 'profile' ? "shadow-sm font-bold bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50")}
+                  onClick={() => setActiveSettingsTab('profile')}
                 >
-                  <CalendarDays className="h-4 w-4" /> My Settlement Cycle
+                  <User size={18} /> Profile & Banking
+                </Button>
+                <Button 
+                  variant={activeSettingsTab === 'settlements' ? "default" : "ghost"} 
+                  className={cn("w-full justify-start gap-3 h-11", activeSettingsTab === 'settlements' ? "shadow-sm font-bold bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50")}
+                  onClick={() => setActiveSettingsTab('settlements')}
+                >
+                  <Landmark size={18} /> Settlements
+                </Button>
+                <Button 
+                  variant={activeSettingsTab === 'payments' ? "default" : "ghost"} 
+                  className={cn("w-full justify-start gap-3 h-11", activeSettingsTab === 'payments' ? "shadow-sm font-bold bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50")}
+                  onClick={() => setActiveSettingsTab('payments')}
+                >
+                  <Wallet size={18} /> Payments
                 </Button>
               </div>
 
-              <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-                <div className="grid grid-cols-3 bg-muted/50 p-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
-                  <div className="col-span-2">Payout Details</div>
-                  <div className="text-right">Amount</div>
-                </div>
+              <div className="flex-1 min-w-0">
                 
-                <div className="divide-y divide-border">
-                  {settlements.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center">
-                      <CalendarClock className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                      <p className="font-medium text-sm">No payouts recorded yet.</p>
-                      <p className="text-xs mt-1">Your settlements will appear here automatically.</p>
+                {activeSettingsTab === 'profile' && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                      <div>
+                        <h2 className="text-xl font-bold">Profile Details</h2>
+                        <p className="text-sm text-muted-foreground">Manage your account and banking info</p>
+                      </div>
+                      <Button onClick={handleOpenEdit} size="sm" className="gap-2 bg-primary text-primary-foreground shrink-0">
+                        <Edit size={16} /> Edit Profile
+                      </Button>
                     </div>
-                  ) : (
-                    settlements.map((settlement) => {
-                      const dates = formatSettlementDates(settlement.settled_at);
-                      
-                      return (
-                        <div key={settlement.id} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                          <div>
-                            <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                              Bank Deposit: {dates.depositDate}
-                            </h4>
-                            
-                            <p className="text-xs text-blue-800/80 bg-blue-50/50 border border-blue-100 px-2 py-1 rounded-md flex items-center gap-1.5 mt-1.5 w-fit">
-                              <CalendarClock size={12} className="opacity-70 text-blue-600" />
-                              <span>Sales from: <strong className="text-blue-900">{dates.salesDate}</strong> (Day before yesterday's sales)</span>
-                            </p>
-                            
-                            <p className="text-[10px] text-muted-foreground mt-1.5 font-mono uppercase">
-                              Ref: {settlement.utr_number || 'Processing'}
-                            </p>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <Card className="border shadow-sm">
+                        <CardHeader className="bg-muted/30 pb-4">
+                          <CardTitle className="text-lg flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Personal Details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4">
+                          <div className="grid gap-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Full Name</p>
+                            <p className="font-semibold text-sm">{profileData?.full_name || 'Not provided'}</p>
+                          </div>
+                          <div className="grid gap-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email Address</p>
+                            <p className="font-semibold text-sm">{profileData?.email || 'Not provided'}</p>
+                          </div>
+                          <div className="grid gap-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone Number</p>
+                            <p className="font-semibold text-sm">{profileData?.phone || 'Not provided'}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border shadow-sm">
+                        <CardHeader className="bg-muted/30 pb-4">
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Landmark className="w-5 h-5 text-emerald-600" /> Bank & Campus
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4">
+                          
+                          <div className="grid gap-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Campus Branch</p>
+                            <p className="font-semibold text-sm">{profileData?.campus_name || 'Not assigned'} ({profileData?.campus_code})</p>
+                            {profileData?.campus_id && (
+                              <p className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded w-fit mt-1 border border-border/50 select-all">
+                                ID: {profileData.campus_id}
+                              </p>
+                            )}
                           </div>
                           
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-emerald-600">
-                              ₹{Number(settlement.amount).toFixed(2)}
+                          <Separator />
+                          
+                          <div className="grid gap-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                              Razorpay Linked Account <Lock size={10} className="text-muted-foreground" />
                             </p>
-                            <p className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-block mt-1">
-                              {settlement.status}
-                            </p>
+                            {profileData?.razorpay_account_id ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                                <p className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                                  {profileData.razorpay_account_id}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="flex h-2 w-2 rounded-full bg-red-500"></span>
+                                <p className="text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded border border-red-100">Bank Account Not Linked</p>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
 
-          </TabsContent>
-        </Tabs>
-
-        <Dialog open={isSettlementInfoOpen} onOpenChange={setIsSettlementInfoOpen}>
-          <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden">
-            <div className="px-6 pt-6 pb-6">
-              <DialogHeader>
-                <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <span className="text-sm font-semibold text-foreground">Settlement Schedule</span>
-                </div>
-                <DialogTitle className="sr-only">Settlement Schedule Info</DialogTitle>
-              </DialogHeader>
-              
-              <div className="flex border-b mb-6 mt-4">
-                <div className="pb-2 border-b-2 border-foreground px-1">
-                  <span className="text-sm font-semibold">2 day settlement (T+2)</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-8">
-                <div className="bg-emerald-500 text-white rounded-md p-1.5 shrink-0 mt-0.5">
-                  <CheckCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-base">Payments received reach your bank account in 2 working days</h3>
-                </div>
-              </div>
-
-              <div className="relative flex justify-between items-start mb-10 px-2">
-                <div className="absolute top-4 left-14 right-14 h-[2px] bg-border border-dashed border-t-2 z-0"></div>
-
-                <div className="relative z-10 flex flex-col items-center w-1/3">
-                  <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-xs font-semibold">DAY 0</span>
+                          {profileData?.bank_account_number && (
+                            <div className="bg-muted/30 p-3 rounded-lg space-y-2 mt-2 border border-border/50 relative">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Traditional Bank Info</p>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <p className="text-muted-foreground text-[10px] uppercase">Account Name</p>
+                                  <p className="font-medium truncate">{profileData.bank_account_name || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-[10px] uppercase">IFSC Code</p>
+                                  <p className="font-medium">{profileData.bank_ifsc || 'N/A'}</p>
+                                </div>
+                                <div className="col-span-2">
+                                  <p className="text-muted-foreground text-[10px] uppercase">Account Number</p>
+                                  <p className="font-mono font-medium">{profileData.bank_account_number}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
-                  <p className="text-xs text-center text-muted-foreground px-2">Payment received from students</p>
-                </div>
+                )}
 
-                <div className="relative z-10 flex flex-col items-center w-1/3">
-                  <div className="bg-background border border-border rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-muted-foreground">DAY 1</span>
-                  </div>
-                </div>
-
-                <div className="relative z-10 flex flex-col items-center w-1/3">
-                  <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-xs font-semibold">DAY 2</span>
-                  </div>
-                  <p className="text-xs text-center text-muted-foreground px-2">Money transferred to your bank before 9 pm</p>
-                </div>
-              </div>
-
-              <div className="bg-amber-900/5 rounded-lg border border-amber-900/10 transition-all duration-300">
-                <div 
-                  className="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-900/10 rounded-lg transition-colors"
-                  onClick={() => setShowHolidayExample(!showHolidayExample)}
-                >
-                  <div className="bg-amber-700 text-white rounded-md p-1.5 shrink-0">
-                    <AlertCircle className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm font-medium text-foreground flex-1">
-                    Pay outs on bank holidays and weekends will be processed on the next working day.
-                  </p>
-                  <div className="flex items-center text-sm font-semibold text-blue-600 hover:underline whitespace-nowrap select-none">
-                    View example {showHolidayExample ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
-                  </div>
-                </div>
-
-                {showHolidayExample && (
-                  <div className="px-2 pb-6 pt-2 animate-in slide-in-from-top-2">
-                    <div className="relative flex justify-between items-start px-2 mt-4">
-                      <div className="absolute top-4 left-10 right-10 h-[2px] bg-amber-900/20 border-dashed border-t-2 z-0"></div>
-
-                      <div className="relative z-10 flex flex-col items-center w-1/4">
-                        <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
-                          <CheckCircle className="h-3 w-3" />
-                          <span className="text-[10px] font-semibold">DAY 0</span>
-                        </div>
-                        <p className="text-[10px] text-center text-muted-foreground leading-tight">Payment received from students</p>
+                {activeSettingsTab === 'settlements' && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                      <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                          <Landmark className="h-6 w-6 text-emerald-600" /> 
+                          Bank Payouts
+                        </h2>
+                        <p className="text-sm text-muted-foreground">Track money deposited to your bank</p>
                       </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          setIsSettlementInfoOpen(true);
+                          setShowHolidayExample(false); 
+                        }}
+                        className="gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 bg-blue-50/50 shrink-0 shadow-sm"
+                      >
+                        <CalendarDays className="h-4 w-4" /> My Settlement Cycle
+                      </Button>
+                    </div>
 
-                      <div className="relative z-10 flex flex-col items-center w-1/4">
-                        <div className="bg-[#fef9f1] border border-border rounded-full px-2 py-1 flex items-center gap-1 mb-2 text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span className="text-[10px] font-semibold">DAY 1</span>
-                        </div>
+                    <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+                      <div className="grid grid-cols-3 bg-muted/50 p-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
+                        <div className="col-span-2">Payout Details</div>
+                        <div className="text-right">Amount</div>
                       </div>
-
-                      <div className="relative z-10 flex flex-col items-center w-1/4">
-                        <div className="bg-amber-600 border border-amber-600 text-white rounded-full px-2 py-1 flex items-center gap-1 mb-2 shadow-sm">
-                          <CornerDownRight className="h-3 w-3" />
-                          <span className="text-[10px] font-semibold tracking-wide">SKIPPED</span>
-                        </div>
-                        <p className="text-[10px] text-center text-muted-foreground leading-tight">If non-working day (bank holiday)</p>
+                      
+                      <div className="divide-y divide-border">
+                        {settlements.length === 0 ? (
+                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                            <CalendarClock className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                            <p className="font-semibold text-base text-foreground">No payouts recorded yet.</p>
+                            <p className="text-sm mt-1">Your settlements will appear here automatically once processed by Razorpay.</p>
+                          </div>
+                        ) : (
+                          settlements.map((settlement) => {
+                            const dates = formatSettlementDates(settlement.settled_at);
+                            
+                            return (
+                              <div key={settlement.id} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                                <div>
+                                  <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    Bank Deposit: {dates.depositDate}
+                                  </h4>
+                                  
+                                  <p className="text-xs text-blue-800/80 bg-blue-50/50 border border-blue-100 px-2 py-1 rounded-md flex items-center gap-1.5 mt-1.5 w-fit">
+                                    <CalendarClock size={12} className="opacity-70 text-blue-600" />
+                                    <span>Sales from: <strong className="text-blue-900">{dates.salesDate}</strong></span>
+                                  </p>
+                                  
+                                  <p className="text-[10px] text-muted-foreground mt-2 font-mono uppercase bg-muted px-2 py-0.5 rounded-md inline-block">
+                                    Ref: {settlement.utr_number || 'Processing'}
+                                  </p>
+                                </div>
+                                
+                                <div className="text-right">
+                                  <p className="text-xl font-black text-emerald-600 tracking-tight">
+                                    ₹{Number(settlement.amount).toFixed(2)}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-block mt-1">
+                                    {settlement.status}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
+                    </div>
+                  </div>
+                )}
 
-                      <div className="relative z-10 flex flex-col items-center w-1/4">
-                        <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
-                          <CheckCircle className="h-3 w-3" />
-                          <span className="text-[10px] font-semibold">DAY 2</span>
+                {/* VIEW 3: SEPARATED PAYMENTS & ORDERS LEDGER 🔥 */}
+                {activeSettingsTab === 'payments' && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                      <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                          <Receipt className="h-6 w-6 text-primary" /> 
+                          Payments Ledger
+                        </h2>
+                        <p className="text-sm text-muted-foreground">Real-time breakdown of all student transactions</p>
+                      </div>
+                      
+                      {/* 🌟 NEW: THE DATE FILTER UI */}
+                      <div className="flex items-center gap-2 self-start sm:self-auto bg-muted/30 p-1 rounded-lg border">
+                        <div className="relative">
+                          <Input 
+                            type="date" 
+                            value={paymentDateFilter}
+                            onChange={(e) => setPaymentDateFilter(e.target.value)}
+                            className="h-8 text-xs font-semibold border-none shadow-none bg-transparent w-[120px] focus-visible:ring-0"
+                          />
                         </div>
-                        <p className="text-[10px] text-center text-muted-foreground leading-tight">Money transferred to your bank before 9 pm</p>
+                        <Button variant="secondary" size="sm" onClick={fetchPaymentsList} className="gap-1.5 shadow-sm h-7 px-3 text-xs" disabled={isLoadingPayments}>
+                          <RefreshCw size={12} className={isLoadingPayments ? "animate-spin" : ""} /> 
+                          <span className="hidden sm:inline">Refresh</span>
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+                      <div className="grid grid-cols-5 md:grid-cols-7 items-center bg-muted/50 p-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b">
+                        <div className="col-span-2">Transaction Details</div>
+                        <div className="hidden md:block col-span-2">Customer Info</div>
+                        <div className="text-center">Payment</div>
+                        <div className="text-center">Order</div>
+                        <div className="text-right">Net Earning</div>
+                      </div>
+                      
+                      <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+                        {isLoadingPayments ? (
+                          <div className="flex justify-center p-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : paymentsList.length === 0 ? (
+                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                            <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                            <p className="font-semibold text-base text-foreground">No payments on this date.</p>
+                            <p className="text-sm mt-1">Try selecting a different day from the calendar above.</p>
+                          </div>
+                        ) : (
+                          paymentsList.map((payment) => {
+                            const rawPaymentStatus = (payment.payment_status || 'pending').toLowerCase();
+                            const rawOrderStatus = (payment.status || 'pending').toLowerCase();
+
+                            const isPaymentSuccess = ['completed', 'paid', 'success', 'captured'].includes(rawPaymentStatus);
+                            const isPaymentFailed = ['failed', 'rejected', 'refunded'].includes(rawPaymentStatus);
+                            
+                            const isOrderFailedOrCancelled = ['cancelled', 'rejected', 'failed', 'expired'].includes(rawOrderStatus);
+                            
+                            const isCancelled = isPaymentFailed || isOrderFailedOrCancelled;
+
+                            return (
+                              <div key={payment.id} className="p-3 grid grid-cols-5 md:grid-cols-7 items-center hover:bg-muted/30 transition-colors text-sm">
+                                <div className="col-span-2">
+                                  <div className="flex flex-col gap-1">
+                                    <p className={cn("font-bold", isCancelled ? "text-muted-foreground" : "text-foreground")}>
+                                      #{payment.order_number}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                      <Clock size={10} /> {format(new Date(payment.created_at), 'MMM d, h:mm a')}
+                                    </p>
+                                    {payment.razorpay_payment_id && (
+                                      <p className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded w-fit border border-border/50 max-w-[140px] truncate" title={payment.razorpay_payment_id}>
+                                        PID: {payment.razorpay_payment_id}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className={cn("hidden md:block col-span-2 pr-2", isCancelled ? "text-muted-foreground/50" : "text-foreground")}>
+                                   <div className="flex items-center gap-2">
+                                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[11px] font-bold shrink-0">
+                                       {(payment.customer_name || 'G')[0].toUpperCase()}
+                                     </div>
+                                     <div className="flex flex-col">
+                                       <span className="font-medium text-xs truncate max-w-[150px]">{payment.customer_name || 'Guest User'}</span>
+                                       {payment.customer_email ? (
+                                         <span className="text-[10px] text-muted-foreground truncate max-w-[160px]" title={payment.customer_email}>{payment.customer_email}</span>
+                                       ) : payment.customer_phone ? (
+                                         <span className="text-[10px] text-muted-foreground">{payment.customer_phone}</span>
+                                       ) : (
+                                         <span className="text-[9px] text-muted-foreground uppercase tracking-wider">No contact info</span>
+                                       )}
+                                     </div>
+                                   </div>
+                                </div>
+
+                                <div className="text-center flex justify-center">
+                                  <Badge className={cn(
+                                    "border-none text-[9px] px-1.5 capitalize",
+                                    isPaymentSuccess ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" :
+                                    rawPaymentStatus === 'refunded' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" :
+                                    isPaymentFailed ? "bg-red-100 text-red-700 hover:bg-red-100" :
+                                    "bg-orange-100 text-orange-700 hover:bg-orange-100"
+                                  )}>
+                                    {rawPaymentStatus}
+                                  </Badge>
+                                </div>
+
+                                <div className="text-center flex justify-center">
+                                  <span className={cn(
+                                    "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border",
+                                    ['completed', 'delivered'].includes(rawOrderStatus) ? "bg-green-50 text-green-600 border-green-200" :
+                                    rawOrderStatus === 'preparing' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                                    rawOrderStatus === 'ready' ? "bg-indigo-50 text-indigo-600 border-indigo-200" :
+                                    isOrderFailedOrCancelled ? "bg-red-50 text-red-600 border-red-200 opacity-70" :
+                                    "bg-orange-50 text-orange-600 border-orange-200"
+                                  )}>
+                                    {rawOrderStatus}
+                                  </span>
+                                </div>
+
+                                <div className={cn("text-right font-black text-base", isCancelled ? "text-muted-foreground line-through opacity-50" : "text-foreground")}>
+                                  ₹{payment.total}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+            
+            <Dialog open={isSettlementInfoOpen} onOpenChange={setIsSettlementInfoOpen}>
+              <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden">
+                <div className="px-6 pt-6 pb-6">
+                  <DialogHeader>
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                      <span className="text-sm font-semibold text-foreground">Settlement Schedule</span>
+                    </div>
+                    <DialogTitle className="sr-only">Settlement Schedule Info</DialogTitle>
+                  </DialogHeader>
+                  
+                  <div className="flex border-b mb-6 mt-4">
+                    <div className="pb-2 border-b-2 border-foreground px-1">
+                      <span className="text-sm font-semibold">2 day settlement (T+2)</span>
+                    </div>
+                  </div>
 
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Edit Profile Details</DialogTitle>
-              <DialogDescription>Update your personal contact information.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input 
-                  id="name" 
-                  value={editForm.full_name} 
-                  onChange={(e) => setEditForm({...editForm, full_name: e.target.value})} 
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input 
-                  id="phone" 
-                  type="tel"
-                  value={editForm.phone} 
-                  onChange={(e) => setEditForm({...editForm, phone: e.target.value})} 
-                  placeholder="e.g. +91 9876543210"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdating}>Cancel</Button>
-              <Button onClick={handleSaveProfile} disabled={isUpdating}>
-                {isUpdating ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                  <div className="flex items-start gap-4 mb-8">
+                    <div className="bg-emerald-500 text-white rounded-md p-1.5 shrink-0 mt-0.5">
+                      <CheckCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-base">Payments received reach your bank account in 2 working days</h3>
+                    </div>
+                  </div>
+
+                  <div className="relative flex justify-between items-start mb-10 px-2">
+                    <div className="absolute top-4 left-14 right-14 h-[2px] bg-border border-dashed border-t-2 z-0"></div>
+
+                    <div className="relative z-10 flex flex-col items-center w-1/3">
+                      <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="text-xs font-semibold">DAY 0</span>
+                      </div>
+                      <p className="text-xs text-center text-muted-foreground px-2">Payment received from students</p>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center w-1/3">
+                      <div className="bg-background border border-border rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground">DAY 1</span>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center w-1/3">
+                      <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="text-xs font-semibold">DAY 2</span>
+                      </div>
+                      <p className="text-xs text-center text-muted-foreground px-2">Money transferred to your bank before 9 pm</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-900/5 rounded-lg border border-amber-900/10 transition-all duration-300">
+                    <div 
+                      className="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-900/10 rounded-lg transition-colors"
+                      onClick={() => setShowHolidayExample(!showHolidayExample)}
+                    >
+                      <div className="bg-amber-700 text-white rounded-md p-1.5 shrink-0">
+                        <AlertCircle className="h-4 w-4" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground flex-1">
+                        Pay outs on bank holidays and weekends will be processed on the next working day.
+                      </p>
+                      <div className="flex items-center text-sm font-semibold text-blue-600 hover:underline whitespace-nowrap select-none">
+                        View example {showHolidayExample ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                      </div>
+                    </div>
+
+                    {showHolidayExample && (
+                      <div className="px-2 pb-6 pt-2 animate-in slide-in-from-top-2">
+                        <div className="relative flex justify-between items-start px-2 mt-4">
+                          <div className="absolute top-4 left-10 right-10 h-[2px] bg-amber-900/20 border-dashed border-t-2 z-0"></div>
+
+                          <div className="relative z-10 flex flex-col items-center w-1/4">
+                            <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
+                              <CheckCircle className="h-3 w-3" />
+                              <span className="text-[10px] font-semibold">DAY 0</span>
+                            </div>
+                            <p className="text-[10px] text-center text-muted-foreground leading-tight">Payment received from students</p>
+                          </div>
+
+                          <div className="relative z-10 flex flex-col items-center w-1/4">
+                            <div className="bg-[#fef9f1] border border-border rounded-full px-2 py-1 flex items-center gap-1 mb-2 text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              <span className="text-[10px] font-semibold">DAY 1</span>
+                            </div>
+                          </div>
+
+                          <div className="relative z-10 flex flex-col items-center w-1/4">
+                            <div className="bg-amber-600 border border-amber-600 text-white rounded-full px-2 py-1 flex items-center gap-1 mb-2 shadow-sm">
+                              <CornerDownRight className="h-3 w-3" />
+                              <span className="text-[10px] font-semibold tracking-wide">SKIPPED</span>
+                            </div>
+                            <p className="text-[10px] text-center text-muted-foreground leading-tight">If non-working day (bank holiday)</p>
+                          </div>
+
+                          <div className="relative z-10 flex flex-col items-center w-1/4">
+                            <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
+                              <CheckCircle className="h-3 w-3" />
+                              <span className="text-[10px] font-semibold">DAY 2</span>
+                            </div>
+                            <p className="text-[10px] text-center text-muted-foreground leading-tight">Money transferred to your bank before 9 pm</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Edit Profile Details</DialogTitle>
+                  <DialogDescription>Update your personal contact information.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input 
+                      id="name" 
+                      value={editForm.full_name} 
+                      onChange={(e) => setEditForm({...editForm, full_name: e.target.value})} 
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input 
+                      id="phone" 
+                      type="tel"
+                      value={editForm.phone} 
+                      onChange={(e) => setEditForm({...editForm, phone: e.target.value})} 
+                      placeholder="e.g. +91 9876543210"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdating}>Cancel</Button>
+                  <Button onClick={handleSaveProfile} disabled={isUpdating}>
+                    {isUpdating ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+          </TabsContent>
+        </Tabs>
 
       </main>
     </div>
