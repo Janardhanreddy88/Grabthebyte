@@ -1,36 +1,35 @@
 import { useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export function useImageUpload() {
   const [isUploading, setIsUploading] = useState(false);
 
+  // 🚀 REAL UPLOAD FUNCTION
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
     setIsUploading(true);
     
     try {
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 1. Secure Filename Generation (Stops files from overwriting each other)
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
       
-      // TODO: Replace with real Supabase storage upload
-      // const { data, error } = await supabase.storage
-      //   .from('menu-images')
-      //   .upload(`${Date.now()}_${file.name}`, file);
-      // 
-      // if (error) throw error;
-      // 
-      // const { data: { publicUrl } } = supabase.storage
-      //   .from('menu-images')
-      //   .getPublicUrl(data.path);
-      // 
-      // return publicUrl;
+      // 2. Upload directly to Supabase
+      const { error: uploadError } = await supabase.storage
+        .from('menu-images') // Ensure this bucket is created and set to PUBLIC!
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false 
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 3. Get the live URL to save in your database
+      const { data } = supabase.storage
+        .from('menu-images')
+        .getPublicUrl(fileName);
+
+      return data.publicUrl;
       
-      // For now, return a data URL (frontend-only simulation)
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      });
     } catch (error) {
       console.error('Upload failed:', error);
       return null;
@@ -39,13 +38,21 @@ export function useImageUpload() {
     }
   }, []);
 
-  const deleteImage = useCallback(async (path: string): Promise<boolean> => {
+  // 🗑️ REAL DELETE FUNCTION
+  const deleteImage = useCallback(async (urlOrPath: string): Promise<boolean> => {
     try {
-      // TODO: Replace with real Supabase storage delete
-      // const { error } = await supabase.storage.from('menu-images').remove([path]);
-      // return !error;
+      // If the database gives us the full public URL, we just need the filename at the end
+      const fileName = urlOrPath.split('/').pop();
       
-      await new Promise(resolve => setTimeout(resolve, 300));
+      if (!fileName) return false;
+
+      // Delete it physically from the Supabase bucket
+      const { error } = await supabase.storage
+        .from('menu-images')
+        .remove([fileName]);
+
+      if (error) throw error;
+      
       return true;
     } catch (error) {
       console.error('Delete failed:', error);

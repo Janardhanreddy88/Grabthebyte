@@ -74,7 +74,7 @@ export default function AdminOffers() {
     if (error) {
       toast({ title: 'Error fetching offers', description: error.message, variant: 'destructive' });
     } else {
-      setOffers(data || []);
+      setOffers((data || []) as Offer[]);
     }
     setLoading(false);
   };

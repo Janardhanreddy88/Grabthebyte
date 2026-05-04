@@ -173,9 +173,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 🌟 FIX: Removed the .eq("payment_status", "pending") lock here!
-    // This function now has supreme authority to mark ANY verified order as completed.
-    const { error: updateError } = await supabaseAdmin
+    // =====================================================================
+    // 🛡️ SECURITY PHASE 3: THE TITANIUM LOCK (RACE CONDITION GUARD)
+    // =====================================================================
+    const { data: updatedOrder, error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
         status: "confirmed",
@@ -184,9 +185,20 @@ Deno.serve(async (req) => {
         razorpay_payment_id: payload.razorpay_payment_id,
         razorpay_signature: payload.razorpay_signature || "api_verified", 
       })
-      .eq("id", order.id);
+      .eq("id", order.id)
+      .eq("payment_status", "pending") // 🔒 THIS PREVENTS THE EXPLOIT!
+      .select()
+      .single();
 
-    if (updateError) throw updateError;
+    if (updateError || !updatedOrder) {
+      console.error("[Race Condition Blocked] Order was no longer pending:", updateError);
+      return new Response(JSON.stringify({ 
+        error: "Order verification blocked. The order has already expired or been processed." 
+      }), { 
+        status: 400, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
 
     // Dispatch Push Notification to Canteen Staff
     await sendAdminNotification(order.campus_id, order.order_number);

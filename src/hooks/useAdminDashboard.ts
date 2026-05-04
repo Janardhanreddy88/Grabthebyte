@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AdminStats {
   totalRevenue: number;
@@ -33,40 +34,6 @@ interface UseAdminDashboardReturn {
   toggleItemAvailability: (itemId: string) => Promise<boolean>;
 }
 
-// Mock data generators
-const generateChartData = (range: string): ChartDataPoint[] => {
-  const baseData = [
-    { day: 'Mon', revenue: 2400, orders: 24 },
-    { day: 'Tue', revenue: 1398, orders: 13 },
-    { day: 'Wed', revenue: 9800, orders: 98 },
-    { day: 'Thu', revenue: 3908, orders: 39 },
-    { day: 'Fri', revenue: 4800, orders: 48 },
-    { day: 'Sat', revenue: 3800, orders: 38 },
-    { day: 'Sun', revenue: 4300, orders: 43 },
-  ];
-  
-  // Modify based on time range
-  if (range === 'daily') {
-    return baseData.slice(0, 1).map(d => ({ ...d, day: 'Today' }));
-  }
-  if (range === 'monthly') {
-    return baseData.map((d, i) => ({ ...d, day: `Week ${i + 1}` }));
-  }
-  return baseData;
-};
-
-const generateMenuItems = (): MenuItem[] => [
-  { id: '1', name: 'Chicken Biryani', price: 120, category: 'main-course', isAvailable: true },
-  { id: '2', name: 'Veg Biryani', price: 90, category: 'main-course', isAvailable: true },
-  { id: '3', name: 'Samosa', price: 15, category: 'snacks', isAvailable: true },
-  { id: '4', name: 'Masala Dosa', price: 50, category: 'breakfast', isAvailable: false },
-  { id: '5', name: 'Chai', price: 15, category: 'beverages', isAvailable: true },
-];
-
-/**
- * Hook for admin dashboard data
- * TODO: Replace with real Supabase queries when Cloud is enabled
- */
 export function useAdminDashboard(): UseAdminDashboardReturn {
   const [stats, setStats] = useState<AdminStats>({
     totalRevenue: 0,
@@ -85,30 +52,89 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
     setError(null);
     
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // TODO: Replace with real Supabase queries
-      // const { data: statsData } = await supabase.rpc('get_dashboard_stats', { time_range: timeRange });
-      // const { data: chartData } = await supabase.rpc('get_revenue_chart', { time_range: timeRange });
-      // const { data: menuData } = await supabase.from('menu_items').select('*');
-      
-      setStats({
-        totalRevenue: 28406,
-        totalOrders: 303,
-        avgOrderValue: 94,
-        todayOrders: 43,
+      // 1. Fetch Real Menu Items
+      const { data: menuData, error: menuError } = await supabase
+        .from('menu_items')
+        .select('*')
+        .order('category');
+
+      if (menuError) throw menuError;
+
+      // 2. Fetch Real Orders (Filtering out failed/cancelled/expired)
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('total, created_at')
+        .not('status', 'in', '("failed","cancelled","expired","rejected")');
+
+      if (ordersError) throw ordersError;
+
+      // 3. Calculate Live Stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let totalRev = 0;
+      let todayOrds = 0;
+
+      ordersData?.forEach(order => {
+        const orderDate = new Date(order.created_at);
+        totalRev += Number(order.total) || 0;
+        
+        if (orderDate >= today) {
+          todayOrds++;
+        }
       });
-      
-      setChartData(generateChartData(timeRange));
-      setMenuItems(generateMenuItems());
+
+      const totalOrds = ordersData?.length || 0;
+      const avgVal = totalOrds > 0 ? Math.round(totalRev / totalOrds) : 0;
+
+      setStats({
+        totalRevenue: totalRev,
+        totalOrders: totalOrds,
+        avgOrderValue: avgVal,
+        todayOrders: todayOrds,
+      });
+
+      // 4. Generate Live Chart Data (Last 7 Days)
+      const last7Days = [...Array(7)].map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return {
+          dateString: d.toISOString().split('T')[0],
+          day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          revenue: 0,
+          orders: 0
+        };
+      });
+
+      ordersData?.forEach(order => {
+        const orderDateStr = new Date(order.created_at).toISOString().split('T')[0];
+        const dayMatch = last7Days.find(d => d.dateString === orderDateStr);
+        if (dayMatch) {
+          dayMatch.revenue += Number(order.total) || 0;
+          dayMatch.orders += 1;
+        }
+      });
+
+      setChartData(last7Days);
+
+      // 5. Update Menu State (Mapping snake_case DB to camelCase UI)
+      if (menuData) {
+        setMenuItems(menuData.map(item => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          category: item.category || 'misc',
+          isAvailable: item.is_available ?? true
+        })));
+      }
+
     } catch (err) {
-      setError('Failed to load dashboard data. Please try again.');
+      setError('Failed to load live dashboard data. Please check your connection.');
       console.error('Error fetching admin data:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [timeRange]);
+  }, [timeRange]); // timeRange kept in dependency array for future expansion
 
   useEffect(() => {
     fetchData();
@@ -116,19 +142,25 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
 
   const toggleItemAvailability = useCallback(async (itemId: string): Promise<boolean> => {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Find the current status so we can flip it
+      const itemToToggle = menuItems.find(i => i.id === itemId);
+      if (!itemToToggle) return false;
       
-      // TODO: Replace with real Supabase update
-      // const { error } = await supabase
-      //   .from('menu_items')
-      //   .update({ is_available: !currentValue })
-      //   .eq('id', itemId);
+      const newStatus = !itemToToggle.isAvailable;
+
+      // 🦅 The Real Supabase Update
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_available: newStatus })
+        .eq('id', itemId);
+
+      if (error) throw error;
       
+      // Update the UI instantly
       setMenuItems(prev => 
         prev.map(item => 
           item.id === itemId 
-            ? { ...item, isAvailable: !item.isAvailable }
+            ? { ...item, isAvailable: newStatus }
             : item
         )
       );
@@ -138,7 +170,7 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
       console.error('Error toggling availability:', err);
       return false;
     }
-  }, []);
+  }, [menuItems]);
 
   return {
     stats,

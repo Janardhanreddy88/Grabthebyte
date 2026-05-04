@@ -77,7 +77,7 @@ export default function Payment() {
         const { data: profile } = await supabase
           .from('profiles') 
           .select('*')
-          .eq('user_id', user.id) // 🌟 CHANGED 'id' to 'user_id' HERE!
+          .eq('user_id', user.id)
           .maybeSingle(); 
 
         rawPhone = profile?.phone || user.phone || (user as any)?.user_metadata?.phone || "";
@@ -86,7 +86,6 @@ export default function Payment() {
       let cleanPhone = String(rawPhone || '').replace(/\D/g, '');
       if (cleanPhone.length > 10 && cleanPhone.startsWith('91')) cleanPhone = cleanPhone.substring(2);
 
-      // 🌟 THE STRICT CHECK: If no phone, show error and throw back to cart!
       if (!cleanPhone || cleanPhone.length < 10) {
         toast({ 
           title: "Phone Number Required", 
@@ -97,7 +96,6 @@ export default function Payment() {
         paymentInitiated.current = false;
         setPaymentState('error'); 
         
-        // Throw them back to the cart gracefully after 2.5 seconds
         setTimeout(() => navigate(-1), 2500); 
         return; 
       }
@@ -133,17 +131,38 @@ export default function Payment() {
             body: { orderId, razorpay_payment_id: paymentId, razorpay_order_id: currentRzpOrderId, razorpay_signature: signature, razorpay_key_id: currentKeyId }
           });
 
+          // 🚨 THE TITANIUM LOCK GUARD (NEW) 🚨
+          // We explicitly check if the backend sent back an error (like Race Condition blocked)
+          const responseError = verifyError || (verifyData && verifyData.error);
+          
+          if (responseError) {
+            console.error("Verification Blocked by Backend:", responseError);
+            
+            toast({ 
+              title: "Session Expired ⏱️", 
+              description: "Your checkout window timed out. If money was deducted, it will be auto-refunded by your bank in 3-5 days.", 
+              variant: "destructive",
+              duration: 6000 // Give them time to read the auto-refund part
+            });
+            
+            // Redirect them safely back to the menu to try again, NOT the order page!
+            navigate('/menu', { replace: true });
+            return; // 🛑 Stop executing!
+          }
+
+          // If no error, proceed to success check
           let isSuccess = false;
           if (verifyData && typeof verifyData === 'object' && verifyData.success) isSuccess = true;
           else if (typeof verifyData === 'string') { try { isSuccess = JSON.parse(verifyData).success; } catch (e) {} }
 
-          if (verifyError || !isSuccess) throw new Error('Payment verification failed on server');
+          if (!isSuccess) throw new Error('Payment verification failed on server');
 
           clearCart();
           toast({ title: "Payment Successful!", className: "bg-green-600 text-white border-none" });
           navigate(`/order/${orderId}`, { replace: true });
 
         } catch (err) {
+          console.error("Verification execution error:", err);
           toast({ title: "Verification Failed", description: "Payment charged but not verified. Contact support.", variant: "destructive" });
           navigate(`/order/${orderId}`, { replace: true });
         }

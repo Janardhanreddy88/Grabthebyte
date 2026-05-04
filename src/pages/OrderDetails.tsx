@@ -17,7 +17,7 @@ interface OrderData {
   rejection_reason: string | null;
   total: number; 
   platform_fee: number;
-  promo_code: string | null; // 🦅 ADDED PROMO CODE
+  promo_code: string | null;
   created_at: string; 
   collection_token: string; 
   campus: { name: string } | null; 
@@ -36,7 +36,6 @@ export default function OrderDetails() {
     if (!orderId) { navigate('/my-orders'); return; }
     
     const fetchOrderDetails = async () => {
-      // 🦅 ADDED promo_code TO THE SECURE FETCH QUERY
       const { data, error } = await supabase
         .from('orders')
         .select(`id, order_number, status, payment_status, rejection_reason, total, platform_fee, promo_code, created_at, collection_token, campus:campuses(name), order_items(name, quantity, price)`)
@@ -52,7 +51,7 @@ export default function OrderDetails() {
           rejection_reason: data.rejection_reason,
           total: Number(data.total), 
           platform_fee: Number(data.platform_fee) || 0,
-          promo_code: data.promo_code, // 🦅 SAVED TO STATE
+          promo_code: data.promo_code, 
           created_at: data.created_at, 
           collection_token: data.collection_token || data.id,
           campus: data.campus as { name: string } | null,
@@ -68,12 +67,11 @@ export default function OrderDetails() {
   if (loading) return <div className="min-h-screen bg-gray-50 flex justify-center items-center safe-top"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
   if (!order) return <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center text-muted-foreground gap-4">Order not found. <Button onClick={() => navigate('/my-orders')}>Back to Orders</Button></div>;
 
-  // 🦅 THE BULLETPROOF MATH (Now Handles Discounts)
+  // 🦅 THE BULLETPROOF MATH
   const originalSubtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discountAmount = order.promo_code ? Math.max(0, originalSubtotal - order.total) : 0;
   
   let displayFee = order.platform_fee;
-  // Legacy fallback for old orders before platform_fee was securely saved
   if (!displayFee && displayFee !== 0) {
     if (order.total <= 40) displayFee = 2;
     else if (order.total <= 100) displayFee = 5;
@@ -85,17 +83,17 @@ export default function OrderDetails() {
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
 
-  const isPaid = order.payment_status === 'completed' || order.payment_status === 'confirmed' || order.payment_status === 'paid' || order.payment_status === 'success';
-  const isPaymentFailed = order.status === 'failed' || order.payment_status === 'not_confirmed' || order.payment_status === 'failed' || (order.status === 'pending' && isTimedOut);
+  const isPaid = ['completed', 'confirmed', 'paid', 'success'].includes(order.payment_status);
+  const isPaymentFailed = ['failed', 'not_confirmed'].includes(order.payment_status) || order.status === 'failed' || (order.status === 'pending' && isTimedOut);
   const isRefunded = !isPaymentFailed && order.status === 'refunded';
   const isExpired = !isPaymentFailed && order.status === 'expired';
-  const isCancelled = !isPaymentFailed && (order.status === 'cancelled' || order.status === 'rejected');
+  const isCancelled = !isPaymentFailed && ['cancelled', 'rejected'].includes(order.status);
   
   const isDead = isRefunded || isCancelled || isExpired || isPaymentFailed;
 
   const getStatusConfig = () => {
     if (isRefunded) return { bg: 'from-[#9333EA] to-[#7E22CE]', icon: <RefreshCw className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Refunded', subtitle: order.rejection_reason || 'Refund processed to your bank.' };
-    if (isPaymentFailed) return { bg: 'from-[#EF4444] to-[#B91C1C]', icon: <XCircle className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Payment Failed', subtitle: order.rejection_reason || (isTimedOut ? 'Timeout reached.' : 'Transaction could not be completed') };
+    if (isPaymentFailed) return { bg: 'from-[#EF4444] to-[#B91C1C]', icon: <XCircle className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Payment Failed', subtitle: order.rejection_reason || (isTimedOut ? 'Checkout window expired.' : 'Transaction could not be completed') };
     if (isCancelled) return { bg: 'from-[#DC2626] to-[#991B1B]', icon: <Landmark className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Cancelled', subtitle: order.rejection_reason || 'Cancelled by Canteen Admin.' };
     if (isExpired) return { bg: 'from-[#4B5563] to-[#6B7280]', icon: <Ban className="w-8 h-8 text-white" strokeWidth={2.5} />, title: 'Order Expired', subtitle: 'Not collected. Initiating refund...' };
     
@@ -248,19 +246,8 @@ export default function OrderDetails() {
             </motion.div>
           )}
 
-          {isPaymentFailed && !isTimedOut && (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
-              <Button 
-                onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${grandTotal.toFixed(2)}`); }}
-                disabled={actionLoading}
-                className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20 bg-red-600 hover:bg-red-700 text-white"
-              >
-                {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <RefreshCw size={18} className="mr-2" />} Retry Payment
-              </Button>
-            </motion.div>
-          )}
-
-          {order.status === 'pending' && !isTimedOut && !isPaid && (
+          {/* 🦅 THE GUARDED PAYMENT BUTTON */}
+          {order.payment_status === 'pending' && order.status === 'pending' && !isTimedOut && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}>
               <Button 
                 onClick={() => { if (actionLoading) return; setActionLoading(true); navigate(`/payment?order_id=${order.id}&amount=${grandTotal.toFixed(2)}`); }}
@@ -268,6 +255,15 @@ export default function OrderDetails() {
                 className="w-full h-12 rounded-2xl text-base font-bold shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 text-white"
               >
                 {actionLoading ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Receipt size={18} className="mr-2" />} Complete Payment Now
+              </Button>
+            </motion.div>
+          )}
+
+          {/* New Helper for Dead Orders */}
+          {isDead && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="text-center">
+              <Button variant="link" onClick={() => navigate('/menu')} className="text-muted-foreground text-sm">
+                Place a new order
               </Button>
             </motion.div>
           )}
