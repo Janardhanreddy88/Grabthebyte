@@ -1,14 +1,35 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { checkRateLimit } from "../_shared/rate-limiter.ts"; // 🛡️ THE EDGE SHIELD IMPORT
 
+// 🦅 ENTERPRISE SECURITY HEADERS ADDED
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "X-Content-Type-Options": "nosniff",               // Prevents MIME-sniffing
+  "X-Frame-Options": "DENY",                         // Prevents Clickjacking
+  "Content-Security-Policy": "default-src 'none'",   // Blocks unauthorized scripts
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains" // Forces HTTPS
 };
 
 Deno.serve(async (req) => {
+  // Handle CORS Preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  // =====================================================================
+  // 🛡️ SECURITY PHASE 0: RATE LIMITING (THE EDGE SHIELD)
+  // =====================================================================
+  // Max 15 admin actions per 60 seconds per IP address
+  const { allowed, ip } = checkRateLimit(req, 15, 60);
+  if (!allowed) {
+    console.warn(`[SECURITY ALERT] Admin Rate limit triggered for IP: ${ip}`);
+    return new Response(JSON.stringify({ error: "Too many requests. Please slow down." }), { 
+      status: 429, 
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } 
+    });
+  }
+  // =====================================================================
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -167,9 +188,11 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Delete related records
-      await adminClient.from("admin_pins").delete().eq("user_id", target_user_id);
-      await adminClient.from("admin_sessions").delete().eq("user_id", target_user_id);
+      // Delete related records 
+      // 🦅 COMMENTED OUT THE TRIPWIRES - WE NO LONGER USE ADMIN_PINS OR ADMIN_SESSIONS
+      // await adminClient.from("admin_pins").delete().eq("user_id", target_user_id);
+      // await adminClient.from("admin_sessions").delete().eq("user_id", target_user_id);
+      
       await adminClient.from("user_roles").delete().eq("user_id", target_user_id);
       await adminClient.from("profiles").delete().eq("user_id", target_user_id);
 

@@ -16,19 +16,60 @@ serve(async (req) => {
     const payload = await req.json()
     
     // 🌟 THE FIX: Detect if this is a Webhook or a Manual Click
-    // Webhooks send { record: { id: "..." } }
-    // Manual Clicks send { order_id: "..." }
     const order_id = payload.record?.id || payload.order_id
 
     if (!order_id) {
       throw new Error('Order ID is required')
     }
 
-    // 1. Initialize Supabase client with Service Role (Bypasses RLS to read secure data)
+    // 1. Initialize Supabase client with Service Role 
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      serviceRoleKey
     )
+
+    // =====================================================================
+    // 🛑 THE TITANIUM SHIELD: ROLE-BASED ACCESS CONTROL (RBAC)
+    // =====================================================================
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('Unauthorized: Missing Authorization header')
+    }
+
+    const token = authHeader.replace('Bearer ', '').trim()
+    let isAuthorized = false
+
+    // Check 1: Is this the automated Supabase Database Webhook?
+    if (token === serviceRoleKey) {
+      isAuthorized = true
+    } 
+    // Check 2: Is this a human user? Verify they are an Admin.
+    else {
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
+      
+      if (authError || !user) {
+        throw new Error('Unauthorized: Invalid or expired session')
+      }
+
+      const { data: roleData } = await supabaseClient
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single()
+
+      if (roleData && ['admin', 'super_admin'].includes(roleData.role)) {
+        isAuthorized = true
+      }
+    }
+
+    if (!isAuthorized) {
+      return new Response(
+        JSON.stringify({ error: 'Security Violation: Only Admins can trigger refunds.' }), 
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    // =====================================================================
 
     // 2. Fetch the order details to get the Razorpay Payment ID
     const { data: order, error: orderError } = await supabaseClient
@@ -57,7 +98,6 @@ serve(async (req) => {
     }
 
     // 🌟 WEBHOOK SAFETY CHECK: Only automatically refund if the status is officially 'expired'
-    // (If it's a manual click from your Super Admin dashboard, we bypass this check)
     if (payload.record && order.status !== 'expired') {
        return new Response(JSON.stringify({ message: 'Webhook ignored. Status is not expired.' }), { status: 200, headers: corsHeaders })
     }
@@ -71,7 +111,7 @@ serve(async (req) => {
     const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET')
     const basicAuth = btoa(`${keyId}:${keySecret}`)
 
-    // 4. Call Razorpay Refund API (OPTION B: THE FULL REFUND)
+    // 4. Call Razorpay Refund API
     const razorpayRes = await fetch(`https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`, {
       method: 'POST',
       headers: {
@@ -79,9 +119,8 @@ serve(async (req) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        // 🌟 amount is intentionally omitted so Razorpay refunds 100% of the GMV
-        speed: 'normal', // Standard 5-7 day free refund
-        reverse_all: 1   // 🌟 Pulls the canteen's portion back so GrabTheByte doesn't pay for it!
+        speed: 'normal', 
+        reverse_all: 1   
       })
     })
 
@@ -92,25 +131,23 @@ serve(async (req) => {
       throw new Error(razorpayData.error?.description || 'Failed to process refund with Razorpay')
     }
 
-  // 5. Update the order status in Supabase to officially mark it as 'refunded'
+    // 5. Update the order status in Supabase
     await supabaseClient
       .from('orders')
       .update({ 
         status: 'refunded',
-        // 🌟 THE FIX: Better, human-friendly text for the student!
         rejection_reason: payload.record 
           ? 'Order expired (not collected in 5 hours). Full refund issued.' 
-          : 'Order was cancelled by admin. full refund issued.'
+          : 'Order was cancelled by admin. Full refund issued.'
       })
       .eq('id', order_id)
 
-    // Return success to the frontend or webhook!
     return new Response(JSON.stringify({ success: true, refund_id: razorpayData.id }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Refund Error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

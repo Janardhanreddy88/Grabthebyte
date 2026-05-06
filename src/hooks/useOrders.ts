@@ -19,6 +19,7 @@ const createOrderParamsSchema = z.object({
   customerEmail: z.string().email().max(255).optional().or(z.literal('')).or(z.undefined()),
   customerPhone: z.string().optional(), 
   promoCode: z.string().optional().nullable(),
+  platformFee: z.number().nonnegative().optional(), // 🦅 Added to schema validation!
 });
 
 export interface CreateOrderParams {
@@ -29,6 +30,7 @@ export interface CreateOrderParams {
   customerEmail: string;
   customerPhone?: string; 
   promoCode?: string | null;
+  platformFee?: number; // 🦅 Added to TypeScript interface!
 }
 
 export function useOrders() {
@@ -50,7 +52,6 @@ export function useOrders() {
 
     setIsLoading(true);
     try {
-      // 🦅 FIX: Added platform_fee and discount_amount to the select query
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(`*, order_items (id, name, price, quantity), platform_fee, discount_amount, promo_code`)
@@ -73,17 +74,14 @@ export function useOrders() {
           isVeg: true,
           isAvailable: true
         })),
-        // 🦅 THE FIX: Add the platform/handling fee so the total matches their bank charge!
-        total: Number(order.total) + Number(order.platform_fee || 0), 
+        // 🦅 THE FIX: Just trust the database! No more double adding!
+        total: Number(order.total), 
         status: order.status as Order['status'],
         qrCode: order.order_number || '',
         createdAt: new Date(order.created_at),
         isUsed: !!order.is_used,
         customerName: order.customer_name || undefined,
         customerEmail: order.customer_email || undefined,
-        // Optional: If you ever want to show a "You saved X" badge in the history!
-        // promoCode: order.promo_code,
-        // discountAmount: order.discount_amount,
       }));
       
       setOrders(transformedOrders);
@@ -142,7 +140,7 @@ export function useOrders() {
         quantity: item.quantity,
       }));
 
-      // 🦅 THE FIX: Atomic Checkout completely stripped of frontend price trust!
+      // 🦅 Atomic Checkout completely stripped of frontend price trust!
       const { data: rpcData, error: rpcError } = await supabase.rpc('place_order_atomic', {
         p_user_id: user.id,
         p_campus_id: campus.id,
@@ -150,6 +148,7 @@ export function useOrders() {
         p_customer_email: params.customerEmail || user.email,
         p_customer_phone: userProfile?.phone || params.customerPhone || null, 
         p_promo_code: params.promoCode || null,
+        p_platform_fee: params.platformFee || 0, 
         p_items: rpcItems
       });
       
@@ -159,7 +158,7 @@ export function useOrders() {
       const newOrder: Order = {
         id: rpcResult.order_id,
         items: params.items,
-        total: params.total, // Using the discounted total
+        total: params.total, // Using the final frontend total, which already includes the fee
         status: 'pending',
         qrCode: rpcResult.order_number || '',
         createdAt: new Date(),
@@ -174,8 +173,6 @@ export function useOrders() {
       
     } catch (err: any) {
       setError(err.message || 'Failed to place order');
-      // 🦅 THE CRITICAL FIX: Throw the error instead of returning null! 
-      // This sends the exact database message ("Too late!", "All claimed!") directly to Checkout.tsx!
       throw err; 
     } finally {
       setIsCreating(false);

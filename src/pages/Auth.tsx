@@ -10,7 +10,6 @@ import { useCampus } from '@/context/CampusContext';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer } from 'lucide-react';
-import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/rateLimit';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
@@ -53,7 +52,6 @@ export default function Auth() {
   const [resendCountdown, setResendCountdown] = useState(0);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
@@ -75,7 +73,7 @@ export default function Auth() {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       setIsLoggingOut(false);
-      // 🌟 REPLACE: True (Already here, perfect!)
+      // 🌟 REPLACE: True
       if (!session) navigate('/auth', { replace: true });
     })();
     return () => { cancelled = true; };
@@ -159,7 +157,7 @@ export default function Auth() {
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); clearErrors(); setRateLimitMessage(null);
+    e.preventDefault(); clearErrors();
     if (!validateLoginForm()) return;
     
     // 🌟 FIXED: Added replace: true
@@ -170,16 +168,19 @@ export default function Auth() {
     }
     
     const sanitizedEmail = sanitizeEmail(loginEmail);
-    const rateLimit = checkLoginRateLimit(sanitizedEmail);
-    if (!rateLimit.allowed) { setRateLimitMessage(rateLimit.message || 'Too many login attempts.'); return; }
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: loginPassword });
-      if (error) { recordLoginAttempt(sanitizedEmail, false); toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' }); return; }
-      recordLoginAttempt(sanitizedEmail, true);
+      if (error) { 
+        toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' }); 
+        return; 
+      }
       if (data.user) toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
-    } catch { toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' }); }
-    finally { setIsLoading(false); }
+    } catch { 
+      toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' }); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -292,7 +293,6 @@ export default function Auth() {
           <h1 className="font-display text-xl font-bold text-foreground">{campus?.name || 'Canteen'}</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to order your favorite food</p>
           {campus && (
-            // 🌟 ADDED REPLACE TRUE HERE JUST IN CASE
             <Button variant="ghost" size="sm" onClick={() => navigate('/select-campus', { replace: true })} className="mt-2 px-3 text-xs text-muted-foreground gap-1.5 rounded-lg">
               <RefreshCw size={12} /> Switch Campus
             </Button>
@@ -313,11 +313,6 @@ export default function Auth() {
                 <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow" disabled={isLoading}>
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
                 </Button>
-                {rateLimitMessage && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-canteen-warning/10 text-canteen-warning">
-                    <AlertTriangle size={14} /><span className="text-xs font-medium">{rateLimitMessage}</span>
-                  </div>
-                )}
                 <div className="text-center">
                   <button type="button" onClick={() => navigate('/forgot-password')} className="text-xs text-muted-foreground hover:text-primary transition-colors font-medium">Forgot your password?</button>
                 </div>

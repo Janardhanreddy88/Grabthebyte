@@ -1,8 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit } from "../_shared/rate-limiter.ts"; // 🛡️ THE EDGE SHIELD IMPORT
 
+// 🦅 ENTERPRISE SECURITY HEADERS ADDED
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "X-Content-Type-Options": "nosniff",               // Prevents MIME-sniffing
+  "X-Frame-Options": "DENY",                         // Prevents Clickjacking
+  "Content-Security-Policy": "default-src 'none'",   // Blocks unauthorized scripts
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains" // Forces HTTPS
 };
 
 interface PaymentPayload {
@@ -58,7 +64,22 @@ async function sendAdminNotification(campusId: string, orderNumber: string) {
 }
 
 Deno.serve(async (req) => {
+  // Handle CORS Preflight
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // =====================================================================
+  // 🛡️ SECURITY PHASE 0: RATE LIMITING (THE EDGE SHIELD)
+  // =====================================================================
+  // Max 10 verification requests per 60 seconds per IP address
+  const { allowed, ip } = checkRateLimit(req, 10, 60);
+  if (!allowed) {
+    console.warn(`[SECURITY ALERT] Rate limit triggered for IP: ${ip}`);
+    return new Response(JSON.stringify({ error: "Too many requests. Please slow down." }), { 
+      status: 429, // 429 is the universal standard for "Too Many Requests"
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } 
+    });
+  }
+  // =====================================================================
 
   try {
     const RAZORPAY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");

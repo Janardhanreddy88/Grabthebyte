@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkGlobalCircuitBreaker } from "../_shared/rate-limiter.ts"; // 🛡️ IMPORT THE BREAKER
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // =====================================================================
+  // 🛑 SECURITY PHASE 0: THE GLOBAL CIRCUIT BREAKER
+  // =====================================================================
+  const isSystemStable = checkGlobalCircuitBreaker(100, 60);
+  if (!isSystemStable) {
+    console.warn("🚨 GLOBAL CIRCUIT BREAKER TRIPPED! Blocking Razorpay API calls.");
+    return new Response(
+      JSON.stringify({ error: "System is experiencing unusually high traffic. Please try again in 60 seconds." }), 
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
+    );
+  }
+  // =====================================================================
 
   try {
     const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID");
@@ -44,7 +58,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized: Invalid Token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 🛡️ SECURITY PHASE 2: RATE LIMITING
+    // 🛡️ SECURITY PHASE 2: INDIVIDUAL RATE LIMITING
     const ONE_MINUTE_AGO = new Date(Date.now() - 60000).toISOString();
     const { count } = await authClient
       .from('orders')
@@ -64,7 +78,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    // 🌟 1. GET SECURE ORDER DETAILS (🦅 FIX: Added discount_amount to the query!)
+    // 🌟 1. GET SECURE ORDER DETAILS 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select("id, status, payment_status, order_number, user_id, campus_id, total, discount_amount, razorpay_order_id, promo_code")
@@ -84,9 +98,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Payment already completed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // =====================================================================
     // 🛡️ IDEMPOTENCY (PREVENT DOUBLE CHARGES)
-    // =====================================================================
     if (order.razorpay_order_id && order.payment_status === "pending") {
       return new Response(
         JSON.stringify({ success: true, razorpayOrderId: order.razorpay_order_id, orderId: orderId }),
@@ -109,26 +121,37 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================================
-    // 🌟 3. SERVER-SIDE MATH (THE GROSS-UP PROFIT SHIELD)
+    // 🌟 3. SERVER-SIDE MATH (THE ULTIMATE TITANIUM SHIELD)
     // =====================================================================
-    const discountedSubtotal = order.total;
-    
-    // 🦅 THE FIX: Reconstruct the raw cart size to protect your fee tier
-    const rawItemTotal = discountedSubtotal + (order.discount_amount || 0);
+    // We fetch the raw items to completely bypass any frontend or SQL price manipulation
+    const { data: items } = await supabaseAdmin
+        .from("order_items")
+        .select("price, quantity")
+        .eq("order_id", orderId);
 
+    let rawFoodTotal = 0;
+    if (items) {
+        items.forEach(item => { rawFoodTotal += (item.price * item.quantity); });
+    }
+
+    const discountedFoodCost = Math.max(0, rawFoodTotal - (order.discount_amount || 0));
+
+    // Calculate the base platform fee based on RAW food total
     let basePlatformFeeINR = 0;
-    if (rawItemTotal <= 40) { basePlatformFeeINR = 2; }
-    else if (rawItemTotal <= 100) { basePlatformFeeINR = 5; }
+    if (rawFoodTotal <= 40) { basePlatformFeeINR = 2; }
+    else if (rawFoodTotal <= 100) { basePlatformFeeINR = 5; }
     else { basePlatformFeeINR = 6; }
 
-    const targetBankAmount = discountedSubtotal + basePlatformFeeINR; 
+    const targetBankAmount = discountedFoodCost + basePlatformFeeINR; 
 
+    // Calculate gross-up to cover the 2.5% Razorpay fee
     const rawFinalTotal = targetBankAmount / 0.975;
     const finalChargeINR = Math.round(rawFinalTotal * 100) / 100;
     const finalChargePaisa = Math.round(finalChargeINR * 100);
     
-    const canteenSharePaisa = Math.round(discountedSubtotal * 100); 
-    const exactHandlingFeeINR = Math.round((finalChargeINR - discountedSubtotal) * 100) / 100;
+    // The Canteen only gets the exact food cost minus any promo codes
+    const canteenSharePaisa = Math.round(discountedFoodCost * 100); 
+    const exactHandlingFeeINR = Math.round((finalChargeINR - discountedFoodCost) * 100) / 100;
 
     const razorpayPayload: any = {
       amount: finalChargePaisa, 
@@ -172,13 +195,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Failed to create payment session", details: razorpayData }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 🌟 5. LOCK IN THE HISTORICAL ACCOUNTING FEE
+    // 🌟 5. LOCK IN THE VERIFIED NUMBERS
     const { error: updateError } = await supabaseAdmin
       .from("orders")
       .update({
         razorpay_order_id: razorpayData.id,
         payment_status: "pending",
         updated_at: new Date().toISOString(),
+        total: finalChargeINR, // 🦅 Force the DB total to match our highly-secure server calculation
         platform_fee: exactHandlingFeeINR, 
       })
       .eq("id", orderId);

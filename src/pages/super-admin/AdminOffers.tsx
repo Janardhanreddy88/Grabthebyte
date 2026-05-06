@@ -6,16 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed } from 'lucide-react';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 
+// 🦅 FIX 1: Updated 'flat' to 'fixed' to match our strict DB ENUM
 interface Offer {
   id: string;
   promo_code: string;
-  discount_type: 'flat' | 'percentage';
+  discount_type: 'fixed' | 'percentage'; 
   discount_value: number;
   max_discount_amount: number | null;
   min_order_value: number;
   sponsored_by: 'platform' | 'canteen';
   campus_id: string | null;
-  target_item_id: string | null; // 🦅 ADDED HERE
+  target_item_id: string | null;
   current_uses: number;
   max_global_uses: number | null;
   is_active: boolean;
@@ -30,18 +31,18 @@ export default function AdminOffers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   
-  // 🦅 NEW: STORE DYNAMIC MENU ITEMS
   const [menuItems, setMenuItems] = useState<{id: string, name: string}[]>([]);
 
+  // 🦅 FIX 2: Updated default state to 'fixed'
   const [formData, setFormData] = useState({
     promo_code: '',
-    discount_type: 'flat' as 'flat' | 'percentage',
+    discount_type: 'fixed' as 'fixed' | 'percentage',
     discount_value: '',
     max_discount_amount: '',
     min_order_value: '0',
     sponsored_by: 'platform' as 'platform' | 'canteen',
     campus_id: 'all',
-    target_item_id: 'all', // 🦅 NEW FIELD
+    target_item_id: 'all', 
     max_global_uses: '',
     valid_until: ''
   });
@@ -50,10 +51,7 @@ export default function AdminOffers() {
     fetchOffers();
   }, []);
 
-  // 🦅 FETCH MENU ITEMS WHEN CAMPUS CHANGES
-  // 🦅 FETCH MENU ITEMS WHEN CAMPUS CHANGES
   useEffect(() => {
-    // 🦅 FIX: Reset target item EVERY time the campus changes to prevent cross-campus ghost items!
     setFormData(prev => ({ ...prev, target_item_id: 'all' })); 
 
     if (formData.campus_id !== 'all') {
@@ -64,17 +62,21 @@ export default function AdminOffers() {
       setMenuItems([]);
     }
   }, [formData.campus_id]);
+
   const fetchOffers = async () => {
     setLoading(true);
+    
+    // 🦅 FIX 3: THE DUCT TAPE IS REMOVED! We now use .returns<Offer[]>()
     const { data, error } = await supabase
       .from('offers')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .returns<Offer[]>(); 
 
     if (error) {
       toast({ title: 'Error fetching offers', description: error.message, variant: 'destructive' });
-    } else {
-      setOffers((data || []) as Offer[]);
+    } else if (data) {
+      setOffers(data); // 🦅 Clean, strongly typed assignment
     }
     setLoading(false);
   };
@@ -92,7 +94,7 @@ export default function AdminOffers() {
         min_order_value: Number(formData.min_order_value),
         sponsored_by: formData.sponsored_by,
         campus_id: formData.campus_id === 'all' ? null : formData.campus_id,
-        target_item_id: formData.target_item_id === 'all' ? null : formData.target_item_id, // 🦅 SET TO NULL IF CART-WIDE
+        target_item_id: formData.target_item_id === 'all' ? null : formData.target_item_id,
         max_global_uses: formData.max_global_uses ? Number(formData.max_global_uses) : null,
         valid_until: formData.valid_until ? new Date(formData.valid_until).toISOString() : null,
         is_active: true,
@@ -105,7 +107,8 @@ export default function AdminOffers() {
 
       toast({ title: 'Success!', description: 'Promo code created successfully.' });
       setShowCreateForm(false);
-      setFormData({ promo_code: '', discount_type: 'flat', discount_value: '', max_discount_amount: '', min_order_value: '0', sponsored_by: 'platform', campus_id: 'all', target_item_id: 'all', max_global_uses: '', valid_until: '' });
+      // 🦅 FIX 4: Reset state defaults to 'fixed'
+      setFormData({ promo_code: '', discount_type: 'fixed', discount_value: '', max_discount_amount: '', min_order_value: '0', sponsored_by: 'platform', campus_id: 'all', target_item_id: 'all', max_global_uses: '', valid_until: '' });
       fetchOffers();
     } catch (error: any) {
       toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
@@ -164,19 +167,20 @@ export default function AdminOffers() {
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Discount Type</label>
               <select className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm" value={formData.discount_type} onChange={e => setFormData({...formData, discount_type: e.target.value as any})}>
-                <option value="flat">Flat Amount (₹)</option>
+                {/* 🦅 FIX 5: Value changed to 'fixed' */}
+                <option value="fixed">Flat Amount (₹)</option>
                 <option value="percentage">Percentage (%)</option>
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Discount Value</label>
-              <Input required type="number" value={formData.discount_value} onChange={e => setFormData({...formData, discount_value: e.target.value})} placeholder={formData.discount_type === 'flat' ? '₹ Amount' : '% Amount'} />
+              <Input required type="number" value={formData.discount_value} onChange={e => setFormData({...formData, discount_value: e.target.value})} placeholder={formData.discount_type === 'fixed' ? '₹ Amount' : '% Amount'} />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Max Discount Cap (₹)</label>
-              <Input type="number" disabled={formData.discount_type === 'flat'} value={formData.max_discount_amount} onChange={e => setFormData({...formData, max_discount_amount: e.target.value})} placeholder="Leave blank for no cap" />
+              <Input type="number" disabled={formData.discount_type === 'fixed'} value={formData.max_discount_amount} onChange={e => setFormData({...formData, max_discount_amount: e.target.value})} placeholder="Leave blank for no cap" />
             </div>
 
             <div className="space-y-1">
@@ -189,7 +193,6 @@ export default function AdminOffers() {
               </select>
             </div>
 
-            {/* 🦅 NEW: ITEM TARGETING */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between">
                 Target Specific Item <UtensilsCrossed size={12} className="text-slate-400" />
@@ -276,7 +279,6 @@ export default function AdminOffers() {
                             <Globe size={12} /> Global
                           </div>
                         )}
-                        {/* 🦅 NEW: SHOW IF IT IS LOCKED TO A SPECIFIC ITEM */}
                         {offer.target_item_id ? (
                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 w-max px-2 py-0.5 rounded-md">
                              <UtensilsCrossed size={10} /> Specific Item Only
@@ -290,7 +292,8 @@ export default function AdminOffers() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-emerald-600">
-                        {offer.discount_type === 'flat' ? `₹${offer.discount_value} OFF` : `${offer.discount_value}% OFF`}
+                        {/* 🦅 FIX 6: Condition updated to check for 'fixed' */}
+                        {offer.discount_type === 'fixed' ? `₹${offer.discount_value} OFF` : `${offer.discount_value}% OFF`}
                       </div>
                       {offer.max_discount_amount && <div className="text-xs text-slate-500 mt-1">Up to ₹{offer.max_discount_amount}</div>}
                     </td>

@@ -69,16 +69,20 @@ export default function OrderDetails() {
 
   // 🦅 THE BULLETPROOF MATH
   const originalSubtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discountAmount = order.promo_code ? Math.max(0, originalSubtotal - order.total) : 0;
   
+  // Safe fallback for older orders before we added platform_fee to the DB
   let displayFee = order.platform_fee;
-  if (!displayFee && displayFee !== 0) {
-    if (order.total <= 40) displayFee = 2;
-    else if (order.total <= 100) displayFee = 5;
+  if (displayFee === undefined || displayFee === null) {
+    if (originalSubtotal <= 40) displayFee = 2;
+    else if (originalSubtotal <= 100) displayFee = 5;
     else displayFee = 6;
   }
   
-  const grandTotal = order.total + displayFee;
+  // 🦅 THE FIX: The database total is now the EXACT final charge. Stop adding to it!
+  const grandTotal = order.total;
+
+  // 🦅 FIX: Calculate discount correctly by stripping the fee out first
+  const discountAmount = order.promo_code ? Math.max(0, originalSubtotal - (grandTotal - displayFee)) : 0;
 
   const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
@@ -259,7 +263,7 @@ export default function OrderDetails() {
             </motion.div>
           )}
 
-          {/* New Helper for Dead Orders */}
+          {/* Helper for Dead Orders */}
           {isDead && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="text-center">
               <Button variant="link" onClick={() => navigate('/menu')} className="text-muted-foreground text-sm">

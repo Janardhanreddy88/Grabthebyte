@@ -63,7 +63,6 @@ export default function Checkout() {
   const discountedFoodCost = Math.max(0, totalPrice - appliedDiscount);
   
   // STEP 3: Calculate the final total including the 2.5% Razorpay fee
-  // targetBankAmount is what needs to hit your bank account (Food Cost + Your Fixed Profit)
   const targetBankAmount = discountedFoodCost + basePlatformFee; 
   const rawFinalTotal = cart.length === 0 ? 0 : (targetBankAmount / 0.975); // 0.975 accounts for exact 2.5% gross fee
   const finalAmountToPay = Math.round(rawFinalTotal * 100) / 100;
@@ -261,6 +260,7 @@ export default function Checkout() {
 
       const safePhone = user.phone || (user as any)?.user_metadata?.phone || "";
 
+      // 🦅 INJECTING THE PLATFORM FEE HERE!
       const order = await createOrder({ 
         items: cart, 
         total: finalAmountToPay, 
@@ -268,7 +268,8 @@ export default function Checkout() {
         customerName: user.fullName, 
         customerEmail: user.email,
         customerPhone: safePhone,
-        promoCode: appliedPromoCode
+        promoCode: appliedPromoCode,
+        platformFee: totalHandlingFee // 👈 Send the fee to the hook!
       });
 
       if (order) { 

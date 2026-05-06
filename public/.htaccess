@@ -1,3 +1,7 @@
+# ==============================================================================
+# 🦅 GRABTHEBYTE: HOSTINGER PRODUCTION .HTACCESS
+# ==============================================================================
+
 # Enable Rewrite Engine
 RewriteEngine On
 RewriteBase /
@@ -44,12 +48,27 @@ RewriteRule . /index.html [L]
     AddOutputFilterByType DEFLATE image/svg+xml
 </IfModule>
 
-# Security headers
+# ==============================================================================
+# 🛡️ TITANIUM FORCEFIELD: SECURITY HEADERS
+# ==============================================================================
 <IfModule mod_headers.c>
+    # Prevents MIME-sniffing
     Header set X-Content-Type-Options "nosniff"
-    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Prevents Clickjacking (Upgraded from SAMEORIGIN to DENY for max security)
+    Header set X-Frame-Options "DENY"
+    
+    # Legacy XSS Protection
     Header set X-XSS-Protection "1; mode=block"
+    
+    # Protects student privacy on external links
     Header set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Forces browsers to always use HTTPS
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Content Security Policy (Allows Supabase & Razorpay, blocks everything else)
+    Header set Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com; img-src 'self' data: https:; font-src 'self' data: https:;"
 </IfModule>
 
 # Prevent directory listing

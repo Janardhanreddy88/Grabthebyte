@@ -51,8 +51,10 @@ Deno.serve(async (req) => {
     }
 
     // Delete related records
-    await adminClient.from("admin_pins").delete().eq("user_id", userId);
-    await adminClient.from("admin_sessions").delete().eq("user_id", userId);
+    // 🦅 TRIPWIRES DISABLED - WE NO LONGER USE THESE TABLES
+    // await adminClient.from("admin_pins").delete().eq("user_id", userId);
+    // await adminClient.from("admin_sessions").delete().eq("user_id", userId);
+    
     await adminClient.from("user_roles").delete().eq("user_id", userId);
     await adminClient.from("profiles").delete().eq("user_id", userId);
 
