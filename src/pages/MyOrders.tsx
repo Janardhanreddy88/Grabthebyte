@@ -132,7 +132,7 @@ export default function MyOrders() {
   return (
     <div className="min-h-screen bg-gray-50/80 pb-20">
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-gray-200 px-3 py-2.5 safe-top shadow-sm">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
+        <div className="flex items-center justify-between max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto">
           <div className="flex items-center gap-2.5">
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/menu')}><ArrowLeft size={18} /></Button>
             <div>
@@ -147,7 +147,7 @@ export default function MyOrders() {
       </header>
 
       <PullToRefresh onRefresh={fetchOrders}>
-      <main className="p-4 space-y-4 max-w-lg mx-auto">
+      <main className="p-4 space-y-4 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto">
         {isLoading ? [1, 2].map(i => <Skeleton key={i} className="h-48 w-full rounded-3xl" />) : orders.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-20 h-20 bg-white shadow-sm border border-gray-100 rounded-full flex items-center justify-center mx-auto mb-5"><ShoppingBag className="h-8 w-8 text-gray-400" /></div>

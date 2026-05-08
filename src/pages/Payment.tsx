@@ -239,7 +239,7 @@ export default function Payment() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-10 bg-background/90 backdrop-blur-xl border-b border-border/40 px-4 py-3 safe-top">
-        <div className="flex items-center gap-3 max-w-lg mx-auto">
+        <div className="flex items-center gap-3 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto">
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-secondary/50" onClick={() => navigate("/menu", { replace: true })} disabled={paymentState === "initiating" || paymentState === "verifying"}>
             <ArrowLeft size={18} />
           </Button>
@@ -250,7 +250,7 @@ export default function Payment() {
         </div>
       </header>
       
-      <main className="flex-1 flex flex-col items-center p-4 max-w-lg mx-auto w-full pt-6">
+      <main className="flex-1 flex flex-col items-center p-4 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto w-full pt-6">
         <div className="w-full bg-card rounded-[24px] border border-border shadow-sm overflow-hidden">
           {amount && (
             <div className="text-center p-6 bg-secondary/30 border-b border-border/50">

@@ -293,7 +293,7 @@ export default function Checkout() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/40 safe-top">
-        <div className="flex items-center justify-between px-3 h-12 max-w-2xl mx-auto w-full">
+        <div className="flex items-center justify-between px-3 h-12 max-w-2xl md:max-w-4xl lg:max-w-6xl mx-auto w-full">
           <div className="flex items-center gap-3">
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate("/menu")} className="w-9 h-9 rounded-full bg-secondary text-foreground flex items-center justify-center">
               <ArrowLeft size={16} />
@@ -309,7 +309,7 @@ export default function Checkout() {
 
       <main className="flex-1 overflow-y-auto">
         <PullToRefresh onRefresh={async () => window.location.reload()}>
-        <div className="max-w-2xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
+        <div className="max-w-2xl md:max-w-4xl lg:max-w-6xl mx-auto w-full px-3 py-4 pb-32 space-y-4">
           
           {ordersPaused && (
             <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive">
@@ -458,7 +458,7 @@ export default function Checkout() {
 
       {/* Sticky Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/40 z-50 safe-bottom">
-        <div className="max-w-2xl mx-auto flex gap-4 items-center">
+        <div className="max-w-2xl md:max-w-4xl lg:max-w-6xl mx-auto flex gap-4 items-center">
           <div className="flex-1">
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total</p>
             <p className="text-xl font-black text-foreground">₹{finalAmountToPay.toFixed(2)}</p>

@@ -376,7 +376,7 @@ export default function Settings() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-card/90 backdrop-blur-md border-b border-border safe-top">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 max-w-lg mx-auto">
+        <div className="flex items-center gap-2.5 px-3 py-2.5 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
             <ArrowLeft size={16} />
           </button>
@@ -384,7 +384,7 @@ export default function Settings() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto">
+      <main className="max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto">
 
         {/* ─── PROFILE ─── */}
         <SectionHeader title="Profile" />
