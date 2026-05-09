@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
-// 🌟 IMPORTING YOUR NEW SUPER ADMIN REFUND HOOK
 import { useProcessRefund } from '@/hooks/useSuperAdminData'; 
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -33,7 +32,9 @@ interface Order {
   customer_email: string | null;
   customer_phone: string | null;
   total: number;
-  platform_fee: number | null;
+  platform_fee: number | null; 
+  discount_amount: number | null; // 🦅 ADDED
+  promo_code: string | null; // 🦅 ADDED
   status: string;
   payment_status: string | null;
   payment_method: string | null;
@@ -48,7 +49,6 @@ interface Order {
 
 export function SuperAdminOrders() {
   const { filters } = useSuperAdmin();
-  // 🌟 INITIALIZING THE REFUND HOOK
   const processRefund = useProcessRefund();
   
   const [orders, setOrders] = useState<Order[]>([]);
@@ -77,15 +77,8 @@ export function SuperAdminOrders() {
     setPage(1);
   }, [debouncedSearch, statusFilter, dateFilter, filters.campusId]);
 
-  const calculatePlatformFee = (rawFoodTotal: number) => {
-    if (rawFoodTotal <= 0) return 0;
-    if (rawFoodTotal <= 42) return 2;
-    if (rawFoodTotal <= 105) return 5;
-    return 6;
-  };
-
   const fetchGlobalStats = useCallback(async () => {
-    let query = supabase.from('orders').select('total, status');
+    let query = supabase.from('orders').select('total, platform_fee, status');
     if (dateFilter === 'today') query = query.gte('created_at', startOfToday().toISOString());
     else if (dateFilter === 'yesterday') {
       query = query.gte('created_at', startOfYesterday().toISOString()).lte('created_at', endOfYesterday().toISOString());
@@ -100,9 +93,10 @@ export function SuperAdminOrders() {
       const validOrders = data.filter(o => !['failed', 'expired', 'cancelled', 'rejected', 'refunded'].includes(o.status.toLowerCase()));
       
       validOrders.forEach(o => {
-        const rawTotal = Number(o.total) || 0;
-        const fee = calculatePlatformFee(rawTotal);
-        totalRevenue += (rawTotal + fee);
+        const grandTotal = Number(o.total) || 0;
+        const fee = Number(o.platform_fee) || 0;
+
+        totalRevenue += grandTotal;
         totalProfit += fee;
       });
 
@@ -121,11 +115,12 @@ export function SuperAdminOrders() {
     setIsLoading(true);
     fetchGlobalStats(); 
     
+    // 🦅 THE FIX 1: Fetching discount data straight from the DB
     let query = supabase
       .from('orders')
       .select(`
         id, order_number, customer_name, customer_email, customer_phone,
-        total, platform_fee, status, payment_status, payment_method, razorpay_payment_id,
+        total, platform_fee, discount_amount, promo_code, status, payment_status, payment_method, razorpay_payment_id,
         commission_amount, notes, created_at, updated_at,
         campus:campuses(name, code),
         order_items(id, name, quantity, price)
@@ -156,7 +151,7 @@ export function SuperAdminOrders() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+  const formatCurrency = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
 
   const getPaymentBadge = (paymentStatus: string | null) => {
     const status = (paymentStatus || 'pending').toLowerCase();
@@ -239,15 +234,18 @@ export function SuperAdminOrders() {
 
   const exportCSV = () => {
     const exportOrders = selectedIds.size > 0 ? orders.filter(o => selectedIds.has(o.id)) : orders;
-    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Food Total', 'Platform Fee', 'Grand Total (GMV)', 'Payment Status', 'Order Status', 'Date'];
+    const headers = ['Order Number', 'Customer', 'Email', 'Campus', 'Item Subtotal', 'Discount', 'Platform Fee', 'Grand Total (Paid)', 'Payment Status', 'Order Status', 'Date'];
     const rows = exportOrders.map(o => {
-      const rawFoodTotal = Number(o.total) || 0;
-      const dynamicFee = calculatePlatformFee(rawFoodTotal);
-      const grandTotal = rawFoodTotal + dynamicFee;
+      const grandTotal = Number(o.total) || 0;
+      const fee = Number(o.platform_fee) || 0;
+      const discount = Number(o.discount_amount) || 0;
+      
+      // Calculate true food cost before discounts for clean accounting
+      const originalFoodCost = (grandTotal - fee) + discount;
 
       return [
         o.order_number, o.customer_name || '', o.customer_email || '',
-        o.campus?.code || '', rawFoodTotal, dynamicFee, grandTotal, o.payment_status || 'pending', o.status,
+        o.campus?.code || '', originalFoodCost, discount, fee, grandTotal, o.payment_status || 'pending', o.status,
         format(new Date(o.created_at), 'yyyy-MM-dd HH:mm')
       ];
     });
@@ -347,7 +345,7 @@ export function SuperAdminOrders() {
                     <TableHead>Order</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Campus</TableHead>
-                    <TableHead>Amount (GMV)</TableHead>
+                    <TableHead>Amount (Paid)</TableHead>
                     <TableHead>Platform Fee</TableHead>
                     <TableHead>Payment</TableHead> 
                     <TableHead>Order Status</TableHead>
@@ -357,9 +355,8 @@ export function SuperAdminOrders() {
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => {
-                    const rawFoodTotal = Number(order.total) || 0;
-                    const dynamicFee = calculatePlatformFee(rawFoodTotal);
-                    const grandTotal = rawFoodTotal + dynamicFee;
+                    const grandTotal = Number(order.total) || 0;
+                    const fee = Number(order.platform_fee) || 0;
                     
                     return (
                       <TableRow key={order.id} className={cn(selectedIds.has(order.id) && "bg-primary/5")}>
@@ -378,9 +375,9 @@ export function SuperAdminOrders() {
                         <TableCell className="font-semibold">{formatCurrency(grandTotal)}</TableCell>
                         
                         <TableCell>
-                          {dynamicFee > 0 ? (
+                          {fee > 0 ? (
                             <span className="font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs border border-green-100">
-                              +{formatCurrency(dynamicFee)}
+                              +{formatCurrency(fee)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground text-xs">₹0</span>
@@ -431,9 +428,14 @@ export function SuperAdminOrders() {
             <DialogDescription>Full financial and order details</DialogDescription>
           </DialogHeader>
           {selectedOrder && (() => {
-            const rawFoodTotal = Number(selectedOrder.total) || 0;
-            const dynamicFee = calculatePlatformFee(rawFoodTotal);
-            const grandTotal = rawFoodTotal + dynamicFee;
+            // 🦅 THE FIX 2: Mathematical Transparency in the Modal
+            const grandTotal = Number(selectedOrder.total) || 0;
+            const fee = Number(selectedOrder.platform_fee) || 0;
+            const discountAmount = Number(selectedOrder.discount_amount) || 0;
+            const promoCode = selectedOrder.promo_code || 'PROMO';
+            
+            // Reconstruct the original, un-discounted food subtotal
+            const originalFoodCost = (grandTotal - fee) + discountAmount;
             
             const isPaid = selectedOrder.payment_status?.toLowerCase() === 'completed' || 
                            selectedOrder.payment_status?.toLowerCase() === 'confirmed' || 
@@ -489,12 +491,20 @@ export function SuperAdminOrders() {
                     
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>Food Subtotal</span>
-                      <span>{formatCurrency(rawFoodTotal)}</span>
+                      <span>{formatCurrency(originalFoodCost)}</span>
                     </div>
+
+                    {/* 🦅 NEW: Beautiful explicit discount line */}
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-sm text-emerald-600 font-bold">
+                        <span>Discount applied ({promoCode})</span>
+                        <span>-{formatCurrency(discountAmount)}</span>
+                      </div>
+                    )}
                     
                     <div className="flex justify-between text-sm">
                       <span className="font-medium text-green-700">Platform Fee (Profit)</span>
-                      <span className="font-bold text-green-700">+{formatCurrency(dynamicFee)}</span>
+                      <span className="font-bold text-green-700">+{formatCurrency(fee)}</span>
                     </div>
 
                     <div className="border-t border-gray-200 my-2 pt-2"></div>
@@ -524,10 +534,8 @@ export function SuperAdminOrders() {
                   </div>
                 </div>
 
-                {/* 🌟 ACTION BUTTONS AREA */}
                 <div className="pt-2 flex flex-col gap-3">
                   
-                  {/* 🌟 NEW: REFUND BUTTON (Only visible if paid and not yet refunded) */}
                   {isPaid && selectedOrder.status !== 'refunded' && (
                     <Button 
                       variant="outline" 
@@ -548,7 +556,6 @@ export function SuperAdminOrders() {
                     </Button>
                   )}
 
-                  {/* EXISTING: CANCEL BUTTON */}
                   {selectedOrder.status !== 'failed' && selectedOrder.status !== 'expired' && selectedOrder.status !== 'collected' && selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'refunded' && (
                     <div>
                       <Button 

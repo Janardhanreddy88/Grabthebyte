@@ -34,6 +34,20 @@ interface UseAdminDashboardReturn {
   toggleItemAvailability: (itemId: string) => Promise<boolean>;
 }
 
+// 🦅 GLOBAL GOLDEN FORMULA
+const getTrueCanteenRevenue = (o: any) => {
+  const rawTotal = Number(o.total) || 0;
+  const platFee = Number(o.platform_fee) || 0;
+  const discAmt = Number(o.discount_amount) || 0;
+  const sponsor = o.discount_sponsor;
+  
+  let baseEarnings = rawTotal - platFee;
+  if (sponsor === 'platform') {
+    baseEarnings += discAmt;
+  }
+  return Math.max(0, baseEarnings);
+};
+
 export function useAdminDashboard(): UseAdminDashboardReturn {
   const [stats, setStats] = useState<AdminStats>({
     totalRevenue: 0,
@@ -61,9 +75,10 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
       if (menuError) throw menuError;
 
       // 2. Fetch Real Orders (Filtering out failed/cancelled/expired)
+      // 🦅 THE FIX 1: Fetch actual discount and fee columns instead of the phantom column
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('total, created_at')
+        .select('total, platform_fee, discount_amount, discount_sponsor, created_at')
         .not('status', 'in', '("failed","cancelled","expired","rejected")');
 
       if (ordersError) throw ordersError;
@@ -77,7 +92,8 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
 
       ordersData?.forEach(order => {
         const orderDate = new Date(order.created_at);
-        totalRev += Number(order.total) || 0;
+        // 🦅 THE FIX 2: Calculate using the Golden Formula
+        totalRev += getTrueCanteenRevenue(order);
         
         if (orderDate >= today) {
           todayOrds++;
@@ -110,7 +126,8 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
         const orderDateStr = new Date(order.created_at).toISOString().split('T')[0];
         const dayMatch = last7Days.find(d => d.dateString === orderDateStr);
         if (dayMatch) {
-          dayMatch.revenue += Number(order.total) || 0;
+          // 🦅 THE FIX 3: Chart bars use pure compensated revenue
+          dayMatch.revenue += getTrueCanteenRevenue(order);
           dayMatch.orders += 1;
         }
       });
@@ -148,7 +165,7 @@ export function useAdminDashboard(): UseAdminDashboardReturn {
       
       const newStatus = !itemToToggle.isAvailable;
 
-      // 🦅 The Real Supabase Update
+      // The Real Supabase Update
       const { error } = await supabase
         .from('menu_items')
         .update({ is_available: newStatus })

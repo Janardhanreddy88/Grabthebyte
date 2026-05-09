@@ -54,9 +54,12 @@ interface Order {
   campus_id: string;
   user_id: string | null;
   order_number: string;
-  // 🌟 UPDATED: Full list of statuses
   status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' | 'cancelled' | 'rejected' | 'refunded';
   total: number;
+  // 🦅 THE FIX 1: Removed phantom column, added real financial columns
+  platform_fee: number | null;
+  discount_amount: number | null;
+  discount_sponsor: string | null;
   qr_code: string | null;
   is_used: boolean;
   customer_name: string | null;
@@ -64,7 +67,7 @@ interface Order {
   payment_method: string | null;
   payment_status: string | null;
   notes: string | null;
-  rejection_reason: string | null; // 🌟 ADDED
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +88,20 @@ interface OrderStats {
   todayOrders: number;
   chartData: { day: string; revenue: number; orders: number }[];
 }
+
+// 🦅 GLOBAL GOLDEN FORMULA
+const getTrueCanteenRevenue = (o: any) => {
+  const rawTotal = Number(o.total) || 0;
+  const platFee = Number(o.platform_fee) || 0;
+  const discAmt = Number(o.discount_amount) || 0;
+  const sponsor = o.discount_sponsor;
+  
+  let baseEarnings = rawTotal - platFee;
+  if (sponsor === 'platform') {
+    baseEarnings += discAmt;
+  }
+  return Math.max(0, baseEarnings);
+};
 
 // Fetch menu items for the current campus
 export function useAdminMenuItems() {
@@ -278,13 +295,13 @@ export function useAdminOrders() {
         order_number: order.order_number,
         user_id: order.user_id,
         items: order.order_items || [],
-        total: Number(order.total),
+        // 🦅 THE FIX 2: Kitchen staff and Recent Orders list now sees the true compensated payout!
+        total: getTrueCanteenRevenue(order),
         status: order.status,
         created_at: order.created_at,
         user_name: order.customer_name || 'Guest',
         is_used: order.is_used,
         qr_code: order.qr_code,
-        // 🌟 FIX: Pass these down to the UI so the Detective Logic works!
         notes: order.notes,
         rejection_reason: order.rejection_reason,
         payment_status: order.payment_status,
@@ -299,7 +316,6 @@ export function useAdminOrders() {
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
-  // 🌟 UPDATED: Accept all valid statuses
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'confirmed' | 'collected' | 'expired' | 'failed' | 'cancelled' | 'rejected' | 'refunded' }) => {
       const statusResult = orderStatusSchema.safeParse(status);
@@ -377,17 +393,18 @@ export function useOrderStats() {
 
       const { data: orders, error } = await supabase
         .from('orders')
-        .select('total, created_at, status')
+        // 🦅 THE FIX 3: Fetching the real columns to run the formula
+        .select('total, platform_fee, discount_amount, discount_sponsor, created_at, status')
         .eq('campus_id', campus.id)
         .gte('created_at', sevenDaysAgo.toISOString())
-        // 🌟 UPDATED: Filter out all dead order types from revenue calculations
         .not('status', 'in', '("failed","expired","cancelled","rejected","refunded")');
 
       if (error) throw error;
 
       const ordersList = orders || [];
       
-      const totalRevenue = ordersList.reduce((sum, o) => sum + Number(o.total), 0);
+      // 🦅 THE FIX 4: Quick Overview Top Cards now use compensated logic
+      const totalRevenue = ordersList.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0);
       const totalOrders = ordersList.length;
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
@@ -413,7 +430,8 @@ export function useOrderStats() {
 
         chartData.push({
           day: dayNames[date.getDay()],
-          revenue: dayOrders.reduce((sum, o) => sum + Number(o.total), 0),
+          // 🦅 THE FIX 5: Quick Overview Chart uses compensated logic
+          revenue: dayOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0),
           orders: dayOrders.length,
         });
       }

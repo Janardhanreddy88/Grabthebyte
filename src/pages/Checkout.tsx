@@ -55,7 +55,7 @@ export default function Checkout() {
   const [promoMessage, setPromoMessage] = useState({ text: "", type: "" });
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
-  // 🦅 THE BULLETPROOF PRICING LOGIC
+  // 🦅 THE BULLETPROOF PRICING LOGIC (UI ONLY)
   // STEP 1: Lock in GrabTheByte's profit based on the RAW total (totalPrice), NOT discounted!
   const basePlatformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
   
@@ -103,7 +103,7 @@ export default function Checkout() {
     };
   }, []);
 
-  // 🦅 UPGRADED PROMO CODE ENGINE
+  // 🦅 FRONTEND PROMO CODE PREVIEW ENGINE
   const handleApplyPromo = async () => {
     if (!promoCodeInput.trim()) return;
     setIsCheckingPromo(true);
@@ -124,7 +124,6 @@ export default function Checkout() {
         return;
       }
 
-      // 🦅 FRONTEND CAMPUS LOCK!
       if (offer.campus_id && offer.campus_id !== campus?.id) {
         setPromoMessage({ text: "This promo code is not valid at this canteen location.", type: "error" });
         setAppliedDiscount(0);
@@ -132,7 +131,6 @@ export default function Checkout() {
         return;
       }
 
-      // 🦅 FRONTEND ITEM LOCK!
       if (offer.target_item_id) {
         const hasTargetItem = cart.some(item => item.id === offer.target_item_id);
         if (!hasTargetItem) {
@@ -150,7 +148,6 @@ export default function Checkout() {
         return;
       }
 
-      // 🦅 ACCURATE DISCOUNT BASE (Only target item price if locked!)
       let discountBase = totalPrice;
       if (offer.target_item_id) {
         const targetItem = cart.find(item => item.id === offer.target_item_id);
@@ -160,7 +157,7 @@ export default function Checkout() {
       }
 
       let finalDiscountAmount = 0;
-      if (offer.discount_type === "flat") {
+      if (offer.discount_type === "fixed") {
         finalDiscountAmount = offer.discount_value;
       } else if (offer.discount_type === "percentage") {
         finalDiscountAmount = discountBase * (offer.discount_value / 100);
@@ -260,7 +257,7 @@ export default function Checkout() {
 
       const safePhone = user.phone || (user as any)?.user_metadata?.phone || "";
 
-      // 🦅 INJECTING THE PLATFORM FEE HERE!
+      // 🦅 PERFECTLY REVERTED: Just the necessary fields sent to backend.
       const order = await createOrder({ 
         items: cart, 
         total: finalAmountToPay, 
@@ -269,7 +266,7 @@ export default function Checkout() {
         customerEmail: user.email,
         customerPhone: safePhone,
         promoCode: appliedPromoCode,
-        platformFee: totalHandlingFee // 👈 Send the fee to the hook!
+        platformFee: totalHandlingFee 
       });
 
       if (order) { 
@@ -370,7 +367,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* NEW PROMO CODE SECTION */}
+          {/* PROMO CODE SECTION */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Tag size={15} />
@@ -406,7 +403,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Bill Summary */}
+          {/* Bill Summary - 🦅 This is where the magic UI breakdown happens */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Receipt size={15} />

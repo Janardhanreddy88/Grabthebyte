@@ -65,11 +65,11 @@ export function useWeeklyAnalytics() {
       const formatDate = (date: Date) => date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
       const weekRange = `${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
 
-      // Fetch both this week and last week orders in parallel
+      // 🦅 THE FIX 1: Fetch platform_fee, discount_amount, and discount_sponsor in BOTH queries
       const [thisWeekRes, lastWeekRes, menuRes] = await Promise.all([
-        supabase.from('orders').select('id, total, created_at, status, order_items (name, quantity, price, menu_item_id)')
+        supabase.from('orders').select('id, total, platform_fee, discount_amount, discount_sponsor, created_at, status, order_items (name, quantity, price, menu_item_id)')
           .eq('campus_id', campus.id).gte('created_at', weekStart.toISOString()).lte('created_at', weekEnd.toISOString()),
-        supabase.from('orders').select('id, total, created_at, status')
+        supabase.from('orders').select('id, total, platform_fee, discount_amount, discount_sponsor, created_at, status')
           .eq('campus_id', campus.id).gte('created_at', lastWeekStart.toISOString()).lte('created_at', lastWeekEnd.toISOString()),
         supabase.from('menu_items').select('id, category').eq('campus_id', campus.id),
       ]);
@@ -84,22 +84,40 @@ export function useWeeklyAnalytics() {
       const paidOrders = ordersList.filter(o => o.status === 'confirmed' || o.status === 'collected');
       const collectedOrders = ordersList.filter(o => o.status === 'collected');
 
+      // 🦅 THE FIX 2: The Golden Canteen Compensation Formula
+      const getTrueCanteenRevenue = (o: any) => {
+        const rawTotal = Number(o.total) || 0;
+        const platFee = Number(o.platform_fee) || 0;
+        const discAmt = Number(o.discount_amount) || 0;
+        const sponsor = o.discount_sponsor;
+        
+        let baseEarnings = rawTotal - platFee;
+        
+        if (sponsor === 'platform') {
+          baseEarnings += discAmt;
+        }
+        
+        return Math.max(0, baseEarnings);
+      };
+
       const totalOrders = paidOrders.length;
-      const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      
+      // 🦅 THE FIX 3: Calculate this week's exact compensated revenue
+      const totalRevenue = paidOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0);
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
       const completionRate = paidOrders.length > 0 ? Math.round((collectedOrders.length / paidOrders.length) * 100) : 0;
 
-      // Last week total
-      const lastWeekTotalRevenue = lastWeekOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      // 🦅 THE FIX 4: Calculate last week's exact compensated revenue
+      const lastWeekTotalRevenue = lastWeekOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0);
       const weeklyGrowth = lastWeekTotalRevenue > 0
         ? Math.round(((totalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100 * 10) / 10
         : 0;
 
-      // Build last week daily revenue map (day of week -> revenue)
+      // 🦅 THE FIX 5: Build last week's daily revenue map safely with true math
       const lastWeekDailyRevenue: Record<number, number> = {};
       lastWeekOrders.forEach(o => {
         const d = new Date(o.created_at).getDay();
-        lastWeekDailyRevenue[d] = (lastWeekDailyRevenue[d] || 0) + Number(o.total);
+        lastWeekDailyRevenue[d] = (lastWeekDailyRevenue[d] || 0) + getTrueCanteenRevenue(o);
       });
 
       const catStats: Record<string, { orders: Set<string>; revenue: number }> = {};
@@ -115,7 +133,9 @@ export function useWeeklyAnalytics() {
         const dayOfWeek = orderDate.getDay();
         hourCounts[hour] = (hourCounts[hour] || 0) + 1;
         dailyStats[dayOfWeek].orders += 1;
-        dailyStats[dayOfWeek].revenue += Number(order.total);
+        
+        // 🦅 THE FIX 6: Daily chart bars now reflect the pure compensated revenue!
+        dailyStats[dayOfWeek].revenue += getTrueCanteenRevenue(order);
 
         (order.order_items || []).forEach((item: any) => {
           const cat = (item.menu_item_id && categoryMap[item.menu_item_id]) || 'other';

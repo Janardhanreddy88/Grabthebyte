@@ -44,9 +44,10 @@ export function useMonthlyAnalytics() {
       const now = new Date();
       const effectiveEnd = monthEnd > now ? now : monthEnd;
 
+      // 🦅 THE FIX 1: Fetch platform_fee, discount_amount, and discount_sponsor!
       const [ordersRes, menuRes] = await Promise.all([
         supabase.from('orders')
-          .select('id, total, created_at, status, order_items (name, quantity, price, menu_item_id)')
+          .select('id, total, platform_fee, discount_amount, discount_sponsor, created_at, status, order_items (name, quantity, price, menu_item_id)')
           .eq('campus_id', campus.id)
           .gte('created_at', monthStart.toISOString())
           .lte('created_at', effectiveEnd.toISOString()),
@@ -60,7 +61,25 @@ export function useMonthlyAnalytics() {
 
       const paidOrders = (ordersRes.data || []).filter(o => o.status === 'confirmed' || o.status === 'collected');
       const totalOrders = paidOrders.length;
-      const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      
+      // 🦅 THE FIX 2: The Golden Canteen Compensation Formula
+      const getTrueCanteenRevenue = (o: any) => {
+        const rawTotal = Number(o.total) || 0;
+        const platFee = Number(o.platform_fee) || 0;
+        const discAmt = Number(o.discount_amount) || 0;
+        const sponsor = o.discount_sponsor;
+        
+        let baseEarnings = rawTotal - platFee;
+        
+        if (sponsor === 'platform') {
+          baseEarnings += discAmt;
+        }
+        
+        return Math.max(0, baseEarnings);
+      };
+
+      // 🦅 THE FIX 3: Calculate the total monthly pure compensated revenue
+      const totalRevenue = paidOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0);
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
       const catStats: Record<string, { orders: Set<string>; revenue: number }> = {};
@@ -98,7 +117,14 @@ export function useMonthlyAnalytics() {
         const dayStart = new Date(year, month, day);
         const dayEnd = new Date(year, month, day, 23, 59, 59);
         const dayOrders = paidOrders.filter(o => { const d = new Date(o.created_at); return d >= dayStart && d <= dayEnd; });
-        dailyTrends.push({ date: `${day}`, day, orders: dayOrders.length, revenue: dayOrders.reduce((sum, o) => sum + Number(o.total), 0) });
+        
+        // 🦅 THE FIX 4: Make sure the daily chart bars only show compensated net revenue!
+        dailyTrends.push({ 
+          date: `${day}`, 
+          day, 
+          orders: dayOrders.length, 
+          revenue: dayOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0) 
+        });
       }
 
       return {

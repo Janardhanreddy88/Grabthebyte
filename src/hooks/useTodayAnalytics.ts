@@ -85,10 +85,11 @@ export function useTodayAnalytics() {
       const dayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
       const dayEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 23, 59, 59);
 
+      // 🦅 THE FIX 1: Fetching platform_fee, discount_amount, and discount_sponsor!
       const { data: orders, error } = await supabase
         .from('orders')
         .select(`
-          id, total, created_at, status, order_number, customer_name,
+          id, total, platform_fee, discount_amount, discount_sponsor, created_at, status, order_number, customer_name,
           order_items (name, quantity, price, menu_item_id)
         `)
         .eq('campus_id', campus.id)
@@ -111,8 +112,29 @@ export function useTodayAnalytics() {
       const paidOrders = ordersList.filter(o => o.status === 'confirmed' || o.status === 'collected');
       const collectedOrdersList = ordersList.filter(o => o.status === 'collected');
 
+      // 🦅 THE FIX 2: Bulletproof Net Revenue Calculation
+      const getTrueCanteenRevenue = (o: any) => {
+        const rawTotal = Number(o.total) || 0;
+        const platFee = Number(o.platform_fee) || 0;
+        const discAmt = Number(o.discount_amount) || 0;
+        const sponsor = o.discount_sponsor;
+        
+        // Start with what the student paid minus GrabTheByte's fee
+        let baseEarnings = rawTotal - platFee;
+        
+        // If GrabTheByte sponsored the code, we ADD the money back to the canteen's payout!
+        if (sponsor === 'platform') {
+          baseEarnings += discAmt;
+        }
+        
+        return Math.max(0, baseEarnings);
+      };
+
       const totalOrders = paidOrders.length;
-      const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      
+      // 🦅 THE FIX 3: Big Green Box now uses the true compensation math!
+      const totalRevenue = paidOrders.reduce((sum, o) => sum + getTrueCanteenRevenue(o), 0);
+      
       const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
       const completionRate = paidOrders.length > 0 
         ? Math.round((collectedOrdersList.length / paidOrders.length) * 100) : 0;
@@ -129,9 +151,11 @@ export function useTodayAnalytics() {
       paidOrders.forEach(order => {
         const orderDate = new Date(order.created_at);
         const hour = orderDate.getHours();
+        
+        // 🦅 THE FIX 4: Hourly chart now maps to true compensated earnings
         if (hourCounts[hour]) {
           hourCounts[hour].orders += 1;
-          hourCounts[hour].revenue += Number(order.total);
+          hourCounts[hour].revenue += getTrueCanteenRevenue(order);
         }
 
         const items = order.order_items as Array<{ name: string; quantity: number; price: number; menu_item_id: string | null }> || [];
@@ -144,7 +168,7 @@ export function useTodayAnalytics() {
 
           if (!catStats[cat]) catStats[cat] = { orders: new Set(), revenue: 0, itemCount: 0 };
           catStats[cat].orders.add(order.id);
-          catStats[cat].revenue += item.price * item.quantity;
+          catStats[cat].revenue += item.price * item.quantity; // Gross item value
           catStats[cat].itemCount += item.quantity;
 
           if (!itemCounts[item.name]) itemCounts[item.name] = { quantity: 0, revenue: 0 };
@@ -152,7 +176,6 @@ export function useTodayAnalytics() {
           itemCounts[item.name].revenue += item.price * item.quantity;
         });
 
-        // Add this order to each category it belongs to
         orderCategories.forEach(catKey => {
           if (!categoryOrders[catKey]) categoryOrders[catKey] = [];
           const catItems = items.filter(item => {
@@ -162,7 +185,8 @@ export function useTodayAnalytics() {
           categoryOrders[catKey].push({
             id: order.id,
             orderNumber: order.order_number,
-            total: Number(order.total),
+            // 🦅 THE FIX 5: Specific order lists now show compensated net revenue
+            total: getTrueCanteenRevenue(order),
             status: order.status,
             createdAt: order.created_at,
             customerName: order.customer_name || 'Guest',

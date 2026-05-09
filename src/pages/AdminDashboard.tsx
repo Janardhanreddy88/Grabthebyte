@@ -41,6 +41,20 @@ import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 import { useCampusBouncer } from '@/hooks/useCampusBouncer'; 
 import { Badge } from "@/components/ui/badge"; 
 
+// 🦅 THE GOLDEN FORMULA
+const getTrueCanteenRevenue = (o: any) => {
+  const rawTotal = Number(o.total) || 0;
+  const platFee = Number(o.platform_fee) || 0;
+  const discAmt = Number(o.discount_amount) || 0;
+  const sponsor = o.discount_sponsor;
+  
+  let baseEarnings = rawTotal - platFee;
+  if (sponsor === 'platform') {
+    baseEarnings += discAmt;
+  }
+  return Math.max(0, baseEarnings);
+};
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout: pinLogout } = useAdminAuth();
@@ -86,7 +100,6 @@ export default function AdminDashboard() {
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   
-  // 🌟 NEW: Date Filter State (Defaults to Today)
   const [paymentDateFilter, setPaymentDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const [editForm, setEditForm] = useState({
@@ -148,30 +161,24 @@ export default function AdminDashboard() {
     fetchProfile();
   }, []);
 
-  // 🌟 UPGRADED FETCH QUERY: Now supports targeted daily filtering
   const fetchPaymentsList = useCallback(async () => {
     if (!profileData?.campus_id) return;
     setIsLoadingPayments(true);
     try {
       let query = supabase
         .from('orders')
-        .select('id, order_number, total, payment_status, status, notes, rejection_reason, created_at, customer_name, customer_phone, customer_email, razorpay_payment_id')
+        // 🦅 THE FIX: We added platform_fee, discount_amount, and discount_sponsor!
+        .select('id, order_number, total, platform_fee, discount_amount, discount_sponsor, payment_status, status, notes, rejection_reason, created_at, customer_name, customer_phone, customer_email, razorpay_payment_id')
         .eq('campus_id', profileData.campus_id)
         .order('created_at', { ascending: false });
 
-      // Apply IST Date Filtering
       if (paymentDateFilter) {
         const [year, month, day] = paymentDateFilter.split('-').map(Number);
-        
-        // Start of selected day
         const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
-        // End of selected day
         const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-
         query = query.gte('created_at', startDate.toISOString())
                      .lte('created_at', endDate.toISOString());
       } else {
-        // Fallback to latest 50 if they clear the calendar completely
         query = query.limit(50);
       }
         
@@ -188,7 +195,6 @@ export default function AdminDashboard() {
     }
   }, [profileData?.campus_id, paymentDateFilter]);
 
-  // Refetch when tab changes OR when the admin picks a new date
   useEffect(() => {
     if (activeSettingsTab === 'payments') {
       fetchPaymentsList();
@@ -322,7 +328,6 @@ export default function AdminDashboard() {
             queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
             queryClient.invalidateQueries({ queryKey: ["today-analytics"] });
             
-            // Only trigger a ledger refresh if they are currently looking at "Today's" date
             if (activeSettingsTab === 'payments') {
                const todayStr = format(new Date(), 'yyyy-MM-dd');
                if (paymentDateFilter === todayStr) fetchPaymentsList();
@@ -717,7 +722,6 @@ export default function AdminDashboard() {
                         <p className="text-sm text-muted-foreground">Real-time breakdown of all student transactions</p>
                       </div>
                       
-                      {/* 🌟 NEW: THE DATE FILTER UI */}
                       <div className="flex items-center gap-2 self-start sm:self-auto bg-muted/30 p-1 rounded-lg border">
                         <div className="relative">
                           <Input 
@@ -827,8 +831,9 @@ export default function AdminDashboard() {
                                   </span>
                                 </div>
 
+                                {/* 🦅 THE FIX: The UI now maps the correct net earning per order! */}
                                 <div className={cn("text-right font-black text-base", isCancelled ? "text-muted-foreground line-through opacity-50" : "text-foreground")}>
-                                  ₹{payment.total}
+                                  ₹{getTrueCanteenRevenue(payment).toFixed(2)}
                                 </div>
                               </div>
                             );

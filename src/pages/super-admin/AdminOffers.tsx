@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed } from 'lucide-react';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 
-// 🦅 FIX 1: Updated 'flat' to 'fixed' to match our strict DB ENUM
 interface Offer {
   id: string;
   promo_code: string;
@@ -21,6 +20,11 @@ interface Offer {
   max_global_uses: number | null;
   is_active: boolean;
   valid_until: string | null;
+  // 🦅 ADDED MISSING DB COLUMNS
+  valid_from: string | null;
+  max_uses_per_user: number | null;
+  banner_text: string | null;
+  background_image_url: string | null;
 }
 
 export default function AdminOffers() {
@@ -33,7 +37,6 @@ export default function AdminOffers() {
   
   const [menuItems, setMenuItems] = useState<{id: string, name: string}[]>([]);
 
-  // 🦅 FIX 2: Updated default state to 'fixed'
   const [formData, setFormData] = useState({
     promo_code: '',
     discount_type: 'fixed' as 'fixed' | 'percentage',
@@ -44,7 +47,12 @@ export default function AdminOffers() {
     campus_id: 'all',
     target_item_id: 'all', 
     max_global_uses: '',
-    valid_until: ''
+    valid_until: '',
+    // 🦅 ADDED TO STATE
+    valid_from: '',
+    max_uses_per_user: '1', // Defaulting to 1 per user to prevent abuse!
+    banner_text: '',
+    background_image_url: ''
   });
 
   useEffect(() => {
@@ -66,7 +74,6 @@ export default function AdminOffers() {
   const fetchOffers = async () => {
     setLoading(true);
     
-    // 🦅 FIX 3: THE DUCT TAPE IS REMOVED! We now use .returns<Offer[]>()
     const { data, error } = await supabase
       .from('offers')
       .select('*')
@@ -76,7 +83,7 @@ export default function AdminOffers() {
     if (error) {
       toast({ title: 'Error fetching offers', description: error.message, variant: 'destructive' });
     } else if (data) {
-      setOffers(data); // 🦅 Clean, strongly typed assignment
+      setOffers(data); 
     }
     setLoading(false);
   };
@@ -86,17 +93,30 @@ export default function AdminOffers() {
     setIsSubmitting(true);
 
     try {
+      const isFixed = formData.discount_type === 'fixed';
+      const cleanMaxDiscount = (isFixed || !formData.max_discount_amount) 
+        ? null 
+        : Math.abs(Number(formData.max_discount_amount));
+
+      // 🦅 FULL DB PAYLOAD MAPPING
       const newOffer = {
         promo_code: formData.promo_code.toUpperCase().trim(),
         discount_type: formData.discount_type,
-        discount_value: Number(formData.discount_value),
-        max_discount_amount: formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
-        min_order_value: Number(formData.min_order_value),
+        discount_value: Math.abs(Number(formData.discount_value)),
+        max_discount_amount: cleanMaxDiscount,
+        min_order_value: Math.abs(Number(formData.min_order_value)),
         sponsored_by: formData.sponsored_by,
         campus_id: formData.campus_id === 'all' ? null : formData.campus_id,
         target_item_id: formData.target_item_id === 'all' ? null : formData.target_item_id,
-        max_global_uses: formData.max_global_uses ? Number(formData.max_global_uses) : null,
+        max_global_uses: formData.max_global_uses ? Math.abs(Number(formData.max_global_uses)) : null,
+        
+        // Dates & New Fields
+        valid_from: formData.valid_from ? new Date(formData.valid_from).toISOString() : new Date().toISOString(), // Default to right now if empty
         valid_until: formData.valid_until ? new Date(formData.valid_until).toISOString() : null,
+        max_uses_per_user: formData.max_uses_per_user ? Math.abs(Number(formData.max_uses_per_user)) : null,
+        banner_text: formData.banner_text.trim() || null,
+        background_image_url: formData.background_image_url.trim() || null,
+
         is_active: true,
         current_uses: 0
       };
@@ -107,8 +127,11 @@ export default function AdminOffers() {
 
       toast({ title: 'Success!', description: 'Promo code created successfully.' });
       setShowCreateForm(false);
-      // 🦅 FIX 4: Reset state defaults to 'fixed'
-      setFormData({ promo_code: '', discount_type: 'fixed', discount_value: '', max_discount_amount: '', min_order_value: '0', sponsored_by: 'platform', campus_id: 'all', target_item_id: 'all', max_global_uses: '', valid_until: '' });
+      setFormData({ 
+        promo_code: '', discount_type: 'fixed', discount_value: '', max_discount_amount: '', 
+        min_order_value: '0', sponsored_by: 'platform', campus_id: 'all', target_item_id: 'all', 
+        max_global_uses: '', valid_until: '', valid_from: '', max_uses_per_user: '1', banner_text: '', background_image_url: '' 
+      });
       fetchOffers();
     } catch (error: any) {
       toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
@@ -159,15 +182,20 @@ export default function AdminOffers() {
           <h2 className="text-lg font-bold mb-4">Create New Promo Code</h2>
           <form onSubmit={handleCreateOffer} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
+            {/* ROW 1 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Promo Code</label>
               <Input required value={formData.promo_code} onChange={e => setFormData({...formData, promo_code: e.target.value})} placeholder="e.g. WELCOME50" className="uppercase font-bold" />
             </div>
 
             <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Banner Text (App UI)</label>
+              <Input value={formData.banner_text} onChange={e => setFormData({...formData, banner_text: e.target.value})} placeholder="e.g. Flat ₹50 Off on Snacks!" />
+            </div>
+
+            <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Discount Type</label>
               <select className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm" value={formData.discount_type} onChange={e => setFormData({...formData, discount_type: e.target.value as any})}>
-                {/* 🦅 FIX 5: Value changed to 'fixed' */}
                 <option value="fixed">Flat Amount (₹)</option>
                 <option value="percentage">Percentage (%)</option>
               </select>
@@ -175,12 +203,18 @@ export default function AdminOffers() {
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Discount Value</label>
-              <Input required type="number" value={formData.discount_value} onChange={e => setFormData({...formData, discount_value: e.target.value})} placeholder={formData.discount_type === 'fixed' ? '₹ Amount' : '% Amount'} />
+              <Input required type="number" min="0" value={formData.discount_value} onChange={e => setFormData({...formData, discount_value: e.target.value})} placeholder={formData.discount_type === 'fixed' ? '₹ Amount' : '% Amount'} />
+            </div>
+
+            {/* ROW 2 */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Min Order Value (₹)</label>
+              <Input required type="number" min="0" value={formData.min_order_value} onChange={e => setFormData({...formData, min_order_value: e.target.value})} />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Max Discount Cap (₹)</label>
-              <Input type="number" disabled={formData.discount_type === 'fixed'} value={formData.max_discount_amount} onChange={e => setFormData({...formData, max_discount_amount: e.target.value})} placeholder="Leave blank for no cap" />
+              <Input type="number" min="0" disabled={formData.discount_type === 'fixed'} value={formData.max_discount_amount} onChange={e => setFormData({...formData, max_discount_amount: e.target.value})} placeholder="Leave blank for no cap" />
             </div>
 
             <div className="space-y-1">
@@ -203,18 +237,14 @@ export default function AdminOffers() {
                 value={formData.target_item_id} 
                 onChange={e => setFormData({...formData, target_item_id: e.target.value})}
               >
-                <option value="all">🛒 Entire Cart (No specific item)</option>
+                <option value="all">🛒 Entire Cart</option>
                 {menuItems.map(item => (
                   <option key={item.id} value={item.id}>🍗 {item.name}</option>
                 ))}
               </select>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Min Order Value (₹)</label>
-              <Input required type="number" value={formData.min_order_value} onChange={e => setFormData({...formData, min_order_value: e.target.value})} />
-            </div>
-
+            {/* ROW 3 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">Sponsored By</label>
               <select className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 bg-slate-50" value={formData.sponsored_by} onChange={e => setFormData({...formData, sponsored_by: e.target.value as any})}>
@@ -224,17 +254,33 @@ export default function AdminOffers() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Total Global Uses</label>
-              <Input type="number" value={formData.max_global_uses} onChange={e => setFormData({...formData, max_global_uses: e.target.value})} placeholder="e.g. 100 uses max" />
+              <label className="text-xs font-bold text-slate-500 uppercase">Max Uses Per Student</label>
+              <Input type="number" min="1" value={formData.max_uses_per_user} onChange={e => setFormData({...formData, max_uses_per_user: e.target.value})} placeholder="e.g. 1" />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Expiry Date</label>
+              <label className="text-xs font-bold text-slate-500 uppercase">Total Global Uses</label>
+              <Input type="number" min="1" value={formData.max_global_uses} onChange={e => setFormData({...formData, max_global_uses: e.target.value})} placeholder="e.g. 100 max" />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Background Image URL</label>
+              <Input type="url" value={formData.background_image_url} onChange={e => setFormData({...formData, background_image_url: e.target.value})} placeholder="https://..." />
+            </div>
+
+            {/* ROW 4 */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Start Date (Valid From)</label>
+              <Input type="datetime-local" value={formData.valid_from} onChange={e => setFormData({...formData, valid_from: e.target.value})} />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Expiry Date (Valid Until)</label>
               <Input type="datetime-local" value={formData.valid_until} onChange={e => setFormData({...formData, valid_until: e.target.value})} />
             </div>
 
-            <div className="col-span-full mt-2">
-              <Button type="submit" disabled={isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 rounded-xl">
+            <div className="col-span-full md:col-span-2 mt-auto">
+              <Button type="submit" disabled={isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 rounded-md">
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Launch Offer'}
               </Button>
             </div>
@@ -267,6 +313,7 @@ export default function AdminOffers() {
                     <td className="px-6 py-4">
                       <span className="font-black text-lg tracking-tight text-slate-900">{offer.promo_code}</span>
                       <div className="text-xs text-slate-500 mt-1">Min. ₹{offer.min_order_value}</div>
+                      {offer.banner_text && <div className="text-[10px] text-blue-600 font-medium mt-1">"{offer.banner_text}"</div>}
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
@@ -292,7 +339,6 @@ export default function AdminOffers() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-emerald-600">
-                        {/* 🦅 FIX 6: Condition updated to check for 'fixed' */}
                         {offer.discount_type === 'fixed' ? `₹${offer.discount_value} OFF` : `${offer.discount_value}% OFF`}
                       </div>
                       {offer.max_discount_amount && <div className="text-xs text-slate-500 mt-1">Up to ₹{offer.max_discount_amount}</div>}
@@ -309,8 +355,9 @@ export default function AdminOffers() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-700 text-xs">
-                        {offer.current_uses} {offer.max_global_uses ? `/ ${offer.max_global_uses}` : ''} claims
+                      <div className="font-semibold text-slate-700 text-xs flex flex-col gap-0.5">
+                        <span>{offer.current_uses} {offer.max_global_uses ? `/ ${offer.max_global_uses}` : ''} total claims</span>
+                        <span className="text-[10px] text-slate-400">Limit: {offer.max_uses_per_user || 'Unlimited'} per user</span>
                       </div>
                       <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                         <div 

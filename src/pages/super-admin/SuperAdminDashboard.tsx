@@ -73,15 +73,16 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, trendValue, varia
   );
 }
 
+// 🦅 THE FIX: Replaced canteen_revenue with explicit financial columns
 interface RecentOrder {
-  id: string; order_number: string; total: number; status: string;
-  payment_status: string | null; customer_name: string | null; created_at: string;
+  id: string; order_number: string; total: number; 
+  platform_fee: number | null; discount_amount: number | null; discount_sponsor: string | null;
+  status: string; payment_status: string | null; customer_name: string | null; created_at: string;
 }
 
 interface TopItem { name: string; count: number; }
 interface UserStats { total_users: number; admins: number; students: number; kiosk_users: number; }
 interface WeeklyData { day: string; gmv: number; profit: number; orders: number; }
-// 🌟 CHANGED: Swapped pending_payout for canteen_earnings
 interface LedgerStats { total_gmv: number; platform_revenue: number; canteen_earnings: number; }
 
 export function SuperAdminDashboard() {
@@ -96,7 +97,7 @@ export function SuperAdminDashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
   };
 
   const fetchExtra = useCallback(async () => {
@@ -108,10 +109,10 @@ export function SuperAdminDashboard() {
       const endOfDay = new Date(targetDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Fetch only orders for that specific calendar day
+      // 🦅 THE FIX: Fetching the pure real columns
       let ordersQuery = supabase
         .from('orders')
-        .select('id, order_number, total, status, payment_status, customer_name, created_at')
+        .select('id, order_number, total, platform_fee, discount_amount, discount_sponsor, status, payment_status, customer_name, created_at')
         .gte('created_at', startOfDay.toISOString())
         .lte('created_at', endOfDay.toISOString())
         .order('created_at', { ascending: false });
@@ -121,7 +122,6 @@ export function SuperAdminDashboard() {
       const { data: rawOrders } = await ordersQuery;
       const allOrders = rawOrders as RecentOrder[] || [];
       
-      // Erase Cancelled/Failed orders from the math!
       const invalidStatuses = ['cancelled', 'failed', 'expired', 'rejected', 'refunded'];
       const completedOrders = allOrders.filter(o => 
         o.payment_status === 'completed' && 
@@ -140,36 +140,42 @@ export function SuperAdminDashboard() {
       }
 
       completedOrders.forEach(order => {
-        const foodSubtotal = Number(order.total);
-        let fee = 0;
+        // ======================================================================
+        // 🦅 GROSS ACCOUNTING MATH (Zero Deductions!)
+        // ======================================================================
+        const rawPaidTotal = Number(order.total) || 0;
+        const discAmt = Number(order.discount_amount) || 0;
+        const platFee = Number(order.platform_fee) || 0;
+
+        // 1. Gross GMV = What the student actually paid + The money saved by the promo code
+        const grossGMV = rawPaidTotal + discAmt;
         
-        if (foodSubtotal > 0 && foodSubtotal <= 42) fee = 2;
-        else if (foodSubtotal <= 105) fee = 5;
-        else if (foodSubtotal > 105) fee = 6;
+        // 2. Gross Platform Revenue = The pure fee calculated before discounts
+        const grossPlatformRevenue = platFee;
+        
+        // 3. Gross Canteen Earnings = Gross GMV minus the Platform Fee (pure food cost)
+        const grossCanteenEarnings = grossGMV - grossPlatformRevenue;
 
-        const grandTotal = foodSubtotal + fee;
-
-        total_gmv += grandTotal; 
-        platform_revenue += fee; 
-        total_canteen_earnings += foodSubtotal;
+        // Add to the master totals
+        total_gmv += grossGMV; 
+        platform_revenue += grossPlatformRevenue; 
+        total_canteen_earnings += grossCanteenEarnings;
 
         const orderHour = new Date(order.created_at).getHours().toString();
         if (hourMap.has(orderHour)) {
           const entry = hourMap.get(orderHour)!;
-          entry.gmv += grandTotal;
-          entry.profit += fee;
+          entry.gmv += grossGMV;
+          entry.profit += grossPlatformRevenue;
           entry.orders += 1;
         }
       });
 
-      // 🌟 THE FIX: Pass the raw Canteen Earnings directly to the UI
       setLedgerStats({ 
         total_gmv, 
         platform_revenue, 
         canteen_earnings: total_canteen_earnings 
       });
 
-      // Build Hourly Chart Array 
       const dayData: WeeklyData[] = [];
       for (let i = 6; i <= 22; i++) {
         const entry = hourMap.get(i.toString())!;
@@ -184,7 +190,6 @@ export function SuperAdminDashboard() {
       }
       setWeeklyData(dayData);
 
-      // Fetch Top Items & User Stats
       const orderIds = completedOrders.map(o => o.id);
       if (orderIds.length > 0) {
         const { data: itemsData } = await supabase.from('order_items').select('name, quantity').in('order_id', orderIds.slice(0, 300));
@@ -273,11 +278,10 @@ export function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* 🌟 REPLACED PENDING PAYOUTS WITH CANTEEN EARNINGS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard title="Total GMV" value={formatCurrency(ledgerStats.total_gmv)} subtitle="Gross transaction volume" icon={IndianRupee} variant="primary" isLoading={extraLoading} />
-        <StatCard title="Platform Revenue" value={formatCurrency(ledgerStats.platform_revenue)} subtitle="Your pure profit" icon={Landmark} variant="success" isLoading={extraLoading} />
-        <StatCard title="Canteen Earnings" value={formatCurrency(ledgerStats.canteen_earnings)} subtitle="Food sales for this day" icon={Wallet} variant="warning" isLoading={extraLoading} />
+        <StatCard title="Total Gross GMV" value={formatCurrency(ledgerStats.total_gmv)} subtitle="Pre-discount volume" icon={IndianRupee} variant="primary" isLoading={extraLoading} />
+        <StatCard title="Platform Revenue" value={formatCurrency(ledgerStats.platform_revenue)} subtitle="Gross fees collected" icon={Landmark} variant="success" isLoading={extraLoading} />
+        <StatCard title="Canteen Earnings" value={formatCurrency(ledgerStats.canteen_earnings)} subtitle="Gross food sales" icon={Wallet} variant="warning" isLoading={extraLoading} />
         <StatCard title="Total Orders" value={extraLoading ? "..." : weeklyData.reduce((acc, curr) => acc + curr.orders, 0)} subtitle="Successful orders" icon={ShoppingBag} variant="default" isLoading={isLoading} />
       </div>
 
@@ -323,7 +327,7 @@ export function SuperAdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
           <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-            <CardTitle className="text-sm sm:text-lg">GMV vs Profit ({format(new Date(selectedDate), 'dd MMM')})</CardTitle>
+            <CardTitle className="text-sm sm:text-lg">Gross GMV vs Profit ({format(new Date(selectedDate), 'dd MMM')})</CardTitle>
             <CardDescription className="text-xs">Hourly breakdown of volume to platform cut</CardDescription>
           </CardHeader>
           <CardContent className="px-2 sm:px-6 pb-3 sm:pb-6">
@@ -337,7 +341,7 @@ export function SuperAdminDashboard() {
                     <XAxis dataKey="day" className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} />
                     <YAxis yAxisId="left" tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} className="text-[10px] sm:text-xs" tick={{ fontSize: 10 }} width={35} />
                     <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `₹${v}`} className="text-[10px] sm:text-xs text-green-600" tick={{ fontSize: 10 }} width={25} />
-                    <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === 'gmv' ? 'Total GMV' : 'Profit']} />
+                    <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === 'gmv' ? 'Gross GMV' : 'Gross Profit']} />
                     <Legend wrapperStyle={{ fontSize: '10px' }} />
                     <Line yAxisId="left" name="gmv" type="monotone" dataKey="gmv" stroke="#94a3b8" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" name="profit" type="monotone" dataKey="profit" stroke="#16a34a" strokeWidth={3} dot={false} />
@@ -380,7 +384,7 @@ export function SuperAdminDashboard() {
           <CardHeader className="pb-2 flex flex-row items-center justify-between px-3 sm:px-6 pt-3 sm:pt-6">
             <div>
               <CardTitle className="text-sm sm:text-lg">Recent Orders</CardTitle>
-              <CardDescription className="text-xs">Latest across all campuses</CardDescription>
+              <CardDescription className="text-xs">Latest across all campuses (Gross Values)</CardDescription>
             </div>
             <Button asChild variant="ghost" size="sm" className="h-8 text-xs">
               <Link to="/super-admin/orders">View All <ArrowRight className="h-3 w-3 ml-1" /></Link>
@@ -394,12 +398,8 @@ export function SuperAdminDashboard() {
             ) : (
               <div className="space-y-0.5">
                 {recentOrders.map(order => {
-                  const subtotal = Number(order.total);
-                  let displayFee = 0;
-                  if (subtotal > 0 && subtotal <= 42) displayFee = 2;
-                  else if (subtotal <= 105) displayFee = 5;
-                  else if (subtotal > 105) displayFee = 6;
-                  const recentOrderGrandTotal = subtotal + displayFee;
+                  // 🦅 Gross value mapping for the list
+                  const grossGMV = (Number(order.total) || 0) + (Number(order.discount_amount) || 0);
 
                   return (
                   <div key={order.id} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/50 transition-colors">
@@ -416,7 +416,7 @@ export function SuperAdminDashboard() {
                       <Badge variant="outline" className={cn("text-[10px] sm:text-xs capitalize px-1.5 py-0.5", getStatusColor(order.status))}>
                         {order.status}
                       </Badge>
-                      <span className="text-xs sm:text-sm font-semibold min-w-[50px] text-right">{formatCurrency(recentOrderGrandTotal)}</span>
+                      <span className="text-xs sm:text-sm font-semibold min-w-[50px] text-right">{formatCurrency(grossGMV)}</span>
                     </div>
                   </div>
                 )})}
