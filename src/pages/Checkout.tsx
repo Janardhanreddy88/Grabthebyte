@@ -11,7 +11,8 @@ import {
   WifiOff,
   AlertOctagon,
   Tag,
-  X
+  X,
+  Trash2 // 🦅 NEW IMPORT FOR DELETE BUTTON!
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -55,19 +56,12 @@ export default function Checkout() {
   const [promoMessage, setPromoMessage] = useState({ text: "", type: "" });
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
-  // 🦅 THE BULLETPROOF PRICING LOGIC (UI ONLY)
-  // STEP 1: Lock in GrabTheByte's profit based on the RAW total (totalPrice), NOT discounted!
+  // 🦅 THE BULLETPROOF PRICING LOGIC
   const basePlatformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
-  
-  // STEP 2: Calculate the discounted food cost
   const discountedFoodCost = Math.max(0, totalPrice - appliedDiscount);
-  
-  // STEP 3: Calculate the final total including the 2.5% Razorpay fee
   const targetBankAmount = discountedFoodCost + basePlatformFee; 
-  const rawFinalTotal = cart.length === 0 ? 0 : (targetBankAmount / 0.975); // 0.975 accounts for exact 2.5% gross fee
+  const rawFinalTotal = cart.length === 0 ? 0 : (targetBankAmount / 0.975);
   const finalAmountToPay = Math.round(rawFinalTotal * 100) / 100;
-  
-  // STEP 4: Calculate the handling fee to show the user
   const totalHandlingFee = cart.length === 0 ? 0 : Math.round((finalAmountToPay - discountedFoodCost) * 100) / 100;
 
   useEffect(() => {
@@ -103,7 +97,6 @@ export default function Checkout() {
     };
   }, []);
 
-  // 🦅 FRONTEND PROMO CODE PREVIEW ENGINE
   const handleApplyPromo = async () => {
     if (!promoCodeInput.trim()) return;
     setIsCheckingPromo(true);
@@ -257,7 +250,6 @@ export default function Checkout() {
 
       const safePhone = user.phone || (user as any)?.user_metadata?.phone || "";
 
-      // 🦅 PERFECTLY REVERTED: Just the necessary fields sent to backend.
       const order = await createOrder({ 
         items: cart, 
         total: finalAmountToPay, 
@@ -336,34 +328,55 @@ export default function Checkout() {
               <h2 className="text-xs font-semibold uppercase tracking-wider">Order Items</h2>
             </div>
             <div className="bg-card rounded-xl shadow-sm border border-border/50 divide-y divide-border/50 overflow-hidden">
-              {cart.map((item) => (
-                <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 flex gap-3.5">
-                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
-                    <ImageWithFallback src={item.image || "/placeholder.svg"} alt={item.name} className="h-full w-full rounded-lg object-cover border border-border/50" fallbackIcon containerClassName="h-16 w-16 sm:h-20 sm:w-20" />
-                    <div className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 rounded-full bg-foreground text-background text-[10px] font-bold flex items-center justify-center">
-                      x{item.quantity}
-                    </div>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-between py-0.5">
-                    <div className="flex justify-between items-start gap-2">
-                      <h3 className="font-semibold text-sm leading-tight line-clamp-2">{item.name}</h3>
-                      <span className="font-bold text-sm whitespace-nowrap">₹{(item.price * item.quantity).toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-xs text-muted-foreground">₹{item.price.toFixed(2)} / item</p>
-                      <div className="flex items-center bg-secondary/50 rounded-lg p-0.5 gap-2 border border-border/50">
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded bg-background flex items-center justify-center shadow-sm" disabled={isLoading}>
-                          <Minus size={13} />
-                        </motion.button>
-                        <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm" disabled={isLoading}>
-                          <Plus size={13} />
-                        </motion.button>
+              {cart.map((item) => {
+                // 🦅 Identify if it's a token to clean up the UI display!
+                const isToken = item.category === 'token' || item.name.toLowerCase().includes('token');
+
+                return (
+                  <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 flex gap-3.5">
+                    <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
+                      <ImageWithFallback src={item.image || "/placeholder.svg"} alt={item.name} className="h-full w-full rounded-lg object-cover border border-border/50" fallbackIcon containerClassName="h-16 w-16 sm:h-20 sm:w-20" />
+                      <div className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 rounded-full bg-foreground text-background text-[10px] font-bold flex items-center justify-center">
+                        x{item.quantity}
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                    <div className="flex-1 flex flex-col justify-between py-0.5">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-semibold text-sm leading-tight line-clamp-2">{item.name}</h3>
+                        <span className="font-bold text-sm whitespace-nowrap">₹{(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        {/* Hide the '₹1/item' text for tokens to maintain the illusion */}
+                        <p className="text-xs text-muted-foreground">
+                          {isToken ? "Custom Amount" : `₹${item.price.toFixed(2)} / item`}
+                        </p>
+                        
+                        {/* 🦅 THE FIX: Added a Trash button alongside the quantity steppers! */}
+                        <div className="flex items-center gap-2">
+                          <motion.button 
+                            whileTap={{ scale: 0.9 }} 
+                            onClick={() => removeFromCart(item.id)} 
+                            className="w-7 h-7 rounded bg-red-100 text-red-600 flex items-center justify-center shadow-sm"
+                            disabled={isLoading}
+                          >
+                            <Trash2 size={13} strokeWidth={2.5} />
+                          </motion.button>
+                          
+                          <div className="flex items-center bg-secondary/50 rounded-lg p-0.5 gap-2 border border-border/50">
+                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded bg-background flex items-center justify-center shadow-sm" disabled={isLoading}>
+                              <Minus size={13} />
+                            </motion.button>
+                            <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
+                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm" disabled={isLoading}>
+                              <Plus size={13} />
+                            </motion.button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
 
@@ -403,7 +416,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Bill Summary - 🦅 This is where the magic UI breakdown happens */}
+          {/* Bill Summary */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground px-1">
               <Receipt size={15} />

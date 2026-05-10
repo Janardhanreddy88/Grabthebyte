@@ -74,7 +74,16 @@ export default function Menu() {
       )
     : safeFilteredItems;
 
+  // 🦅 THE FIX: Advanced Sorting Algorithm to PIN the Token!
   const searchedItems = [...baseItems].sort((a: any, b: any) => {
+    const aIsToken = a.category === 'token' || a.name.toLowerCase().includes('token');
+    const bIsToken = b.category === 'token' || b.name.toLowerCase().includes('token');
+
+    // Rule 1: Tokens always go straight to the top
+    if (aIsToken && !bIsToken) return -1;
+    if (!aIsToken && bIsToken) return 1;
+
+    // Rule 2: Then sort by availability
     const aAvail = a.isAvailable === true || a.is_available === true;
     const bAvail = b.isAvailable === true || b.is_available === true;
 

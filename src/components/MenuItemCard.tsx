@@ -1,12 +1,12 @@
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, Check, X } from "lucide-react";
+import { useState } from "react";
 import { MenuItem as BaseMenuItem } from "@/types/canteen";
 import { useCart } from "@/context/CartContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { ImageWithFallback } from "@/components/ImageWithFallback"; // 🌟 IMPORTED YOUR MASTERPIECE!
+import { ImageWithFallback } from "@/components/ImageWithFallback"; 
 
-// 🌟 Production Grade: Handle both JS camelCase and DB snake_case
 interface MenuItem extends BaseMenuItem { 
   quantity?: number; 
   is_available?: boolean; 
@@ -18,17 +18,34 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
   const cartItem = cart.find((i) => i.id === item.id);
   const quantity = cartItem?.quantity || 0;
   
-  // 🔥 THE PRODUCTION-READY PRIORITY LOGIC 🔥
-  // We ONLY treat strict TRUE as enabled. Everything else (null, undefined, false) is UNAVAILABLE.
+  // 🦅 NEW: State for the Token Inline Input
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [tokenAmount, setTokenAmount] = useState("");
+  
   const isItemEnabled = item.isAvailable === true || item.is_available === true;
   const isUnavailable = !isItemEnabled;
 
-  // Check stock: Treat null as 0 to be safe
-  const currentStock = item.quantity ?? (item as any).stock_quantity ?? 0;
+  // 🦅 THE FIX: Identify the token and grant it infinite stock!
+  const isToken = item.category === 'token' || item.name.toLowerCase().includes('token');
+  const currentStock = isToken ? 999999 : (item.quantity ?? (item as any).stock_quantity ?? 0);
   const isOutOfStock = currentStock <= 0;
 
-  // Combine: If it's disabled by Admin OR out of stock, it's un-buyable
   const isSoldOut = isUnavailable || isOutOfStock;
+
+  const handleTokenSubmit = () => {
+    const amount = parseInt(tokenAmount);
+    if (!isNaN(amount) && amount > 0) {
+      // Add the new amount to whatever they already have in the cart
+      if (quantity > 0) {
+        updateQuantity(item.id, quantity + amount);
+      } else {
+        // We use a loop here so the CartContext registers the initial addition properly
+    addToCart(item, amount);
+      }
+      setShowTokenInput(false);
+      setTokenAmount("");
+    }
+  };
 
   return (
     <motion.div 
@@ -37,7 +54,7 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
       className={cn(
         "group relative bg-card rounded-2xl overflow-hidden transition-all duration-200",
         quantity > 0 ? "ring-2 ring-primary shadow-lg" : "shadow-md hover:shadow-xl",
-        isSoldOut && "opacity-60 grayscale-[0.3]" // 🌟 Gray out the whole card
+        isSoldOut && "opacity-60 grayscale-[0.3]" 
       )}
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
@@ -58,7 +75,6 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
           </div>
         )}
 
-        {/* 🌟 UPGRADED: The Skeleton Loader is now active! */}
         <ImageWithFallback 
           src={item.image || "/placeholder.svg"} 
           alt={item.name} 
@@ -91,10 +107,29 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
         <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>
         
         <div className="flex items-center justify-between mt-3 gap-2">
-          <span className="text-sm lg:text-base font-black text-foreground">₹{item.price}</span>
+          {/* If it's a token, don't show "₹1", just show "Custom" */}
+          <span className="text-sm lg:text-base font-black text-foreground">
+            {isToken ? "Custom ₹" : `₹${item.price}`}
+          </span>
           
           {!isSoldOut ? (
-            quantity > 0 ? (
+            showTokenInput ? (
+              // 🦅 THE INLINE TOKEN INPUT
+              <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-xl">
+                <input 
+                  type="number" 
+                  autoFocus 
+                  className="w-12 h-7 text-xs font-bold border-none rounded-md text-center focus:ring-1 focus:ring-primary bg-background" 
+                  value={tokenAmount} 
+                  onChange={e => setTokenAmount(e.target.value)} 
+                  placeholder="₹"
+                  onKeyDown={(e) => e.key === 'Enter' && handleTokenSubmit()}
+                />
+                <button onClick={handleTokenSubmit} className="h-7 w-7 bg-emerald-500 text-white rounded-md flex items-center justify-center active:scale-95"><Check size={14}/></button>
+                <button onClick={() => setShowTokenInput(false)} className="h-7 w-7 bg-muted-foreground/20 text-foreground rounded-md flex items-center justify-center active:scale-95"><X size={14}/></button>
+              </div>
+            ) : quantity > 0 && !isToken ? (
+              // Normal Plus/Minus buttons for food items
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => updateQuantity(item.id, quantity - 1)}
@@ -110,11 +145,25 @@ export function MenuItemCard({ item }: MenuItemCardProps) {
                   <Plus size={14} strokeWidth={3} />
                 </button>
               </div>
+            ) : quantity > 0 && isToken ? (
+              // Custom button if they already have tokens in the cart
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-primary">₹{quantity} in cart</span>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="rounded-xl h-8 text-[10px] font-black px-3 active:scale-95 transition-all" 
+                  onClick={() => setShowTokenInput(true)}
+                >
+                  + ADD MORE
+                </Button>
+              </div>
             ) : (
+              // The default ADD button
               <Button 
                 size="sm" 
                 className="rounded-xl h-8 text-[10px] font-black px-4 bg-primary hover:bg-primary/90 shadow-md active:scale-95 transition-all" 
-                onClick={() => addToCart(item)}
+                onClick={() => isToken ? setShowTokenInput(true) : addToCart(item)}
               >
                 ADD
               </Button>

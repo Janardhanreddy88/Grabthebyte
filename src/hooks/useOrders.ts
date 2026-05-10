@@ -11,7 +11,8 @@ const createOrderParamsSchema = z.object({
     id: z.string(),
     name: z.string().min(1).max(200),
     price: z.number().nonnegative(),
-    quantity: z.number().int().positive().max(100),
+    // 🦅 THE FIX: Bumped max from 100 to 10000 so students can buy big tokens!
+    quantity: z.number().int().positive().max(10000),
   })).min(1),
   total: z.number().positive().max(999999),
   paymentMethod: z.string().min(1).max(50),
@@ -19,8 +20,10 @@ const createOrderParamsSchema = z.object({
   customerEmail: z.string().email().max(255).optional().or(z.literal('')).or(z.undefined()),
   customerPhone: z.string().optional(), 
   promoCode: z.string().optional().nullable(),
-  platformFee: z.number().nonnegative().optional(), // 🦅 Added to schema validation!
+  platformFee: z.number().nonnegative().optional(),
 });
+
+// ... Keep the rest of your file exactly the same!
 
 export interface CreateOrderParams {
   items: CartItem[];

@@ -3,7 +3,8 @@ import { CartItem, MenuItem, Order } from '@/types/canteen';
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (item: MenuItem) => void;
+  // 🦅 UPGRADED: addToCart now accepts a custom quantity!
+  addToCart: (item: MenuItem, quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -18,7 +19,6 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 const CART_STORAGE_KEY = 'grabthebyte_cart';
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  // 🌟 UPGRADE 1: Initialize from the phone's memory instead of an empty array!
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -33,7 +33,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
 
-  // 🌟 UPGRADE 2: Auto-Save! Every time 'cart' changes, write it to the phone's memory.
   useEffect(() => {
     try {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
@@ -42,15 +41,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [cart]);
 
-  const addToCart = (item: MenuItem) => {
+  // 🦅 UPGRADE 4: Smart limits & Bulk Additions
+  const addToCart = (item: MenuItem, quantityToAdd: number = 1) => {
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
+      
+      // Safety Check: Tokens can go up to ₹10,000. Normal food is capped at 50.
+      const isToken = item.category === 'token' || item.name.toLowerCase().includes('token');
+      const maxLimit = isToken ? 10000 : 50; 
+
       if (existing) {
+        const newQuantity = Math.min(existing.quantity + quantityToAdd, maxLimit);
         return prev.map(i => 
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.id === item.id ? { ...i, quantity: newQuantity } : i
         );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      const initialQty = Math.min(quantityToAdd, maxLimit);
+      return [...prev, { ...item, quantity: initialQty }];
     });
   };
 
@@ -63,12 +70,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeFromCart(itemId);
       return;
     }
+    
     setCart(prev => 
-      prev.map(i => i.id === itemId ? { ...i, quantity } : i)
+      prev.map(i => {
+        if (i.id === itemId) {
+           const isToken = i.category === 'token' || i.name.toLowerCase().includes('token');
+           const maxLimit = isToken ? 10000 : 50; 
+           return { ...i, quantity: Math.min(quantity, maxLimit) };
+        }
+        return i;
+      })
     );
   };
 
-  // 🌟 UPGRADE 3: Make sure clearing the cart also wipes the phone's memory
   const clearCart = () => {
     setCart([]);
     localStorage.removeItem(CART_STORAGE_KEY);
