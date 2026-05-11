@@ -98,7 +98,7 @@ export default function Checkout() {
   }, []);
 
   const handleApplyPromo = async () => {
-    if (!promoCodeInput.trim()) return;
+    if (!promoCodeInput.trim() || !user) return;
     setIsCheckingPromo(true);
     setPromoMessage({ text: "Checking...", type: "loading" });
 
@@ -112,6 +112,23 @@ export default function Checkout() {
 
       if (error || !offer) {
         setPromoMessage({ text: "Invalid or expired promo code.", type: "error" });
+        setAppliedDiscount(0);
+        setAppliedPromoCode(null);
+        return;
+      }
+
+      // 🦅 THE FIX: Check if the user has already used this code on a VALID order
+      const { data: pastOrders } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('promo_code', offer.promo_code)
+        // IGNORE any orders that failed, expired, cancelled, or refunded!
+        .not('status', 'in', '("failed","cancelled","expired","rejected","refunded")')
+        .limit(1);
+
+      if (pastOrders && pastOrders.length > 0) {
+        setPromoMessage({ text: "You have already used this promo code.", type: "error" });
         setAppliedDiscount(0);
         setAppliedPromoCode(null);
         return;

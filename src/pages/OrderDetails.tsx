@@ -84,7 +84,8 @@ export default function OrderDetails() {
   // 🦅 FIX: Calculate discount correctly by stripping the fee out first
   const discountAmount = order.promo_code ? Math.max(0, originalSubtotal - (grandTotal - displayFee)) : 0;
 
-  const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000;
+  // 🦅 THE FIX: Synced perfectly with the 3-minute rule!
+  const PAYMENT_TIMEOUT_MS = 3 * 60 * 1000;
   const isTimedOut = (Date.now() - new Date(order.created_at).getTime()) > PAYMENT_TIMEOUT_MS;
 
   const isPaid = ['completed', 'confirmed', 'paid', 'success'].includes(order.payment_status);
