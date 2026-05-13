@@ -1,0 +1,35 @@
+name: Deploy to Hostinger
+
+# This tells the robot to wake up every time you push code to the 'main' branch
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Adjust this if you use a different Node version
+
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      - name: 🔨 Build Project (Generating the dist folder)
+        run: npm run build
+
+      - name: 🚀 Sync files to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/ 
+          server-dir: ./public_html/
