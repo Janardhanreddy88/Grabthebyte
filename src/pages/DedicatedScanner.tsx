@@ -10,11 +10,11 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   LogOut, CheckCircle, XCircle, AlertCircle, RefreshCw,
   Bluetooth, BluetoothOff, Volume2, VolumeX, Loader2,
-  Search, Clock, History, X, Camera, SwitchCamera,
-  QrCode, Store, User 
+  Clock, History, X, Camera, SwitchCamera,
+  QrCode, Store, User, Lock, Unlock, SunMedium,Search // 🦅 IMPORTED SUN ICON FOR GLARE WARNING
 } from 'lucide-react';
 import jsQR from 'jsqr';
-import { useCampusBouncer } from '@/hooks/useCampusBouncer'; // 🌟 IMPORTED THE BOUNCER
+import { useCampusBouncer } from '@/hooks/useCampusBouncer'; 
 
 // ─── Audio Feedback ───
 const playSuccessSound = () => {
@@ -89,6 +89,15 @@ export default function KioskScanner() {
   const [scanning, setScanning] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
+  // 🌟 BATTERY & GLARE SAVER STATES
+  const [isSleeping, setIsSleeping] = useState(false);
+  const [showGlareWarning, setShowGlareWarning] = useState(false); // 🦅 NEW GLARE WARNING STATE
+
+  // 🌟 UI LOCK STATE (TRIPLE CLICK FEATURE)
+  const [isLocked, setIsLocked] = useState(false);
+  const unlockClickCount = useRef(0);
+  const unlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Results State
   const [showResult, setShowResult] = useState(false);
   const [resultType, setResultType] = useState<ResultType>(null);
@@ -114,11 +123,35 @@ export default function KioskScanner() {
   
   const scanningPausedRef = useRef<boolean>(false); 
   const lastProcessTimeRef = useRef<number>(0); 
+  const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); 
+  const glareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // 🦅 GLARE TIMER REF
 
-  // 🌟 Auto-Connect Tracker 🌟
   const hasAttemptedAutoConnect = useRef<boolean>(false);
 
   useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
+
+  // =======================================================================
+  // 🦅 THE HARDWARE BACK BUTTON TRAP
+  // =======================================================================
+  useEffect(() => {
+    if (!isLocked) return;
+
+    // Push a dummy state into the navigation history
+    window.history.pushState(null, '', window.location.href);
+
+    const blockBackButton = () => {
+      // Push the state again to keep them trapped
+      window.history.pushState(null, '', window.location.href);
+      toast({ 
+        title: 'Kiosk Locked 🔒', 
+        description: 'You must unlock the screen to leave this page.', 
+        variant: 'destructive' 
+      });
+    };
+
+    window.addEventListener('popstate', blockBackButton);
+    return () => window.removeEventListener('popstate', blockBackButton);
+  }, [isLocked, toast]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -141,7 +174,6 @@ export default function KioskScanner() {
     fetchProfile();
   }, []);
 
-  // 🌟 MEMORY-WIPING LOGOUT FOR KIOSK
   const handleSignOut = async () => {
     if (logout) await logout();
     localStorage.removeItem('campus_code');
@@ -151,7 +183,6 @@ export default function KioskScanner() {
     navigate('/');
   };
 
-  // 🌟 AGGRESSIVE AUTO-CONNECT TRIGGER 🌟
   useEffect(() => {
     if (activeScreen === 'home') {
       hasAttemptedAutoConnect.current = false;
@@ -161,7 +192,7 @@ export default function KioskScanner() {
     }
   }, [activeScreen, isPrinterConnected, connectPrinter]);
 
-  // ─── Camera Management ───
+  // 🦅 THE WATCHDOG RESETS (BATTERY & GLARE)
   const stopCamera = useCallback(() => {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -172,7 +203,25 @@ export default function KioskScanner() {
       streamRef.current = null;
     }
     setCameraActive(false);
+    if (glareTimerRef.current) clearTimeout(glareTimerRef.current);
+    setShowGlareWarning(false);
   }, []);
+
+  const resetTimers = useCallback(() => {
+    // 1. Reset Battery Saver (2 mins)
+    if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+    sleepTimerRef.current = setTimeout(() => {
+      setIsSleeping(true);
+      stopCamera();
+    }, 120000); 
+
+    // 2. Reset Glare Watchdog (6 seconds)
+    if (glareTimerRef.current) clearTimeout(glareTimerRef.current);
+    setShowGlareWarning(false);
+    glareTimerRef.current = setTimeout(() => {
+      setShowGlareWarning(true); // Pop the warning if no scan happens!
+    }, 6000);
+  }, [stopCamera]);
 
   const scanQRFromCamera = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -203,7 +252,10 @@ export default function KioskScanner() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+      // 🦅 JSQR UPGRADE: 'attemptBoth' fixes dark mode and severe glare inversion!
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { 
+        inversionAttempts: 'attemptBoth' 
+      });
 
       if (code?.data && code.data !== lastScannedRef.current) {
         lastScannedRef.current = code.data;
@@ -221,17 +273,20 @@ export default function KioskScanner() {
     setShowResult(false);
     setResultType(null);
     setScanning(false);
+    setIsSleeping(false); 
     scanningPausedRef.current = false; 
     lastScannedRef.current = ''; 
 
     const useFacing = mode || facingModeRef.current;
 
     try {
+      // 🦅 WEBRTC UPGRADE: Bump resolution to 720p and beg for continuous autofocus!
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: useFacing },
-          width: { ideal: 640 }, 
-          height: { ideal: 480 },
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          advanced: [{ focusMode: "continuous" }] as any,
         },
       });
       streamRef.current = stream;
@@ -242,15 +297,20 @@ export default function KioskScanner() {
         videoRef.current.setAttribute('playsinline', 'true');
         await videoRef.current.play();
         scanQRFromCamera();
+        resetTimers(); // Start the watchdogs!
       }
     } catch (err: any) {
-      console.error('Camera error:', err);
       setCameraError(err?.name === 'NotAllowedError'
         ? 'Camera permission denied. Please allow camera access.'
         : 'Unable to access camera. Check if another app is using it.'
       );
     }
-  }, [stopCamera, scanQRFromCamera]);
+  }, [stopCamera, scanQRFromCamera, resetTimers]);
+
+  const wakeUpScanner = useCallback(() => {
+    setIsSleeping(false);
+    startCamera();
+  }, [startCamera]);
 
   const switchCamera = useCallback(() => {
     const newMode = facingMode === 'user' ? 'environment' : 'user';
@@ -263,14 +323,46 @@ export default function KioskScanner() {
       startCamera();
     } else {
       stopCamera();
+      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+      if (glareTimerRef.current) clearTimeout(glareTimerRef.current);
     }
-    return () => stopCamera();
+    return () => {
+      stopCamera();
+      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+      if (glareTimerRef.current) clearTimeout(glareTimerRef.current);
+    };
   }, [activeScreen, startCamera, stopCamera]);
 
-  // ─── Core Scan Logic ───
+  // 🦅 THE TRIPLE CLICK UNLOCK LOGIC
+  const handleUnlockAttempt = () => {
+    unlockClickCount.current += 1;
+    if (unlockClickCount.current === 1) {
+      unlockTimerRef.current = setTimeout(() => {
+        unlockClickCount.current = 0; 
+      }, 2000);
+    }
+    if (unlockClickCount.current >= 3) {
+      setIsLocked(false);
+      unlockClickCount.current = 0;
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+      toast({ title: 'Kiosk Unlocked', description: 'Settings are now accessible.' });
+    }
+  };
+
+  const handleLockScreen = () => {
+    setIsLocked(true);
+    setShowManualInput(false);
+    setShowHistory(false);
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch((e) => console.log(e));
+    }
+    toast({ title: 'Kiosk Locked', description: 'Tap the lock icon 3 times quickly to unlock.' });
+  };
+
   const handleScan = useCallback(async (qrData: string) => {
     if (scanning) return;
     setScanning(true);
+    resetTimers(); // 🦅 SCANNED SUCCESSFULLY! RESET ALL WATCHDOGS!
 
     try {
       const cleanedToken = qrData.trim();
@@ -308,7 +400,6 @@ export default function KioskScanner() {
           if (soundEnabled) playSuccessSound();
 
           if (isPrinterConnected && orderData) {
-            // 🦅 THE FIX: PASS PROMO AND FEE TO THE PRINTER
             printTicket({
               orderNumber: orderData.order_number,
               items: scannedOrder.items,
@@ -350,7 +441,6 @@ export default function KioskScanner() {
             setResultMessage('Order expired.');
             if (soundEnabled) playErrorSound();
           } else if (order.status === 'confirmed') {
-            // 🦅 THE FIX: FETCH PROMO CODE ALONG WITH COLLECTION TOKEN
             const { data: tokenData } = await supabase
               .from('orders')
               .select('collection_token, promo_code, platform_fee')
@@ -380,7 +470,6 @@ export default function KioskScanner() {
                 if (soundEnabled) playSuccessSound();
 
                 if (isPrinterConnected) {
-                  // 🦅 THE FIX: PASS PROMO AND FEE TO THE PRINTER
                   printTicket({
                     orderNumber: order.qrCode,
                     items: scannedOrder.items,
@@ -430,7 +519,7 @@ export default function KioskScanner() {
     } finally {
       setScanning(false);
     }
-  }, [scanning, verifyQrCode, verifyByCollectionToken, soundEnabled, isPrinterConnected, printTicket]);
+  }, [scanning, verifyQrCode, verifyByCollectionToken, soundEnabled, isPrinterConnected, printTicket, resetTimers]);
 
   const handleManualLookup = async () => {
     if (!manualOrderNumber.trim()) return;
@@ -449,7 +538,8 @@ export default function KioskScanner() {
     lastScannedRef.current = '';
     scanCooldownRef.current = false;
     scanningPausedRef.current = false; 
-  }, []);
+    resetTimers(); // 🦅 RESTART WATCHDOG AFTER RESULT CLOSES
+  }, [resetTimers]);
 
   useEffect(() => {
     if (showResult && resultType) {
@@ -542,84 +632,104 @@ export default function KioskScanner() {
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
       {/* ─── HEADER BAR ─── */}
-      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => isPrinterConnected ? disconnectPrinter() : connectPrinter()}
-            disabled={isConnecting}
-            className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/20 active:scale-95 transition-transform"
-          >
-            {isConnecting ? (
-              <Loader2 className="w-4 h-4 text-white animate-spin" />
-            ) : isPrinterConnected ? (
-              <Bluetooth className="w-4 h-4 text-green-400" />
-            ) : (
-              <BluetoothOff className="w-4 h-4 text-yellow-400" />
-            )}
-            <span className="text-white text-xs font-medium">
-              {isConnecting ? 'Connecting...' : isPrinterConnected ? 'Printer Ready' : 'No Printer'}
-            </span>
-          </button>
-        </div>
+      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-all">
+        
+        {/* 🦅 WHEN LOCKED: Hide printer details, show only faded Lock icon */}
+        {isLocked ? (
+          <div className="w-full flex justify-end">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleUnlockAttempt}
+              className="text-white/30 hover:text-white/60 bg-black/20 rounded-full mt-2"
+            >
+              <Lock className="w-5 h-5" />
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* UNLOCKED: LEFT SIDE (Printer Status) */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => isPrinterConnected ? disconnectPrinter() : connectPrinter()}
+                disabled={isConnecting}
+                className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/20 active:scale-95 transition-transform"
+              >
+                {isConnecting ? (
+                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+                ) : isPrinterConnected ? (
+                  <Bluetooth className="w-4 h-4 text-green-400" />
+                ) : (
+                  <BluetoothOff className="w-4 h-4 text-yellow-400" />
+                )}
+                <span className="text-white text-xs font-medium">
+                  {isConnecting ? 'Connecting...' : isPrinterConnected ? 'Printer Ready' : 'No Printer'}
+                </span>
+              </button>
+            </div>
 
-        <div className="flex items-center gap-1 z-50 transition-opacity duration-300">
-          <Button
-            variant="ghost" size="icon"
-            onClick={switchCamera}
-            className="text-white hover:bg-white/10"
-          >
-            <SwitchCamera className="w-5 h-5" />
-          </Button>
+            {/* UNLOCKED: RIGHT SIDE MENU */}
+            <div className="flex items-center gap-1 z-50 transition-opacity duration-300">
+              <Button
+                variant="ghost" size="icon"
+                onClick={switchCamera}
+                className="text-white hover:bg-white/10"
+              >
+                <SwitchCamera className="w-5 h-5" />
+              </Button>
 
-          <Button
-            variant="ghost" size="icon"
-            onClick={() => setShowHistory(!showHistory)}
-            className="text-white hover:bg-white/10 relative"
-          >
-            <History className="w-5 h-5" />
-            {scannedHistory.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {scannedHistory.length}
-              </span>
-            )}
-          </Button>
+              <Button
+                variant="ghost" size="icon"
+                onClick={() => setShowHistory(!showHistory)}
+                className="text-white hover:bg-white/10 relative"
+              >
+                <History className="w-5 h-5" />
+                {scannedHistory.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {scannedHistory.length}
+                  </span>
+                )}
+              </Button>
 
-          <Button
-            variant="ghost" size="icon"
-            onClick={() => setShowManualInput(!showManualInput)}
-            className="text-white hover:bg-white/10"
-          >
-            <Search className="w-5 h-5" />
-          </Button>
+              {/* 🦅 THE LOCK BUTTON (REPLACED THE SEARCH BUTTON) */}
+              <Button
+                variant="ghost" size="icon"
+                onClick={handleLockScreen}
+                className="text-emerald-400 hover:bg-white/10"
+              >
+                <Unlock className="w-5 h-5" />
+              </Button>
 
-          <Button
-            variant="ghost" size="icon"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="text-white hover:bg-white/10"
-          >
-            {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-          </Button>
+              <Button
+                variant="ghost" size="icon"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="text-white hover:bg-white/10"
+              >
+                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </Button>
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => {
-              stopCamera();
-              if (isFromAdmin) {
-                navigate(-1); 
-              } else {
-                setActiveScreen('home'); 
-              }
-            }} 
-            className="text-white hover:bg-slate-700/50 bg-black/20 rounded-full ml-2 border border-white/10"
-          >
-            <X className="w-5 h-5" />
-          </Button>
-        </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => {
+                  stopCamera();
+                  if (isFromAdmin) {
+                    navigate(-1); 
+                  } else {
+                    setActiveScreen('home'); 
+                  }
+                }} 
+                className="text-white hover:bg-slate-700/50 bg-black/20 rounded-full ml-2 border border-white/10"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ─── MANUAL INPUT BAR ─── */}
-      {showManualInput && (
+      {/* ─── MANUAL INPUT BAR (Hidden) ─── */}
+      {showManualInput && !isLocked && (
         <div className="absolute top-20 left-0 right-0 z-40 px-4 py-3 bg-black/80 backdrop-blur-lg border-b border-white/10 animate-fade-in">
           <div className="flex gap-2 max-w-md mx-auto">
             <Input
@@ -641,17 +751,33 @@ export default function KioskScanner() {
         </div>
       )}
 
+      {/* ─── 🔋 BATTERY SAVER SLEEP OVERLAY ─── */}
+      {isSleeping && (
+        <div 
+          className="absolute inset-0 z-40 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center cursor-pointer animate-in fade-in duration-300"
+          onClick={wakeUpScanner}
+        >
+          <div className="w-32 h-32 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.15)] animate-[pulse_3s_ease-in-out_infinite]">
+            <Camera className="w-12 h-12 text-emerald-400 opacity-80" />
+          </div>
+          <h2 className="text-4xl font-black text-white mb-3 tracking-widest text-center">TAP TO WAKE</h2>
+          <p className="text-emerald-400/80 font-medium uppercase tracking-widest text-sm text-center">
+            Camera sleeping to save battery
+          </p>
+        </div>
+      )}
+
       {/* ─── CAMERA VIDEO ─── */}
       <video
         ref={videoRef}
-        className={`absolute inset-0 w-full h-full object-cover ${!cameraActive ? 'opacity-0' : ''}`}
+        className={`absolute inset-0 w-full h-full object-cover ${!cameraActive || isSleeping ? 'opacity-0' : ''}`}
         muted
         playsInline
       />
       <canvas ref={canvasRef} className="hidden" />
 
       {/* ─── SCANNING RETICLE ─── */}
-      {!showResult && cameraActive && (
+      {!showResult && cameraActive && !isSleeping && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
           <div className="absolute inset-0 bg-black/40" />
           <div className="relative w-72 h-72 z-10">
@@ -662,7 +788,16 @@ export default function KioskScanner() {
             <div className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" 
               style={{ top: '50%' }}
             />
+            
+            {/* 🦅 THE GLARE WATCHDOG UI WARNING! */}
+            {showGlareWarning && !scanning && (
+              <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-72 bg-amber-500/90 backdrop-blur-md text-white px-3 py-2 rounded-xl text-xs font-bold border border-amber-400 shadow-xl flex items-center gap-2 animate-in slide-in-from-top-2 duration-300">
+                <SunMedium className="w-6 h-6 shrink-0" />
+                <p>Lower the screen brightness for better scanning.</p>
+              </div>
+            )}
           </div>
+
           <div className="absolute bottom-24 z-10">
             <div className="bg-black/60 backdrop-blur-md text-white px-5 py-2.5 rounded-full text-sm font-medium border border-white/10">
               {scanning ? (
@@ -680,7 +815,7 @@ export default function KioskScanner() {
       )}
 
       {/* ─── COMPACT RESULT BANNER (Success & Error) ─── */}
-      {showResult && resultType && (
+      {showResult && resultType && !isSleeping && (
         <div className="absolute bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-200">
           <div className={`${resultConfig.bg} px-5 py-4 flex items-center gap-3`}>
             <ResultIcon className="w-8 h-8 text-white shrink-0" />
@@ -702,7 +837,7 @@ export default function KioskScanner() {
       )}
 
       {/* ─── CAMERA ERROR ─── */}
-      {cameraError && (
+      {cameraError && !isSleeping && (
         <div className="absolute inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6">
           <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
           <h2 className="text-white text-lg font-semibold mb-2">Camera Error</h2>
@@ -711,19 +846,12 @@ export default function KioskScanner() {
             <Button onClick={() => startCamera()} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               <RefreshCw className="w-4 h-4 mr-2" /> Retry Camera
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => { setCameraError(null); setShowManualInput(true); }}
-              className="border-white/20 text-white hover:bg-white/10"
-            >
-              <Search className="w-4 h-4 mr-2" /> Manual Entry
-            </Button>
           </div>
         </div>
       )}
 
-      {/* ─── ORDER HISTORY SIDEBAR ─── */}
-      {showHistory && (
+      {/* ─── ORDER HISTORY SIDEBAR (Hidden if Locked) ─── */}
+      {showHistory && !isLocked && (
         <div className="absolute top-0 right-0 bottom-0 z-50 w-80 bg-gray-950/95 backdrop-blur-xl border-l border-white/10 flex flex-col animate-slide-in-right">
           <div className="flex items-center justify-between p-4 border-b border-white/10">
             <h3 className="text-white font-semibold flex items-center gap-2">
@@ -781,7 +909,6 @@ export default function KioskScanner() {
         </div>
       )}
 
-      {/* ─── Scan Line Animation ─── */}
       <style>{`
         @keyframes scan {
           0%, 100% { transform: translateY(-60px); opacity: 0.3; }

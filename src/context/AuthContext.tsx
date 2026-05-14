@@ -11,7 +11,8 @@ declare global {
   }
 }
 
-type UserAccess = { role: UserRole; campusId?: string };
+// 🦅 ADDED 'profile' to grab the Guest Visitor data!
+type UserAccess = { role: UserRole; campusId?: string; profile?: any };
 
 interface AuthContextType {
   user: User | null;
@@ -21,6 +22,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isKiosk: boolean;
   isSuperAdmin: boolean;
+  isAnonymous: boolean; // 🦅 NEW: Expose the Guest Status globally!
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
   signup: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -36,10 +38,12 @@ const mapRole = (role: unknown): UserRole => {
   return "student";
 };
 
+// 🦅 UPGRADED: Handle Anonymous Users who have no email!
 const getFullName = (sessionEmail: string | undefined, fullNameMeta: unknown) => {
   const metaName = typeof fullNameMeta === "string" ? fullNameMeta.trim() : "";
   if (metaName) return metaName;
-  return (sessionEmail ?? "User").split("@")[0].replace(/[._]/g, " ");
+  if (sessionEmail) return sessionEmail.split("@")[0].replace(/[._]/g, " ");
+  return "Guest Visitor"; // Fallback for Anonymous!
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -50,19 +54,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUserAccess = useCallback(async (userId: string): Promise<UserAccess> => {
     // 🚀 OFFLINE SHIELD: Skip network request if offline to avoid crashes
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return { role: "student", campusId: undefined };
+      return { role: "student", campusId: undefined, profile: null };
     }
 
     try {
       const [rolesResult, profileResult] = await Promise.all([
         supabase.from("user_roles").select("role, campus_id").eq("user_id", userId).maybeSingle(),
-        supabase.from("profiles").select("campus_id").eq("user_id", userId).maybeSingle(),
+        // 🦅 Fetch the profile so we get the Dummy Phone and Guest Name!
+        supabase.from("profiles").select("campus_id, full_name, phone").eq("user_id", userId).maybeSingle(),
       ]);
       const role = mapRole(rolesResult.data?.role);
       const campusId = (rolesResult.data?.campus_id as string | undefined) || (profileResult.data?.campus_id as string | undefined);
-      return { role, campusId };
+      return { role, campusId, profile: profileResult.data };
     } catch {
-      return { role: "student", campusId: undefined };
+      return { role: "student", campusId: undefined, profile: null };
     }
   }, []);
 
@@ -77,15 +82,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const access = await fetchUserAccess(nextSession.user.id);
       const fallbackCampusId = access.campusId || nextSession.user.user_metadata?.campus_id;
+      
+      // 🦅 Extract data from the database profile if metadata is empty (Anonymous Users)
+      const profileName = access.profile?.full_name;
+      const profilePhone = access.profile?.phone;
 
       setUser({
         id: nextSession.user.id,
         email: nextSession.user.email ?? "",
-        fullName: getFullName(nextSession.user.email, nextSession.user.user_metadata?.full_name),
-        phone: typeof nextSession.user.phone === "string" && nextSession.user.phone ? nextSession.user.phone : undefined,
+        fullName: getFullName(nextSession.user.email, nextSession.user.user_metadata?.full_name || profileName),
+        phone: typeof nextSession.user.phone === "string" && nextSession.user.phone ? nextSession.user.phone : (profilePhone || undefined),
         role: access.role,
         campusId: fallbackCampusId,
-      });
+      } as User); // Asserting as User to satisfy the type
 
       const isNative = Capacitor.isNativePlatform();
       if (isNative) {
@@ -105,7 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [fetchUserAccess]
   );
-
 
   useEffect(() => {
     let mounted = true;
@@ -129,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [setFromSession]);
-
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
@@ -212,6 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
   const isKiosk = user?.role === "kiosk";
   const isSuperAdmin = user?.role === "super_admin";
+  const isAnonymous = session?.user?.is_anonymous ?? false; // 🦅 THE GUEST CHECK FLAG
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -223,8 +231,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextType>(
-    () => ({ user, session, isLoading, isAuthenticated, isAdmin, isKiosk, isSuperAdmin, login, signup, logout, updateUser, changePassword, requestPasswordReset }),
-    [user, session, isLoading, isAuthenticated, isAdmin, isKiosk, isSuperAdmin, login, signup, logout, updateUser, changePassword, requestPasswordReset]
+    () => ({ 
+      user, session, isLoading, isAuthenticated, isAdmin, isKiosk, isSuperAdmin, isAnonymous, // 🦅 EXPORTED HERE
+      login, signup, logout, updateUser, changePassword, requestPasswordReset 
+    }),
+    [user, session, isLoading, isAuthenticated, isAdmin, isKiosk, isSuperAdmin, isAnonymous, login, signup, logout, updateUser, changePassword, requestPasswordReset]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

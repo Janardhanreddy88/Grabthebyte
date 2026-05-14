@@ -142,7 +142,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     });
     commands.push(...textEncoder.encode(`${separator}\n`));
 
-    // =====================================================================
+   // =====================================================================
     // 🌟 🦅 PRINTER MATH VAULT (PROMO CODES & FEES) 🦅 🌟
     // =====================================================================
     commands.push(ESC, 0x61, 0x02); // Align Right
@@ -155,10 +155,11 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (orderData.promoCode) {
-      // Use passed discount amount, or fallback to math
+      // 🦅 THE FIX: Properly reverse-engineer the discount by including the platform fee!
+      const fee = orderData.platformFee || 0;
       const discount = orderData.discountAmount !== undefined 
         ? orderData.discountAmount 
-        : Math.max(0, subtotal - orderData.totalAmount);
+        : Math.max(0, (subtotal + fee) - orderData.totalAmount);
       
       commands.push(...textEncoder.encode(`Promo (${orderData.promoCode}): -Rs.${discount}\n`));
     }
@@ -167,14 +168,15 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       commands.push(...textEncoder.encode(`Platform Fee: +Rs.${orderData.platformFee}\n`));
     }
 
-    // Calculate final printed total
-    const finalToPay = orderData.platformFee ? (orderData.totalAmount + orderData.platformFee) : orderData.totalAmount;
+    // 🦅 THE FIX: The frontend UI already added the platform fee to the totalAmount!
+    // We just print the exact totalAmount passed from the UI.
+    const finalToPay = orderData.totalAmount;
 
     commands.push(ESC, 0x45, 0x01); 
     commands.push(GS, 0x21, 0x11); 
     commands.push(...textEncoder.encode(`TOTAL: Rs.${finalToPay}\n`));
     commands.push(GS, 0x21, 0x00); 
-    commands.push(ESC, 0x45, 0x00); 
+    commands.push(ESC, 0x45, 0x00);
 
     commands.push(ESC, 0x61, 0x01); 
     commands.push(...textEncoder.encode(`\n${separator}\n`));

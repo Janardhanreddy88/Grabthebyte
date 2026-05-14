@@ -9,7 +9,7 @@ import { Logo } from '@/components/Logo';
 import { useCampus } from '@/context/CampusContext';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
-import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer, Info } from 'lucide-react'; // 🦅 Added Info icon
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
@@ -73,7 +73,6 @@ export default function Auth() {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       setIsLoggingOut(false);
-      // 🌟 REPLACE: True
       if (!session) navigate('/auth', { replace: true });
     })();
     return () => { cancelled = true; };
@@ -160,7 +159,6 @@ export default function Auth() {
     e.preventDefault(); clearErrors();
     if (!validateLoginForm()) return;
     
-    // 🌟 FIXED: Added replace: true
     if (!campus?.id) { 
       toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
       navigate('/select-campus', { replace: true }); 
@@ -187,7 +185,6 @@ export default function Auth() {
     e.preventDefault(); clearErrors();
     if (!validateSignupForm()) return;
     
-    // 🌟 FIXED: Added replace: true
     if (!campus?.id) { 
       toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
       navigate('/select-campus', { replace: true }); 
@@ -221,6 +218,39 @@ export default function Auth() {
       
     } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
     finally { setIsLoading(false); }
+  };
+
+  // 🦅 THE ANONYMOUS GUEST LOGIN GENERATOR
+  const handleVisitorLogin = async () => {
+    if (!campus?.id) { 
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
+      navigate('/select-campus', { replace: true }); 
+      return; 
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Create a temporary guest profile so RLS and the Bouncer don't panic!
+        await supabase.from('profiles').upsert({
+          user_id: data.user.id,
+          full_name: 'Guest Visitor',
+          phone: '0000000000', // Dummy phone placeholder
+          campus_id: campus.id,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+        toast({ title: 'Welcome, Guest!', description: 'You can now browse and order.' });
+      }
+    } catch (error: any) {
+      toast({ title: 'Guest Login Failed', description: error.message || 'Error occurred.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleResendOtp = async () => {
@@ -386,6 +416,40 @@ export default function Auth() {
               )}
             </TabsContent>
           </Tabs>
+
+          {/* 🦅 THE GUEST CHECKOUT BUTTON WITH WARNING */}
+          {!isVerifyingOtp && (
+            <div className="mt-4">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground font-semibold">Or</span>
+                </div>
+              </div>
+              
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full font-bold rounded-xl gap-2 text-sm border-dashed hover:bg-primary/5 hover:text-primary transition-colors"
+                onClick={handleVisitorLogin}
+                disabled={isLoading}
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <User size={16} />}
+                Continue as Visitor
+              </Button>
+              
+              {/* 🦅 STRICT VISITOR DISCLAIMER */}
+              <div className="mt-3 flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[10px] leading-tight text-amber-800 dark:text-amber-200 font-medium">
+                  <strong>Continue as Visitor</strong> button is strictly for people from other colleges
+                </p>
+              </div>
+            </div>
+          )}
+
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-5">

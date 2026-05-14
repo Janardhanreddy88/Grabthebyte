@@ -35,7 +35,10 @@ import { Input } from "@/components/ui/input";
 export default function Checkout() {
   const navigate = useNavigate();
   const { cart, totalPrice, totalItems, updateQuantity, removeFromCart } = useCart();
-  const { user } = useAuth();
+  
+  // 🦅 THE UPGRADE: PULL IN THE isAnonymous FLAG
+  const { user, isAnonymous } = useAuth(); 
+  
   const { campus } = useCampus(); 
   const { createOrder, isCreating } = useOrders();
   const { toast } = useToast();
@@ -117,18 +120,25 @@ export default function Checkout() {
         return;
       }
 
-      // 🦅 THE FIX: Check if the user has already used this code on a VALID order
+      // 🦅 THE UPGRADE: Count EXACTLY how many times the user has used this code!
       const { data: pastOrders } = await supabase
         .from('orders')
         .select('id')
         .eq('user_id', user.id)
         .eq('promo_code', offer.promo_code)
         // IGNORE any orders that failed, expired, cancelled, or refunded!
-        .not('status', 'in', '("failed","cancelled","expired","rejected","refunded")')
-        .limit(1);
+        .not('status', 'in', '("failed","cancelled","expired","rejected","refunded")');
+        // Notice we removed .limit(1) so we can count them all!
 
-      if (pastOrders && pastOrders.length > 0) {
-        setPromoMessage({ text: "You have already used this promo code.", type: "error" });
+      // Read the limit from the database (default to 1 if the cell is accidentally empty)
+      const maxUsesAllowed = offer.max_uses_per_user || 1;
+
+      // Now we do real math! Have they reached or exceeded their specific limit?
+      if (pastOrders && pastOrders.length >= maxUsesAllowed) {
+        setPromoMessage({ 
+          text: `You have reached the maximum limit (${maxUsesAllowed} uses) for this code.`, 
+          type: "error" 
+        });
         setAppliedDiscount(0);
         setAppliedPromoCode(null);
         return;
@@ -265,14 +275,17 @@ export default function Checkout() {
         return; 
       }
 
-      const safePhone = user.phone || (user as any)?.user_metadata?.phone || "";
+      // 🦅 STRICT GUEST CHECK: Only inject dummy data if they are a visitor!
+      const safePhone = user.phone || (user as any)?.user_metadata?.phone || (isAnonymous ? "0000000000" : "");
+      const safeEmail = user.email || (isAnonymous ? "guest@grabthebyte.com" : "");
+      const safeName = user.fullName || (isAnonymous ? "Guest Visitor" : "Student");
 
       const order = await createOrder({ 
         items: cart, 
         total: finalAmountToPay, 
         paymentMethod: "razorpay", 
-        customerName: user.fullName, 
-        customerEmail: user.email,
+        customerName: safeName, 
+        customerEmail: safeEmail,
         customerPhone: safePhone,
         promoCode: appliedPromoCode,
         platformFee: totalHandlingFee 
@@ -280,7 +293,7 @@ export default function Checkout() {
 
       if (order) { 
         navigate(`/payment?order_id=${order.id}&amount=${finalAmountToPay}`, {
-          state: { customerName: user.fullName, customerEmail: user.email, customerPhone: safePhone }
+          state: { customerName: safeName, customerEmail: safeEmail, customerPhone: safePhone }
         });
       } else { 
         toast({ title: "Order Failed", description: "Could not create order.", variant: "destructive" }); 
