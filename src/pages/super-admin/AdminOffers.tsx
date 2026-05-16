@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed } from 'lucide-react';
+import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed, UploadCloud, Image as ImageIcon,CheckCircle2 } from 'lucide-react';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 
 interface Offer {
@@ -20,7 +20,6 @@ interface Offer {
   max_global_uses: number | null;
   is_active: boolean;
   valid_until: string | null;
-  // 🦅 ADDED MISSING DB COLUMNS
   valid_from: string | null;
   max_uses_per_user: number | null;
   banner_text: string | null;
@@ -35,6 +34,9 @@ export default function AdminOffers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   
+  // 🦅 NEW STATE FOR UPLOADER
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [menuItems, setMenuItems] = useState<{id: string, name: string}[]>([]);
 
   const [formData, setFormData] = useState({
@@ -48,9 +50,8 @@ export default function AdminOffers() {
     target_item_id: 'all', 
     max_global_uses: '',
     valid_until: '',
-    // 🦅 ADDED TO STATE
     valid_from: '',
-    max_uses_per_user: '1', // Defaulting to 1 per user to prevent abuse!
+    max_uses_per_user: '1', 
     banner_text: '',
     background_image_url: ''
   });
@@ -88,6 +89,40 @@ export default function AdminOffers() {
     setLoading(false);
   };
 
+  // 🦅 NEW: DIRECT SUPABASE IMAGE UPLOAD FUNCTION
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      // Generate a random math string to prevent duplicate file name errors
+      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // 1. Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('offer_banners')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Grab the Public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('offer_banners')
+        .getPublicUrl(filePath);
+
+      // 3. Save it to form state
+      setFormData(prev => ({ ...prev, background_image_url: publicUrlData.publicUrl }));
+      toast({ title: 'Banner Uploaded!', description: 'Image successfully attached to promo code.' });
+    } catch (error: any) {
+      toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleCreateOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -98,7 +133,6 @@ export default function AdminOffers() {
         ? null 
         : Math.abs(Number(formData.max_discount_amount));
 
-      // 🦅 FULL DB PAYLOAD MAPPING
       const newOffer = {
         promo_code: formData.promo_code.toUpperCase().trim(),
         discount_type: formData.discount_type,
@@ -110,8 +144,7 @@ export default function AdminOffers() {
         target_item_id: formData.target_item_id === 'all' ? null : formData.target_item_id,
         max_global_uses: formData.max_global_uses ? Math.abs(Number(formData.max_global_uses)) : null,
         
-        // Dates & New Fields
-        valid_from: formData.valid_from ? new Date(formData.valid_from).toISOString() : new Date().toISOString(), // Default to right now if empty
+        valid_from: formData.valid_from ? new Date(formData.valid_from).toISOString() : new Date().toISOString(),
         valid_until: formData.valid_until ? new Date(formData.valid_until).toISOString() : null,
         max_uses_per_user: formData.max_uses_per_user ? Math.abs(Number(formData.max_uses_per_user)) : null,
         banner_text: formData.banner_text.trim() || null,
@@ -263,9 +296,33 @@ export default function AdminOffers() {
               <Input type="number" min="1" value={formData.max_global_uses} onChange={e => setFormData({...formData, max_global_uses: e.target.value})} placeholder="e.g. 100 max" />
             </div>
 
+            {/* 🦅 THE UPGRADED IMAGE UPLOADER UI */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Background Image URL</label>
-              <Input type="url" value={formData.background_image_url} onChange={e => setFormData({...formData, background_image_url: e.target.value})} placeholder="https://..." />
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                <ImageIcon size={12} className="text-slate-400" /> Canva Banner Upload
+              </label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleImageUpload} 
+                    disabled={isUploading}
+                    className="cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 text-xs w-full"
+                  />
+                  {isUploading && <Loader2 className="w-5 h-5 animate-spin text-emerald-600 flex-shrink-0" />}
+                </div>
+                {/* Image Preview Block */}
+                {formData.background_image_url && (
+                  <div className="relative h-16 w-full rounded-md overflow-hidden border border-slate-200 shadow-sm">
+                    <img src={formData.background_image_url} alt="Banner Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-1 right-2 text-[9px] font-bold text-white tracking-wider flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-400" /> READY
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ROW 4 */}
@@ -280,7 +337,7 @@ export default function AdminOffers() {
             </div>
 
             <div className="col-span-full md:col-span-2 mt-auto">
-              <Button type="submit" disabled={isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 rounded-md">
+              <Button type="submit" disabled={isSubmitting || isUploading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 rounded-md">
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Launch Offer'}
               </Button>
             </div>
@@ -313,7 +370,11 @@ export default function AdminOffers() {
                     <td className="px-6 py-4">
                       <span className="font-black text-lg tracking-tight text-slate-900">{offer.promo_code}</span>
                       <div className="text-xs text-slate-500 mt-1">Min. ₹{offer.min_order_value}</div>
-                      {offer.banner_text && <div className="text-[10px] text-blue-600 font-medium mt-1">"{offer.banner_text}"</div>}
+                      {offer.background_image_url && (
+                        <div className="mt-2 h-10 w-24 rounded-sm overflow-hidden border border-slate-200">
+                           <img src={offer.background_image_url} alt="Offer Banner" className="w-full h-full object-cover opacity-80" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">

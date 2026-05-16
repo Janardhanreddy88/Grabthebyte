@@ -65,6 +65,7 @@ export function HeroBanner() {
   }
 
   // 2. 🛡️ THE FALLBACK (No active offers at all)
+  // We keep the gradient here just for the default fallback image so the text is readable!
   if (offers.length === 0) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
@@ -90,12 +91,10 @@ export function HeroBanner() {
     );
   }
 
-  // 3. 🌟 ZOMATO-STYLE SWIPEABLE CAROUSEL
+  // 3. 🌟 ZOMATO-STYLE SWIPEABLE CAROUSEL (REFACTORED FOR PURE IMAGES)
   return (
     <div className="mb-4">
-      {/* Native CSS Scroll snapping! 
-        hide-scrollbar classes ensure it looks clean without ugly scrollbars on Android/Windows 
-      */}
+      {/* Native CSS Scroll snapping */}
       <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {offers.map((offer) => (
           <motion.div 
@@ -104,45 +103,33 @@ export function HeroBanner() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
             onClick={() => copyCode(offer.promo_code)}
-            // 🦅 If only 1 offer, it takes 100% width. If multiple, it takes 92% width so the next one peeks!
-            className={`relative flex-none ${offers.length === 1 ? 'w-full' : 'w-[92%] sm:w-[85%]'} h-40 sm:h-44 rounded-2xl overflow-hidden shadow-md cursor-pointer group snap-center`}
+            className={`relative flex-none ${offers.length === 1 ? 'w-full' : 'w-[92%] sm:w-[85%]'} h-40 sm:h-44 rounded-2xl overflow-hidden shadow-md cursor-pointer snap-center`}
           >
+            {/* 🌟 1. THE FLIPKART-STYLE PURE IMAGE */}
             <img 
               src={offer.background_image_url || heroBannerImg} 
-              alt="Offer Background" 
+              alt="Promo Banner" 
               className="absolute inset-0 w-full h-full object-cover" 
             />
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-black/10 pointer-events-none" />
-
-            <div className="absolute top-3 left-3">
-              <div className="inline-flex items-center gap-1.5 bg-black/50 backdrop-blur-md border border-white/10 px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider text-white">
-                <Sparkles size={10} className="text-yellow-400" />
-                {offer.discount_type === 'flat' ? `₹${offer.discount_value} OFF` : 'MEGA OFFER'}
+            {/* 🌟 2. THE ONLY FLOATING UI: The Copy Button */}
+            {offer.promo_code && (
+              <div className="absolute bottom-3 right-3">
+                <div 
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-xl transition-all ${
+                    copiedCode === offer.promo_code 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-white/95 backdrop-blur-sm text-black hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="uppercase tracking-wider">
+                    {offer.promo_code}
+                  </span>
+                  <div className="w-px h-3 bg-current opacity-20" />
+                  {copiedCode === offer.promo_code ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                </div>
               </div>
-            </div>
-
-            <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 flex flex-col justify-end">
-              <h2 className="text-lg sm:text-xl font-black text-white leading-snug mb-2.5 drop-shadow-md line-clamp-2">
-                {offer.banner_text}
-              </h2>
-
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-white/90 font-semibold bg-black/40 px-2 py-1 rounded backdrop-blur-sm border border-white/10">
-                  Min. order ₹{offer.min_order_value}
-                </span>
-
-                {offer.promo_code && (
-                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-xl transition-all ${copiedCode === offer.promo_code ? 'bg-green-500 text-white' : 'bg-white text-red-600 group-hover:bg-gray-100'}`}>
-                    <span className="uppercase tracking-wider">
-                      {offer.promo_code}
-                    </span>
-                    <div className="w-px h-3 bg-current opacity-20" />
-                    {copiedCode === offer.promo_code ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </motion.div>
         ))}
       </div>
