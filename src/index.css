@@ -265,9 +265,10 @@
   padding: 1px;
   border-radius: inherit;
   background: linear-gradient(135deg, hsl(var(--primary) / 0.4), hsl(var(--secondary) / 0.4));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+ -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+-webkit-mask-composite: xor;
+mask-composite: exclude;
   pointer-events: none;
 }
 
@@ -314,4 +315,20 @@
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+}
+
+/* 🦅 RAZORPAY SAFE AREA OVERRIDE */
+.razorpay-container {
+  /* This forces Razorpay to respect the notch/status bar on iOS and Android */
+  padding-top: env(safe-area-inset-top, 40px) !important;
+  /* Adds a matching background color so the status bar isn't just transparent floating text */
+  background-color: #EA580C !important; 
+  height: 100vh !important;
+  box-sizing: border-box !important;
+  z-index: 9999999 !important;
+}
+
+/* Ensure the inner iframe adjusts its height so the bottom doesn't get cut off */
+.razorpay-container iframe {
+  height: calc(100vh - env(safe-area-inset-top, 40px)) !important;
 }
