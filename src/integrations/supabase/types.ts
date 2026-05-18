@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_versions: {
+          Row: {
+            id: string
+            created_at: string
+            platform: string
+            latest_version: string
+            minimum_required_version: string
+          }
+          Insert: {
+            id?: string
+            created_at?: string
+            platform?: string
+            latest_version: string
+            minimum_required_version: string
+          }
+          Update: {
+            id?: string
+            created_at?: string
+            platform?: string
+            latest_version?: string
+            minimum_required_version?: string
+          }
+          Relationships: []
+        }
+      admin_pins: {
+        Row: {
+          created_at: string
+          id: string
+          pin_hash: string
+          salt: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pin_hash: string
+          salt: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pin_hash?: string
+          salt?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      admin_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          session_token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          session_token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -66,6 +141,13 @@ export type Database = {
             foreignKeyName: "audit_logs_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "audit_logs_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -93,7 +175,6 @@ export type Database = {
           prep_time_minutes: number | null
           razorpay_account_id: string | null
           settings: Json
-          status: string | null
           updated_at: string
           upi_id: string | null
         }
@@ -118,7 +199,6 @@ export type Database = {
           prep_time_minutes?: number | null
           razorpay_account_id?: string | null
           settings?: Json
-          status?: string | null
           updated_at?: string
           upi_id?: string | null
         }
@@ -143,7 +223,6 @@ export type Database = {
           prep_time_minutes?: number | null
           razorpay_account_id?: string | null
           settings?: Json
-          status?: string | null
           updated_at?: string
           upi_id?: string | null
         }
@@ -190,6 +269,71 @@ export type Database = {
           },
           {
             foreignKeyName: "categories_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "categories_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_ledger: {
+        Row: {
+          campus_id: string | null
+          created_at: string
+          id: string
+          net_canteen_payout: number
+          order_id: string
+          platform_fee: number
+          settlement_status: string
+          total_order_value: number
+          transaction_type: string
+        }
+        Insert: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          net_canteen_payout: number
+          order_id: string
+          platform_fee: number
+          settlement_status?: string
+          total_order_value: number
+          transaction_type?: string
+        }
+        Update: {
+          campus_id?: string | null
+          created_at?: string
+          id?: string
+          net_canteen_payout?: number
+          order_id?: string
+          platform_fee?: number
+          settlement_status?: string
+          total_order_value?: number
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
             referencedRelation: "campuses"
@@ -258,6 +402,13 @@ export type Database = {
             foreignKeyName: "menu_items_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "menu_items_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -270,90 +421,62 @@ export type Database = {
           },
         ]
       }
-      offers: {
+offers: {
         Row: {
-          background_image_url: string | null
-          banner_text: string | null
-          campus_id: string | null
-          created_at: string
-          current_uses: number | null
-          discount_type: Database["public"]["Enums"]["offer_discount_type"]
-          discount_value: number
           id: string
-          is_active: boolean | null
+          promo_code: string
+          discount_type: "fixed" | "percentage" // 🦅 STRICT TYPE
+          discount_value: number
           max_discount_amount: number | null
+          min_order_value: number
+          sponsored_by: "platform" | "canteen" // 🦅 STRICT TYPE
+          current_uses: number
           max_global_uses: number | null
           max_uses_per_user: number | null
-          min_order_value: number | null
-          promo_code: string
-          sponsored_by: string | null
-          target_item_id: string | null
           valid_from: string | null
           valid_until: string | null
+          is_active: boolean
+          created_at: string
+          campus_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          target_item_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
         }
         Insert: {
-          background_image_url?: string | null
-          banner_text?: string | null
-          campus_id?: string | null
-          created_at?: string
-          current_uses?: number | null
-          discount_type: Database["public"]["Enums"]["offer_discount_type"]
-          discount_value: number
           id?: string
-          is_active?: boolean | null
+          promo_code: string
+          discount_type: "fixed" | "percentage"
+          discount_value: number
           max_discount_amount?: number | null
+          min_order_value?: number
+          sponsored_by?: "platform" | "canteen"
+          current_uses?: number
           max_global_uses?: number | null
           max_uses_per_user?: number | null
-          min_order_value?: number | null
-          promo_code: string
-          sponsored_by?: string | null
-          target_item_id?: string | null
           valid_from?: string | null
           valid_until?: string | null
+          is_active?: boolean
+          created_at?: string
+          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
         }
         Update: {
-          background_image_url?: string | null
-          banner_text?: string | null
-          campus_id?: string | null
-          created_at?: string
-          current_uses?: number | null
-          discount_type?: Database["public"]["Enums"]["offer_discount_type"]
-          discount_value?: number
           id?: string
-          is_active?: boolean | null
+          promo_code?: string
+          discount_type?: "fixed" | "percentage"
+          discount_value?: number
           max_discount_amount?: number | null
+          min_order_value?: number
+          sponsored_by?: "platform" | "canteen"
+          current_uses?: number
           max_global_uses?: number | null
           max_uses_per_user?: number | null
-          min_order_value?: number | null
-          promo_code?: string
-          sponsored_by?: string | null
-          target_item_id?: string | null
           valid_from?: string | null
           valid_until?: string | null
+          is_active?: boolean
+          created_at?: string
+          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block '?'
+          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
         }
-        Relationships: [
-          {
-            foreignKeyName: "offers_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campus_public_info"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "offers_campus_id_fkey"
-            columns: ["campus_id"]
-            isOneToOne: false
-            referencedRelation: "campuses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "offers_target_item_id_fkey"
-            columns: ["target_item_id"]
-            isOneToOne: false
-            referencedRelation: "menu_items"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       order_items: {
         Row: {
@@ -410,8 +533,8 @@ export type Database = {
           customer_email: string | null
           customer_name: string | null
           customer_phone: string | null
-          discount_amount: number | null
-          discount_sponsor: string | null
+          discount_amount: number | null // 🦅 ADDED HERE
+          discount_sponsor: string | null // 🦅 ADDED HERE
           id: string
           is_used: boolean
           notes: string | null
@@ -419,7 +542,7 @@ export type Database = {
           payment_method: string | null
           payment_status: string | null
           platform_fee: number | null
-          promo_code: string | null
+          promo_code: string | null // 🦅 ADDED HERE
           qr_code: string | null
           razorpay_order_id: string | null
           razorpay_payment_id: string | null
@@ -430,8 +553,11 @@ export type Database = {
           total: number
           updated_at: string
           user_id: string | null
+          canteen_revenue: number | null;
         }
         Insert: {
+          discount_amount?: number | null // ✅ Added '?'
+          discount_sponsor?: string | null // ✅ Added '?'
           amount?: number | null
           campus_id: string
           collection_token?: string | null
@@ -440,8 +566,6 @@ export type Database = {
           customer_email?: string | null
           customer_name?: string | null
           customer_phone?: string | null
-          discount_amount?: number | null
-          discount_sponsor?: string | null
           id?: string
           is_used?: boolean
           notes?: string | null
@@ -449,7 +573,7 @@ export type Database = {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
-          promo_code?: string | null
+          promo_code?: string | null // 🦅 ADDED HERE
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
@@ -460,8 +584,11 @@ export type Database = {
           total: number
           updated_at?: string
           user_id?: string | null
+          canteen_revenue?: number | null;
         }
         Update: {
+         discount_amount?: number | null // ✅ Added '?'
+          discount_sponsor?: string | null // ✅ Added '?'
           amount?: number | null
           campus_id?: string
           collection_token?: string | null
@@ -470,8 +597,6 @@ export type Database = {
           customer_email?: string | null
           customer_name?: string | null
           customer_phone?: string | null
-          discount_amount?: number | null
-          discount_sponsor?: string | null
           id?: string
           is_used?: boolean
           notes?: string | null
@@ -479,7 +604,7 @@ export type Database = {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
-          promo_code?: string | null
+          promo_code?: string | null // 🦅 ADDED HERE
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
@@ -490,6 +615,7 @@ export type Database = {
           total?: number
           updated_at?: string
           user_id?: string | null
+          canteen_revenue?: number | null;
         }
         Relationships: [
           {
@@ -498,6 +624,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "orders_campus_id_fkey"
@@ -579,6 +712,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_alerts_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "platform_alerts_campus_id_fkey"
@@ -669,6 +809,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "profiles_campus_id_fkey"
@@ -779,6 +926,13 @@ export type Database = {
             foreignKeyName: "settlements_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "settlements_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -813,6 +967,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "campus_public_info"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
           },
           {
             foreignKeyName: "user_roles_campus_id_fkey"
@@ -858,6 +1019,18 @@ export type Database = {
         }
         Relationships: []
       }
+      campus_settlement_summary: {
+        Row: {
+          campus_code: string | null
+          campus_id: string | null
+          campus_name: string | null
+          pending_orders: number | null
+          pending_payout: number | null
+          total_paid_out: number | null
+          total_platform_profit: number | null
+        }
+        Relationships: []
+      }
       profiles_readable: {
         Row: {
           campus_code: string | null
@@ -871,6 +1044,41 @@ export type Database = {
           user_id: string | null
         }
         Relationships: []
+      }
+      settlement_history_log: {
+        Row: {
+          amount_paid: number | null
+          campus_code: string | null
+          campus_id: string | null
+          campus_name: string | null
+          order_date: string | null
+          platform_profit: number | null
+          total_gmv: number | null
+          total_orders: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "financial_ledger_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
+            referencedRelation: "campuses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles_readable: {
         Row: {
@@ -898,6 +1106,13 @@ export type Database = {
             foreignKeyName: "profiles_campus_id_fkey"
             columns: ["campus_id"]
             isOneToOne: false
+            referencedRelation: "campus_settlement_summary"
+            referencedColumns: ["campus_id"]
+          },
+          {
+            foreignKeyName: "profiles_campus_id_fkey"
+            columns: ["campus_id"]
+            isOneToOne: false
             referencedRelation: "campuses"
             referencedColumns: ["id"]
           },
@@ -911,6 +1126,7 @@ export type Database = {
       cleanup_expired_admin_sessions: { Args: never; Returns: number }
       cleanup_old_orders: { Args: never; Returns: number }
       cleanup_orders_older_than_48h: { Args: never; Returns: undefined }
+      cleanup_stuck_pending_orders: { Args: never; Returns: number }
       decrement_stock: {
         Args: { p_item_id: string; p_quantity: number }
         Returns: undefined
@@ -978,19 +1194,18 @@ export type Database = {
         }
         Returns: undefined
       }
-      place_order_atomic: {
-        Args: {
-          p_campus_id: string
-          p_customer_email: string
-          p_customer_name: string
-          p_customer_phone: string
-          p_items: Json
-          p_platform_fee?: number
-          p_promo_code?: string
-          p_user_id: string
+place_order_atomic: {
+          Args: {
+            p_user_id: string
+            p_campus_id: string
+            p_customer_name: string
+            p_customer_email: string
+            p_customer_phone?: string | null
+            p_promo_code?: string | null
+            p_items: Json
+          }
+          Returns: Json
         }
-        Returns: Json
-      }
       reset_item_stock: {
         Args: { item_id: string; new_stock?: number }
         Returns: undefined
@@ -1000,16 +1215,8 @@ export type Database = {
     Enums: {
       app_role: "student" | "admin" | "kiosk" | "super_admin"
       day_of_week: "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
-      offer_discount_type: "percentage" | "fixed"
-      order_status:
-        | "pending"
-        | "confirmed"
-        | "collected"
-        | "expired"
-        | "failed"
-        | "cancelled"
-        | "rejected"
-        | "refunded"
+      // 🌟 UPDATED WITH YOUR NEW VALUES 🌟
+      order_status: "pending" | "confirmed" | "collected" | "expired" | "failed" | "cancelled" | "rejected" | "refunded"
       time_period: "breakfast" | "lunch" | "snacks" | "dinner"
     }
     CompositeTypes: {
@@ -1140,17 +1347,8 @@ export const Constants = {
     Enums: {
       app_role: ["student", "admin", "kiosk", "super_admin"],
       day_of_week: ["mon", "tue", "wed", "thu", "fri", "sat"],
-      offer_discount_type: ["percentage", "fixed"],
-      order_status: [
-        "pending",
-        "confirmed",
-        "collected",
-        "expired",
-        "failed",
-        "cancelled",
-        "rejected",
-        "refunded",
-      ],
+      // 🌟 UPDATED THE CONSTANT ARRAY AS WELL 🌟
+      order_status: ["pending", "confirmed", "collected", "expired", "failed", "cancelled", "rejected", "refunded"],
       time_period: ["breakfast", "lunch", "snacks", "dinner"],
     },
   },
