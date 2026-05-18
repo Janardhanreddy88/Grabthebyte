@@ -19,9 +19,12 @@ import { CampusGate } from "@/components/CampusGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
 
-import { Loader2 } from "lucide-react";
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+
+// 🦅 IMPORT YOUR SMART SPLASH SCREEN!
+// Make sure this path points exactly to where you saved SplashScreen.tsx
+import { SplashScreen } from "@/components/SplashScreen"; 
 
 // 🦅 MAKE SURE THIS PATH MATCHES YOUR SUPABASE CLIENT FILE!
 import { supabase } from "@/integrations/supabase/client";
@@ -77,11 +80,9 @@ const queryClient = new QueryClient({
   },
 });
 
-const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-background">
-    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-  </div>
-);
+// 🦅 THE UPGRADED PAGE LOADER
+// This now directly uses your glitch-free SplashScreen component!
+const PageLoader = () => <SplashScreen />;
 
 // 🌟 THE NATIVE HARDWARE BACK BUTTON CONTROLLER 🌟
 function HardwareBackButtonHandler() {
@@ -158,6 +159,8 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
     checkVersion();
   }, []);
 
+  // 🦅 THIS IS WHERE THE MAGIC HAPPENS! 
+  // While checking version, we show your beautiful Splash Screen!
   if (isChecking) {
     return <PageLoader />;
   }
@@ -170,14 +173,14 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
           Bro, your app is out of date! We upgraded our servers to process orders faster. Update GrabTheByte to continue ordering Biryani.
         </p>
         <button 
-  onClick={() => {
-    alert("🚀 Google Play Store link coming soon! GrabTheByte is in stealth mode.");
-    // window.location.href = 'YOUR_ACTUAL_LINK_GOES_HERE_LATER';
-  }}
-  className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform"
->
-  Update Now
-</button>
+          onClick={() => {
+            alert("🚀 Google Play Store link coming soon! GrabTheByte is in stealth mode.");
+            // window.location.href = 'YOUR_ACTUAL_LINK_GOES_HERE_LATER';
+          }}
+          className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform"
+        >
+          Update Now
+        </button>
       </div>
     );
   }
@@ -207,6 +210,7 @@ const App = () => (
                               <BrowserRouter>
                                 <HardwareBackButtonHandler /> 
                                 
+                                {/* 🦅 Suspense also uses your Splash Screen when lazy loading chunks! */}
                                 <Suspense fallback={<PageLoader />}>
                                   <Routes>
                                     {/* Public routes */}

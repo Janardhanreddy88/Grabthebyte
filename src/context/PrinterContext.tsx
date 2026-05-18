@@ -1,10 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useCampus } from '@/context/CampusContext';
-import { PrinterSettings } from '@/types/campus';
 
-declare const window: any;
-
+// 🦅 STRICT TYPESCRIPT: No more `declare const window: any;`
 export interface BluetoothDevice {
   name: string;
   address: string;
@@ -12,11 +9,28 @@ export interface BluetoothDevice {
   class?: number;
 }
 
-// 🦅 ADDED PROMO & FEE FIELDS TO THE PRINTER INTERFACE
+interface BluetoothSerialPlugin {
+  isEnabled: (success: () => void, failure: () => void) => void;
+  enable: (success: () => void, failure: () => void) => void;
+  showBluetoothSettings: () => void;
+  list: (success: (devices: BluetoothDevice[]) => void, failure: () => void) => void;
+  discoverUnpaired: (success: (devices: BluetoothDevice[]) => void, failure: () => void) => void;
+  connect: (macAddress: string, success: () => void, failure: () => void) => void;
+  disconnect: (success: () => void, failure: () => void) => void;
+  isConnected: (success: () => void, failure: () => void) => void;
+  write: (data: Uint8Array, success: () => void, failure: (err: unknown) => void) => void;
+}
+
+declare global {
+  interface Window {
+    bluetoothSerial?: BluetoothSerialPlugin;
+  }
+}
+
 interface OrderData {
   orderNumber: string;
   items: { name: string; quantity: number; price: number }[];
-  totalAmount: number; // The discounted food total
+  totalAmount: number; 
   customerName: string;
   createdAt: string;
   promoCode?: string | null;
@@ -32,8 +46,11 @@ interface PrinterContextType {
   isScanningBluetooth: boolean;
   pairedDevices: BluetoothDevice[];
   unpairedDevices: BluetoothDevice[];
-  printerSettings: PrinterSettings | null;
-  isWebMode: boolean; 
+  isWebMode: boolean;
+  
+  // 🦅 Local Storage Profile State
+  savedMacAddress: string | null;
+  
   checkBluetoothStatus: () => void;
   enableBluetooth: () => void;
   openBluetoothSettings: () => void;
@@ -41,6 +58,10 @@ interface PrinterContextType {
   connectPrinter: (macAddress?: string, silent?: boolean) => Promise<boolean>;
   disconnectPrinter: () => void;
   printTicket: (orderData: OrderData) => Promise<boolean>;
+  
+  // 🦅 The Profile Save/Clear Engine (80mm Only)
+  savePrinterProfile: (macAddress: string) => void;
+  clearPrinterProfile: () => void;
 }
 
 const PrinterContext = createContext<PrinterContextType | null>(null);
@@ -48,19 +69,15 @@ const PrinterContext = createContext<PrinterContextType | null>(null);
 const ESC = 0x1B;
 const GS = 0x1D;
 
+// Universal BLE Services for Web/Laptop (Including common Chinese printer UUIDs)
 const ESCPOS_SERVICES = [
   '000018f0-0000-1000-8000-00805f9b34fb',
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
   '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-  '0000ff00-0000-1000-8000-00805f9b34fb'
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000fee7-0000-1000-8000-00805f9b34fb',
+  '0000ae30-0000-1000-8000-00805f9b34fb'
 ];
-
-const DEFAULT_PRINTER_SETTINGS: PrinterSettings = {
-  paper_width: '58mm',
-  bluetooth_name_prefix: 'BlueTooth Printer', 
-  print_logo: false,
-  footer_text: 'Thank you! Enjoy the meal.', 
-};
 
 export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const [isPrinterConnected, setIsPrinterConnected] = useState(false);
@@ -72,11 +89,13 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const [unpairedDevices, setUnpairedDevices] = useState<BluetoothDevice[]>([]);
   const [isWebMode, setIsWebMode] = useState(false);
 
+  // 🦅 Local Profile State
+  const [savedMacAddress, setSavedMacAddress] = useState<string | null>(null);
+
+  // Using unknown type assertion for Web Bluetooth API compatibility 
   const webDeviceRef = useRef<any>(null);
   const webCharRef = useRef<any>(null);
 
-  // 🌟 THE MAC ADDRESS VAULT 🌟
-  const lastMacAddressRef = useRef<string | null>(null); 
   const intentionalDisconnectRef = useRef(false); 
   const isConnectingRef = useRef(isConnecting);
   const isConnectedRef = useRef(isPrinterConnected);
@@ -85,34 +104,54 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { isConnectedRef.current = isPrinterConnected; }, [isPrinterConnected]);
 
   const { toast } = useToast();
-  const { settings: campusSettings } = useCampus();
-
-  const printerSettings = campusSettings?.printer || DEFAULT_PRINTER_SETTINGS;
   const textEncoder = new TextEncoder();
 
+  // 🦅 Load Profile from Local Storage on Boot
   useEffect(() => {
+    const storedMac = localStorage.getItem('kiosk_printer_mac');
+    if (storedMac) setSavedMacAddress(storedMac);
+
     if (typeof window !== 'undefined' && !window.bluetoothSerial && navigator.bluetooth) {
       setIsWebMode(true);
       setIsBluetoothEnabled(true); 
     }
   }, []);
 
+  // 🦅 Save & Clear Profile Functions
+  const savePrinterProfile = useCallback((macAddress: string) => {
+    localStorage.setItem('kiosk_printer_mac', macAddress);
+    localStorage.removeItem('kiosk_printer_width'); // Clean up old 58mm data just in case
+    setSavedMacAddress(macAddress);
+    toast({ title: 'Printer Profile Saved', description: 'Locked to 80mm Terminal' }); 
+  }, [toast]);
+
+  const clearPrinterProfile = useCallback(() => {
+    localStorage.removeItem('kiosk_printer_mac');
+    localStorage.removeItem('kiosk_printer_width');
+    setSavedMacAddress(null);
+    toast({ title: 'Profile Cleared', description: 'Terminal is no longer locked to a printer.' });
+  }, [toast]);
+
   const createESCPOSCommands = useCallback((orderData: OrderData): Uint8Array => {
     const commands: number[] = [];
-    const is80mm = printerSettings.paper_width === '80mm';
-    const lineWidth = is80mm ? 48 : 32;
+    
+    // 🦅 HARDCODED 80MM MATH (48 Columns)
+    const lineWidth = 48;
     const separator = '-'.repeat(lineWidth);
 
     const campusCode = orderData.orderNumber.includes('-') ? orderData.orderNumber.split('-')[0].toUpperCase() : 'CAMPUS';
 
     const formatRow = (name: string, qty: string, price: string) => {
-      const nameLen = is80mm ? 30 : 16;
-      const qtyLen = 3;
-      const priceLen = is80mm ? 12 : 9;
-      const n = name.length > nameLen ? name.substring(0, nameLen - 1) + "." : name.padEnd(nameLen, ' ');
-      const q = qty.padStart(qtyLen, ' ');
-      const p = price.padStart(priceLen, ' ');
-      return `${n} ${q}  ${p}\n`; 
+      // 80mm Math: 30 chars for Name, 5 for Qty, 11 for Price (with 2 spaces between = 48)
+      const maxName = 30;
+      const maxQty = 5;
+      const maxPrice = 11;
+
+      const n = name.length > maxName ? name.substring(0, maxName - 1) + "." : name.padEnd(maxName, ' ');
+      const q = qty.padStart(maxQty, ' ');
+      const p = price.padStart(maxPrice, ' ');
+
+      return `${n} ${q} ${p}\n`; 
     };
 
     commands.push(ESC, 0x40); 
@@ -142,20 +181,15 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     });
     commands.push(...textEncoder.encode(`${separator}\n`));
 
-   // =====================================================================
-    // 🌟 🦅 PRINTER MATH VAULT (PROMO CODES & FEES) 🦅 🌟
-    // =====================================================================
-    commands.push(ESC, 0x61, 0x02); // Align Right
+    commands.push(ESC, 0x61, 0x02); 
 
     const subtotal = orderData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    // Only show the breakdown if a promo code or fee exists
     if (orderData.promoCode || orderData.platformFee) {
       commands.push(...textEncoder.encode(`Subtotal: Rs.${subtotal}\n`));
     }
 
     if (orderData.promoCode) {
-      // 🦅 THE FIX: Properly reverse-engineer the discount by including the platform fee!
       const fee = orderData.platformFee || 0;
       const discount = orderData.discountAmount !== undefined 
         ? orderData.discountAmount 
@@ -168,8 +202,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       commands.push(...textEncoder.encode(`Platform Fee: +Rs.${orderData.platformFee}\n`));
     }
 
-    // 🦅 THE FIX: The frontend UI already added the platform fee to the totalAmount!
-    // We just print the exact totalAmount passed from the UI.
     const finalToPay = orderData.totalAmount;
 
     commands.push(ESC, 0x45, 0x01); 
@@ -182,16 +214,19 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     commands.push(...textEncoder.encode(`\n${separator}\n`));
     commands.push(ESC, 0x45, 0x01); 
     
-    commands.push(...textEncoder.encode(`${printerSettings.footer_text}\n\n`)); 
+    commands.push(...textEncoder.encode(`Thank you! Enjoy the meal.\n\n`)); 
     commands.push(ESC, 0x64, 0x03); 
     commands.push(GS, 0x56, 0x00); 
     
     return new Uint8Array(commands);
-  }, [printerSettings]);
+  }, []);
 
   const checkBluetoothStatus = useCallback(() => {
     if (!isWebMode && window.bluetoothSerial) {
-      window.bluetoothSerial.isEnabled(() => setIsBluetoothEnabled(true), () => setIsBluetoothEnabled(false));
+      window.bluetoothSerial.isEnabled(
+        () => setIsBluetoothEnabled(true), 
+        () => setIsBluetoothEnabled(false)
+      );
     }
   }, [isWebMode]);
 
@@ -216,9 +251,9 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
 
     window.bluetoothSerial.isEnabled(() => {
       setIsBluetoothEnabled(true);
-      window.bluetoothSerial.list((paired: BluetoothDevice[]) => {
+      window.bluetoothSerial!.list((paired: BluetoothDevice[]) => {
         setPairedDevices(paired);
-        window.bluetoothSerial.discoverUnpaired((unpaired: BluetoothDevice[]) => {
+        window.bluetoothSerial!.discoverUnpaired((unpaired: BluetoothDevice[]) => {
           setUnpairedDevices(unpaired);
           setIsScanningBluetooth(false);
         }, () => setIsScanningBluetooth(false));
@@ -226,16 +261,16 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     }, () => { setIsScanningBluetooth(false); setIsBluetoothEnabled(false); });
   }, [isWebMode]);
 
-  const connectPrinter = useCallback(async (macAddress?: string, silent: boolean = false): Promise<boolean> => {
+  const connectPrinter = useCallback(async (targetMacAddress?: string, silent: boolean = false): Promise<boolean> => {
     intentionalDisconnectRef.current = false; 
     setIsConnecting(true);
+    
+    const macToDial = targetMacAddress || savedMacAddress;
 
     if (isWebMode) {
       try {
-        const prefix = printerSettings.bluetooth_name_prefix || 'BlueTooth Printer';
         let device;
-        try { device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: prefix }], optionalServices: ESCPOS_SERVICES }); } 
-        catch { device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ESCPOS_SERVICES }); }
+        device = await (navigator as any).bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ESCPOS_SERVICES }); 
 
         if (!device?.gatt) throw new Error("GATT missing");
         
@@ -244,18 +279,30 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         });
 
         const server = await device.gatt.connect();
+        
         let validChar = null;
-
+        let fallbackChar = null;
         const services = await server.getPrimaryServices();
+
         for (const service of services) {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
-            if (char.properties.write || char.properties.writeWithoutResponse) { validChar = char; break; }
+            if (char.properties.write || char.properties.writeWithoutResponse) {
+              if (char.uuid.includes('2af1') || char.uuid.includes('ff02') || char.uuid.includes('write')) {
+                validChar = char;
+                break;
+              }
+              if (!fallbackChar) fallbackChar = char;
+            }
           }
           if (validChar) break;
         }
 
-        if (!validChar) throw new Error("Could not find a writable port on this printer.");
+        if (!validChar && fallbackChar) {
+          validChar = fallbackChar; 
+        }
+
+        if (!validChar) throw new Error("Could not find a printing port on this device.");
 
         webDeviceRef.current = device;
         webCharRef.current = validChar;
@@ -263,9 +310,11 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         setIsConnecting(false);
         if (!silent) toast({ title: 'Web Printer Connected!' });
         return true;
-      } catch (err: any) {
+      } catch (err: unknown) {
         setIsConnecting(false);
-        if (!silent && err.name !== 'NotFoundError') toast({ title: 'Connection Error', description: err.message, variant: 'destructive' });
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorName = err instanceof Error ? err.name : '';
+        if (!silent && errorName !== 'NotFoundError') toast({ title: 'Connection Error', description: errorMsg, variant: 'destructive' });
         return false;
       }
     } else {
@@ -273,8 +322,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
 
       return new Promise((resolve) => {
         const doConnect = (address: string) => {
-          // 🌟 THE FIX: SAVE THE MAC FOR FUTURE BACKGROUND DIALING 🌟
-          lastMacAddressRef.current = address;
           let resolved = false;
 
           const timeoutId = setTimeout(() => {
@@ -294,28 +341,26 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           };
 
           const initiateConnection = () => {
-            window.bluetoothSerial.connect(address, onSuccess, onError);
+            window.bluetoothSerial!.connect(address, onSuccess, onError);
           };
 
-          window.bluetoothSerial.disconnect(
+          // 🦅 CORDOVA RAW CONNECTION (Kept exactly as you provided)
+          window.bluetoothSerial!.disconnect(
             () => setTimeout(initiateConnection, 500), 
             () => setTimeout(initiateConnection, 500)
           );
         };
 
-        if (macAddress) {
-          doConnect(macAddress);
+        if (macToDial) {
+          doConnect(macToDial);
         } else {
-          window.bluetoothSerial.list((devices: BluetoothDevice[]) => {
-            const prefix = printerSettings.bluetooth_name_prefix || 'BlueTooth Printer';
-            const targetPrinter = devices.find(d => d.name && (d.name.toUpperCase().includes(prefix.toUpperCase()) || d.name.toUpperCase().includes('HOIN') || d.name.toUpperCase().includes('MTP')));
-            if (!targetPrinter) { setIsConnecting(false); resolve(false); return; }
-            doConnect(targetPrinter.address);
-          }, () => { setIsConnecting(false); resolve(false); });
+          setIsConnecting(false);
+          if (!silent) toast({ title: 'No Printer Configured', description: 'Please pair a printer in settings first.', variant: 'default' });
+          resolve(false);
         }
       });
     }
-  }, [isWebMode, printerSettings, toast]);
+  }, [isWebMode, savedMacAddress, toast]);
 
   const disconnectPrinter = useCallback(() => {
     intentionalDisconnectRef.current = true; 
@@ -332,65 +377,71 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isWebMode, toast]);
 
-  // 🌟 THE MAC-DIALING BACKGROUND WATCHDOG 🌟
   useEffect(() => {
     if (isWebMode || typeof window === 'undefined' || !window.bluetoothSerial) return;
 
     const watchdog = setInterval(() => {
-      window.bluetoothSerial.isConnected(
+      window.bluetoothSerial!.isConnected(
         () => {
           if (!isConnectedRef.current) setIsPrinterConnected(true);
         },
         () => {
           if (isConnectedRef.current) setIsPrinterConnected(false);
           
-          if (!intentionalDisconnectRef.current && !isConnectingRef.current) {
-            // 🌟 IF PRINTER TURNED OFF, AGGRESSIVELY DIAL THE EXACT MAC ADDRESS UNTIL IT WAKES UP!
-            if (lastMacAddressRef.current) {
-              connectPrinter(lastMacAddressRef.current, true);
-            } else {
-              connectPrinter(undefined, true);
-            }
+          if (!intentionalDisconnectRef.current && !isConnectingRef.current && savedMacAddress) {
+            connectPrinter(savedMacAddress, true);
           }
         }
       );
     }, 5000); 
 
     return () => clearInterval(watchdog);
-  }, [isWebMode, connectPrinter]);
+  }, [isWebMode, connectPrinter, savedMacAddress]);
 
   const printTicket = useCallback(async (orderData: OrderData): Promise<boolean> => {
-    if (!isPrinterConnected) return false;
+    if (!isPrinterConnected) {
+      toast({ title: 'Print Failed', description: 'Printer is not connected.', variant: 'destructive' });
+      return false;
+    }
+    
     setIsPrinting(true);
-    const printData = createESCPOSCommands(orderData);
+    
+    try {
+      const printData = createESCPOSCommands(orderData);
 
-    if (isWebMode && webCharRef.current) {
-      try {
+      if (isWebMode && webCharRef.current) {
         const CHUNK_SIZE = 20; 
+        const useWriteWithResponse = webCharRef.current.properties.write;
+
         for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
           const chunk = printData.slice(i, i + CHUNK_SIZE);
-          if (webCharRef.current.properties.writeWithoutResponse) {
-            await webCharRef.current.writeValueWithoutResponse(chunk);
+          
+          if (useWriteWithResponse) {
+            await webCharRef.current.writeValue(chunk); 
           } else {
-            await webCharRef.current.writeValue(chunk);
+            await webCharRef.current.writeValueWithoutResponse(chunk);
+            await new Promise(r => setTimeout(r, 40)); 
           }
-          await new Promise(r => setTimeout(r, 75)); 
         }
         setIsPrinting(false);
         return true;
-      } catch (err: any) {
-        setIsPrinting(false); 
-        toast({ title: 'Print Failed', description: 'Communication with printer lost.', variant: 'destructive' }); 
-        return false;
+      } else if (!isWebMode && window.bluetoothSerial) {
+        return new Promise((resolve) => {
+          window.bluetoothSerial!.write(printData, 
+            () => { setIsPrinting(false); resolve(true); },
+            (err: unknown) => { 
+              setIsPrinting(false); 
+              toast({ title: 'Bluetooth Print Failed', description: String(err), variant: 'destructive' }); 
+              resolve(false); 
+            }
+          );
+        });
       }
-    } else if (!isWebMode && window.bluetoothSerial) {
-      return new Promise((resolve) => {
-        window.bluetoothSerial.write(printData, 
-          () => { setIsPrinting(false); resolve(true); },
-          (err: any) => { setIsPrinting(false); toast({ title: 'Print Failed', variant: 'destructive' }); resolve(false); }
-        );
-      });
+    } catch (err: unknown) {
+      console.error("Print Command Error:", err);
+      toast({ title: 'Data Format Error', description: 'Could not generate receipt data.', variant: 'destructive' });
     }
+
     setIsPrinting(false);
     return false;
   }, [isPrinterConnected, isWebMode, createESCPOSCommands, toast]);
@@ -398,12 +449,19 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isWebMode) {
       checkBluetoothStatus();
-      if (window.bluetoothSerial) window.bluetoothSerial.isEnabled(() => connectPrinter(undefined, true), () => {});
+      if (window.bluetoothSerial && savedMacAddress) {
+        window.bluetoothSerial.isEnabled(() => connectPrinter(savedMacAddress, true), () => {});
+      }
     }
-  }, [isWebMode, connectPrinter, checkBluetoothStatus]);
+  }, [isWebMode, connectPrinter, checkBluetoothStatus, savedMacAddress]);
 
   return (
-    <PrinterContext.Provider value={{ isPrinterConnected, isConnecting, isPrinting, isBluetoothEnabled, isScanningBluetooth, pairedDevices, unpairedDevices, printerSettings, isWebMode, checkBluetoothStatus, enableBluetooth, openBluetoothSettings, scanForDevices, connectPrinter, disconnectPrinter, printTicket }}>
+    <PrinterContext.Provider value={{ 
+      isPrinterConnected, isConnecting, isPrinting, isBluetoothEnabled, isScanningBluetooth, 
+      pairedDevices, unpairedDevices, isWebMode, savedMacAddress,
+      checkBluetoothStatus, enableBluetooth, openBluetoothSettings, scanForDevices, 
+      connectPrinter, disconnectPrinter, printTicket, savePrinterProfile, clearPrinterProfile 
+    }}>
       {children}
     </PrinterContext.Provider>
   );
