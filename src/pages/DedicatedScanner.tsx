@@ -76,7 +76,7 @@ interface ScannedOrder {
   message: string;
 }
 
-type ResultType = 'success' | 'invalid' | 'expired' | 'used' | 'payment_pending' | null;
+type ResultType = 'success' | 'invalid' | 'expired' | 'used' | 'payment_pending' | 'printer_error' | null;
 
 export default function KioskScanner() {
   const navigate = useNavigate();
@@ -211,6 +211,140 @@ export default function KioskScanner() {
     }, 6000);
   }, [stopCamera]);
 
+  const handleScan = useCallback(async (qrData: string) => {
+    if (scanning) return;
+    setScanning(true);
+    resetTimers(); 
+
+    try {
+      const cleanedToken = qrData.trim();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isCollectionToken = uuidRegex.test(cleanedToken);
+
+      if (isCollectionToken) {
+        const result = await verifyByCollectionToken(cleanedToken);
+        const { data: orderData } = await supabase.from('orders').select(`*, order_items(id, name, price, quantity)`).eq('collection_token', cleanedToken).maybeSingle();
+
+        const scannedOrder: ScannedOrder = {
+          id: orderData?.id || '',
+          orderNumber: orderData?.order_number || 'Unknown',
+          customerName: orderData?.customer_name || 'Customer',
+          total: Number(orderData?.total || 0),
+          items: (orderData?.order_items || []).map((i: SupabaseOrderItem) => ({ name: i.name, quantity: i.quantity, price: Number(i.price) })),
+          scannedAt: new Date(),
+          status: result.success ? 'success' : 'failed',
+          message: result.message,
+        };
+
+        setLastOrderDetails(scannedOrder);
+        setScannedHistory(prev => [scannedOrder, ...prev].slice(0, 50));
+
+        if (result.success) {
+          setResultType('success');
+          setResultMessage('Verified ✓ Sending to Printer...');
+          if (soundEnabled) playSuccessSound();
+          
+          if (orderData) {
+            // 🦅 ENTERPRISE FIX: Await the print job to lock the scanner & catch jams
+            const printSuccess = await printTicket({
+              orderNumber: orderData.order_number,
+              items: scannedOrder.items,
+              totalAmount: scannedOrder.total,
+              customerName: scannedOrder.customerName,
+              createdAt: orderData.created_at,
+              promoCode: orderData.promo_code,
+              platformFee: orderData.platform_fee,
+            });
+
+            if (!printSuccess) {
+              setResultType('printer_error');
+              setResultMessage('Verified ✓ (PRINTER ERROR - HANDWRITE TOKEN)');
+              if (soundEnabled) playErrorSound(); 
+            } else {
+              setResultMessage('Verified ✓ Token Printed');
+            }
+          }
+        } else {
+          if (result.message.includes('Already Collected')) setResultType('used');
+          else if (result.message.includes('Expired')) setResultType('expired');
+          else if (result.message.includes('Payment Not Confirmed')) setResultType('payment_pending');
+          else setResultType('invalid');
+          setResultMessage(result.message);
+          if (soundEnabled) playErrorSound();
+        }
+      } else {
+        const order = await verifyQrCode(cleanedToken);
+        if (!order) {
+          setResultType('invalid');
+          setResultMessage('Order not found.');
+          if (soundEnabled) playErrorSound();
+          setLastOrderDetails(null);
+        } else {
+          if (order.status === 'collected' || order.isUsed) {
+            setResultType('used'); setResultMessage('Already collected.'); if (soundEnabled) playErrorSound();
+          } else if (order.status === 'expired') {
+            setResultType('expired'); setResultMessage('Order expired.'); if (soundEnabled) playErrorSound();
+          } else if (order.status === 'confirmed') {
+            const { data: tokenData } = await supabase.from('orders').select('collection_token, promo_code, platform_fee').eq('id', order.id).maybeSingle();
+            if (tokenData?.collection_token) {
+              const result = await verifyByCollectionToken(tokenData.collection_token);
+              const scannedOrder: ScannedOrder = {
+                id: order.id, orderNumber: order.qrCode, customerName: order.customerName || 'Customer', total: order.total,
+                items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })), scannedAt: new Date(), status: result.success ? 'success' : 'failed', message: result.message,
+              };
+              setLastOrderDetails(scannedOrder);
+              setScannedHistory(prev => [scannedOrder, ...prev].slice(0, 50));
+              
+              if (result.success) {
+                setResultType('success'); 
+                setResultMessage('Verified ✓ Sending to Printer...'); 
+                if (soundEnabled) playSuccessSound();
+                
+                // 🦅 ENTERPRISE FIX: Await the print job
+                const printSuccess = await printTicket({ 
+                  orderNumber: order.qrCode, 
+                  items: scannedOrder.items, 
+                  totalAmount: order.total, 
+                  customerName: scannedOrder.customerName, 
+                  createdAt: order.createdAt.toISOString(), 
+                  promoCode: tokenData.promo_code, 
+                  platformFee: tokenData.platform_fee 
+                });
+
+                if (!printSuccess) {
+                  setResultType('printer_error');
+                  setResultMessage('Verified ✓ (PRINTER ERROR - HANDWRITE TOKEN)');
+                  if (soundEnabled) playErrorSound(); 
+                } else {
+                  setResultMessage('Verified ✓ Token Printed');
+                }
+
+              } else {
+                setResultType('invalid'); setResultMessage(result.message); if (soundEnabled) playErrorSound();
+              }
+            } else {
+              setResultType('invalid'); setResultMessage('Missing collection token.'); if (soundEnabled) playErrorSound();
+            }
+          } else {
+            setResultType('payment_pending'); setResultMessage('Payment not confirmed.'); if (soundEnabled) playErrorSound();
+          }
+          setLastOrderDetails({ id: order.id, orderNumber: order.qrCode, customerName: order.customerName || 'Customer', total: order.total, items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })), scannedAt: new Date(), status: 'failed', message: '' });
+        }
+      }
+      setShowResult(true);
+    } catch (err) {
+      console.error('Scan Error:', err); setResultType('invalid'); setResultMessage('Scanner error. Try again.'); setShowResult(true); if (soundEnabled) playErrorSound();
+    } finally {
+      // 🦅 Scanner will not accept a new code until the entire print lifecycle above is completely finished!
+      setScanning(false);
+    }
+  }, [scanning, verifyQrCode, verifyByCollectionToken, soundEnabled, printTicket, resetTimers]);
+
+  const handleScanRef = useRef(handleScan);
+  useEffect(() => {
+    handleScanRef.current = handleScan;
+  }, [handleScan]);
+
   const scanQRFromCamera = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
@@ -243,7 +377,7 @@ export default function KioskScanner() {
       if (code?.data && code.data !== lastScannedRef.current) {
         lastScannedRef.current = code.data;
         scanningPausedRef.current = true;
-        handleScan(code.data);
+        handleScanRef.current(code.data);
       }
       animationRef.current = requestAnimationFrame(scan);
     };
@@ -338,108 +472,10 @@ export default function KioskScanner() {
     toast({ title: 'Kiosk Locked', description: 'Tap the lock icon 3 times quickly to unlock.' });
   };
 
-  const handleScan = useCallback(async (qrData: string) => {
-    if (scanning) return;
-    setScanning(true);
-    resetTimers(); 
-
-    try {
-      const cleanedToken = qrData.trim();
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const isCollectionToken = uuidRegex.test(cleanedToken);
-
-      if (isCollectionToken) {
-        const result = await verifyByCollectionToken(cleanedToken);
-        const { data: orderData } = await supabase.from('orders').select(`*, order_items(id, name, price, quantity)`).eq('collection_token', cleanedToken).maybeSingle();
-
-        const scannedOrder: ScannedOrder = {
-          id: orderData?.id || '',
-          orderNumber: orderData?.order_number || 'Unknown',
-          customerName: orderData?.customer_name || 'Customer',
-          total: Number(orderData?.total || 0),
-          items: (orderData?.order_items || []).map((i: SupabaseOrderItem) => ({ name: i.name, quantity: i.quantity, price: Number(i.price) })),
-          scannedAt: new Date(),
-          status: result.success ? 'success' : 'failed',
-          message: result.message,
-        };
-
-        setLastOrderDetails(scannedOrder);
-        setScannedHistory(prev => [scannedOrder, ...prev].slice(0, 50));
-
-        if (result.success) {
-          setResultType('success');
-          setResultMessage('Verified ✓ Printing Token');
-          if (soundEnabled) playSuccessSound();
-          if (isPrinterConnected && orderData) {
-            printTicket({
-              orderNumber: orderData.order_number,
-              items: scannedOrder.items,
-              totalAmount: scannedOrder.total,
-              customerName: scannedOrder.customerName,
-              createdAt: orderData.created_at,
-              promoCode: orderData.promo_code,
-              platformFee: orderData.platform_fee,
-            });
-          }
-        } else {
-          if (result.message.includes('Already Collected')) setResultType('used');
-          else if (result.message.includes('Expired')) setResultType('expired');
-          else if (result.message.includes('Payment Not Confirmed')) setResultType('payment_pending');
-          else setResultType('invalid');
-          setResultMessage(result.message);
-          if (soundEnabled) playErrorSound();
-        }
-      } else {
-        const order = await verifyQrCode(cleanedToken);
-        if (!order) {
-          setResultType('invalid');
-          setResultMessage('Order not found.');
-          if (soundEnabled) playErrorSound();
-          setLastOrderDetails(null);
-        } else {
-          if (order.status === 'collected' || order.isUsed) {
-            setResultType('used'); setResultMessage('Already collected.'); if (soundEnabled) playErrorSound();
-          } else if (order.status === 'expired') {
-            setResultType('expired'); setResultMessage('Order expired.'); if (soundEnabled) playErrorSound();
-          } else if (order.status === 'confirmed') {
-            const { data: tokenData } = await supabase.from('orders').select('collection_token, promo_code, platform_fee').eq('id', order.id).maybeSingle();
-            if (tokenData?.collection_token) {
-              const result = await verifyByCollectionToken(tokenData.collection_token);
-              const scannedOrder: ScannedOrder = {
-                id: order.id, orderNumber: order.qrCode, customerName: order.customerName || 'Customer', total: order.total,
-                items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })), scannedAt: new Date(), status: result.success ? 'success' : 'failed', message: result.message,
-              };
-              setLastOrderDetails(scannedOrder);
-              setScannedHistory(prev => [scannedOrder, ...prev].slice(0, 50));
-              if (result.success) {
-                setResultType('success'); setResultMessage('Verified ✓ Printing Token'); if (soundEnabled) playSuccessSound();
-                if (isPrinterConnected) {
-                  printTicket({ orderNumber: order.qrCode, items: scannedOrder.items, totalAmount: order.total, customerName: scannedOrder.customerName, createdAt: order.createdAt.toISOString(), promoCode: tokenData.promo_code, platformFee: tokenData.platform_fee });
-                }
-              } else {
-                setResultType('invalid'); setResultMessage(result.message); if (soundEnabled) playErrorSound();
-              }
-            } else {
-              setResultType('invalid'); setResultMessage('Missing collection token.'); if (soundEnabled) playErrorSound();
-            }
-          } else {
-            setResultType('payment_pending'); setResultMessage('Payment not confirmed.'); if (soundEnabled) playErrorSound();
-          }
-          setLastOrderDetails({ id: order.id, orderNumber: order.qrCode, customerName: order.customerName || 'Customer', total: order.total, items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })), scannedAt: new Date(), status: 'failed', message: '' });
-        }
-      }
-      setShowResult(true);
-    } catch (err) {
-      console.error('Scan Error:', err); setResultType('invalid'); setResultMessage('Scanner error. Try again.'); setShowResult(true); if (soundEnabled) playErrorSound();
-    } finally {
-      setScanning(false);
-    }
-  }, [scanning, verifyQrCode, verifyByCollectionToken, soundEnabled, isPrinterConnected, printTicket, resetTimers]);
-
   const handleManualLookup = async () => {
     if (!manualOrderNumber.trim()) return;
     setIsVerifying(true); scanningPausedRef.current = true; 
-    await handleScan(manualOrderNumber.trim());
+    await handleScanRef.current(manualOrderNumber.trim());
     setIsVerifying(false); setManualOrderNumber('');
   };
 
@@ -451,7 +487,8 @@ export default function KioskScanner() {
 
   useEffect(() => {
     if (showResult && resultType) {
-      const timer = setTimeout(() => { resetAndRestart(); }, 3000);
+      // 🦅 Extended timeout so staff has time to read printer error messages
+      const timer = setTimeout(() => { resetAndRestart(); }, resultType === 'printer_error' ? 5000 : 3000);
       return () => clearTimeout(timer);
     }
   }, [showResult, resultType, resetAndRestart]);
@@ -459,6 +496,7 @@ export default function KioskScanner() {
   const getResultConfig = () => {
     switch (resultType) {
       case 'success': return { icon: CheckCircle, bg: 'bg-emerald-600', title: 'VERIFIED ✓', color: 'text-white' };
+      case 'printer_error': return { icon: AlertCircle, bg: 'bg-red-600', title: 'VERIFIED (NO PRINT)', color: 'text-white' };
       case 'used': return { icon: XCircle, bg: 'bg-amber-600', title: 'ALREADY COLLECTED', color: 'text-white' };
       case 'expired': return { icon: AlertCircle, bg: 'bg-orange-600', title: 'EXPIRED', color: 'text-white' };
       case 'payment_pending': return { icon: Clock, bg: 'bg-yellow-600', title: 'PAYMENT PENDING', color: 'text-white' };
@@ -469,18 +507,15 @@ export default function KioskScanner() {
   const resultConfig = getResultConfig();
   const ResultIcon = resultConfig.icon;
 
-  // 🦅 TABLET/CORDOVA PAIRING
   const handlePairPrinter = async (device: BluetoothDevice) => {
     savePrinterProfile(device.address);
     const success = await connectPrinter(device.address, false);
     if (success) setShowPrinterSetup(false);
   };
 
-  // 🦅 WEB BLE PAIRING (LAPTOP)
   const handleWebPrinterSetup = async () => {
     const success = await connectPrinter(undefined, false);
     if (success) {
-      // Web BLE hides the true MAC address, so we save a generic flag to unlock the UI
       savePrinterProfile('WEB_BLE_PRINTER');
       setShowPrinterSetup(false);
     }
@@ -521,7 +556,6 @@ export default function KioskScanner() {
                </div>
              </div>
 
-             {/* 🦅 NEW: PRINTER STATUS CARD */}
              <div className="pt-4 mt-2 border-t border-slate-800/50">
                <div className="flex justify-between items-center mb-3">
                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Printer Status</p>
@@ -561,7 +595,6 @@ export default function KioskScanner() {
              </div>
           </div>
 
-          {/* 🦅 THE SECURITY LOCK: Cannot scan unless printer is physically connected! */}
           <Button 
             onClick={() => setActiveScreen('scanner')}
             disabled={!profileData || !isPrinterConnected}
@@ -576,7 +609,6 @@ export default function KioskScanner() {
           </Button>
         </div>
 
-        {/* 🦅 THE SETUP OVERLAY MODAL */}
         {showPrinterSetup && (
           <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl flex flex-col gap-6">
@@ -610,7 +642,6 @@ export default function KioskScanner() {
                   <div className="space-y-3">
                     <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Available Printers</label>
                     
-                    {/* 🦅 LAPTOP FIX: Distinguish between WebBLE and Tablet/Cordova scanning */}
                     <Button 
                       onClick={isWebMode ? handleWebPrinterSetup : scanForDevices} 
                       disabled={isScanningBluetooth || isConnecting}
@@ -621,7 +652,6 @@ export default function KioskScanner() {
                     </Button>
                   </div>
 
-                  {/* Scanned Devices List (ONLY VISIBLE ON TABLET/CORDOVA) */}
                   {!isWebMode && (pairedDevices.length > 0 || unpairedDevices.length > 0) && (
                     <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                       {pairedDevices.map((device, i) => (

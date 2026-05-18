@@ -18,7 +18,7 @@ interface BluetoothSerialPlugin {
   connect: (macAddress: string, success: () => void, failure: () => void) => void;
   disconnect: (success: () => void, failure: () => void) => void;
   isConnected: (success: () => void, failure: () => void) => void;
-  write: (data: Uint8Array, success: () => void, failure: (err: unknown) => void) => void;
+  write: (data: ArrayBuffer | Uint8Array, success: () => void, failure: (err: unknown) => void) => void;
 }
 
 declare global {
@@ -69,7 +69,7 @@ const PrinterContext = createContext<PrinterContextType | null>(null);
 const ESC = 0x1B;
 const GS = 0x1D;
 
-// Universal BLE Services for Web/Laptop (Including common Chinese printer UUIDs)
+// Universal BLE Services for Web/Laptop
 const ESCPOS_SERVICES = [
   '000018f0-0000-1000-8000-00805f9b34fb',
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
@@ -78,6 +78,13 @@ const ESCPOS_SERVICES = [
   '0000fee7-0000-1000-8000-00805f9b34fb',
   '0000ae30-0000-1000-8000-00805f9b34fb'
 ];
+
+// 🛡️ ENTERPRISE FIX: Strict ASCII Sanitization to prevent Emoji/Unicode printer crashes
+const sanitizeText = (str: string) => {
+  if (!str) return '';
+  // Replaces anything outside standard printable English characters with a space
+  return str.replace(/[^\x20-\x7E]/g, ' ').trim();
+};
 
 export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const [isPrinterConnected, setIsPrinterConnected] = useState(false);
@@ -89,16 +96,17 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const [unpairedDevices, setUnpairedDevices] = useState<BluetoothDevice[]>([]);
   const [isWebMode, setIsWebMode] = useState(false);
 
-  // 🦅 Local Profile State
   const [savedMacAddress, setSavedMacAddress] = useState<string | null>(null);
 
-  // Using unknown type assertion for Web Bluetooth API compatibility 
   const webDeviceRef = useRef<any>(null);
   const webCharRef = useRef<any>(null);
 
   const intentionalDisconnectRef = useRef(false); 
   const isConnectingRef = useRef(isConnecting);
   const isConnectedRef = useRef(isPrinterConnected);
+  
+  // 🛡️ ENTERPRISE FIX: Concurrency Mutex Lock
+  const isPrintingRef = useRef(false);
 
   useEffect(() => { isConnectingRef.current = isConnecting; }, [isConnecting]);
   useEffect(() => { isConnectedRef.current = isPrinterConnected; }, [isPrinterConnected]);
@@ -106,7 +114,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const textEncoder = new TextEncoder();
 
-  // 🦅 Load Profile from Local Storage on Boot
   useEffect(() => {
     const storedMac = localStorage.getItem('kiosk_printer_mac');
     if (storedMac) setSavedMacAddress(storedMac);
@@ -117,10 +124,9 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // 🦅 Save & Clear Profile Functions
   const savePrinterProfile = useCallback((macAddress: string) => {
     localStorage.setItem('kiosk_printer_mac', macAddress);
-    localStorage.removeItem('kiosk_printer_width'); // Clean up old 58mm data just in case
+    localStorage.removeItem('kiosk_printer_width'); 
     setSavedMacAddress(macAddress);
     toast({ title: 'Printer Profile Saved', description: 'Locked to 80mm Terminal' }); 
   }, [toast]);
@@ -138,50 +144,60 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     // 🦅 HARDCODED 80MM MATH (48 Columns)
     const lineWidth = 48;
     const separator = '-'.repeat(lineWidth);
+    const campusCode = sanitizeText(orderData.orderNumber.includes('-') ? orderData.orderNumber.split('-')[0].toUpperCase() : 'CAMPUS');
 
-    const campusCode = orderData.orderNumber.includes('-') ? orderData.orderNumber.split('-')[0].toUpperCase() : 'CAMPUS';
-
-    const formatRow = (name: string, qty: string, price: string) => {
-      // 80mm Math: 30 chars for Name, 5 for Qty, 11 for Price (with 2 spaces between = 48)
+    const formatRow = (rawName: string, qty: string, price: string) => {
       const maxName = 30;
       const maxQty = 5;
       const maxPrice = 11;
-
+      
+      const name = sanitizeText(rawName); // Sanitize item name
       const n = name.length > maxName ? name.substring(0, maxName - 1) + "." : name.padEnd(maxName, ' ');
       const q = qty.padStart(maxQty, ' ');
       const p = price.padStart(maxPrice, ' ');
-
       return `${n} ${q} ${p}\n`; 
     };
 
     commands.push(ESC, 0x40); 
     commands.push(ESC, 0x61, 0x01); 
+    
+    // 🦅 HEADER: DOUBLE WIDTH + DOUBLE HEIGHT + BOLD
     commands.push(ESC, 0x45, 0x01); 
     commands.push(GS, 0x21, 0x11); 
     commands.push(...textEncoder.encode(`GrabTheByte\n`));
-    commands.push(GS, 0x21, 0x01); 
     commands.push(...textEncoder.encode(`${campusCode} CANTEEN\n`));
+    
     commands.push(GS, 0x21, 0x00); 
     commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
 
+    // 🦅 ORDER NUMBER: DOUBLE HEIGHT ONLY + BOLD
     commands.push(ESC, 0x61, 0x00); 
     commands.push(ESC, 0x45, 0x01); 
-    commands.push(...textEncoder.encode(`Order No: #${orderData.orderNumber}\n`));
+    commands.push(GS, 0x21, 0x10); 
+    commands.push(...textEncoder.encode(`Order No: #${sanitizeText(orderData.orderNumber)}\n`));
+    
+    commands.push(GS, 0x21, 0x00); 
     commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
 
+    // 🦅 ITEM HEADERS: BOLD
     commands.push(ESC, 0x45, 0x01); 
     commands.push(...textEncoder.encode(formatRow('ITEM', 'QTY', 'PRICE')));
     commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
 
+    // 🦅 ITEMS LIST: BOLD
+    commands.push(ESC, 0x45, 0x01); 
     orderData.items.forEach(item => {
       commands.push(...textEncoder.encode(formatRow(item.name, String(item.quantity), String(item.price * item.quantity))));
     });
+    commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
 
+    // 🦅 SUBTOTALS/FEES: BOLD
     commands.push(ESC, 0x61, 0x02); 
+    commands.push(ESC, 0x45, 0x01); 
 
     const subtotal = orderData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -195,7 +211,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         ? orderData.discountAmount 
         : Math.max(0, (subtotal + fee) - orderData.totalAmount);
       
-      commands.push(...textEncoder.encode(`Promo (${orderData.promoCode}): -Rs.${discount}\n`));
+      commands.push(...textEncoder.encode(`Promo (${sanitizeText(orderData.promoCode)}): -Rs.${discount}\n`));
     }
 
     if (orderData.platformFee) {
@@ -204,17 +220,19 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
 
     const finalToPay = orderData.totalAmount;
 
-    commands.push(ESC, 0x45, 0x01); 
+    // 🦅 FINAL TOTAL: DOUBLE WIDTH + DOUBLE HEIGHT + BOLD
     commands.push(GS, 0x21, 0x11); 
     commands.push(...textEncoder.encode(`TOTAL: Rs.${finalToPay}\n`));
+    
     commands.push(GS, 0x21, 0x00); 
-    commands.push(ESC, 0x45, 0x00);
+    commands.push(ESC, 0x45, 0x00); 
 
     commands.push(ESC, 0x61, 0x01); 
     commands.push(...textEncoder.encode(`\n${separator}\n`));
-    commands.push(ESC, 0x45, 0x01); 
     
-    commands.push(...textEncoder.encode(`Thank you! Enjoy the meal.\n\n`)); 
+    // 🦅 FOOTER: BOLD
+    commands.push(ESC, 0x45, 0x01); 
+    commands.push(...textEncoder.encode(`Thank you! Enjoy the meal.\n\n\n`)); 
     commands.push(ESC, 0x64, 0x03); 
     commands.push(GS, 0x56, 0x00); 
     
@@ -269,27 +287,36 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
 
     if (isWebMode) {
       try {
-        let device;
-        device = await (navigator as any).bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ESCPOS_SERVICES }); 
+        console.log("🖥️ [WebBLE] Requesting Bluetooth Device...");
+        let device = await (navigator as any).bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ESCPOS_SERVICES }); 
 
         if (!device?.gatt) throw new Error("GATT missing");
         
+        console.log(`🖥️ [WebBLE] Selected Device: ${device.name} (${device.id})`);
+        
         device.addEventListener('gattserverdisconnected', () => {
+          console.log("🖥️ [WebBLE] Gatt Server Disconnected!");
           setIsPrinterConnected(false); webDeviceRef.current = null; webCharRef.current = null;
         });
 
+        console.log("🖥️ [WebBLE] Connecting to GATT server...");
         const server = await device.gatt.connect();
         
+        console.log("🖥️ [WebBLE] Connected! Fetching Primary Services...");
         let validChar = null;
         let fallbackChar = null;
         const services = await server.getPrimaryServices();
+        console.log(`🖥️ [WebBLE] Found ${services.length} services.`);
 
         for (const service of services) {
+          console.log(`🖥️ [WebBLE] Checking Service UUID: ${service.uuid}`);
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
+            console.log(`🖥️ [WebBLE]   -> Found Characteristic: ${char.uuid} | Write: ${char.properties.write} | WriteWoRes: ${char.properties.writeWithoutResponse}`);
             if (char.properties.write || char.properties.writeWithoutResponse) {
               if (char.uuid.includes('2af1') || char.uuid.includes('ff02') || char.uuid.includes('write')) {
                 validChar = char;
+                console.log(`🖥️ [WebBLE]   ✅ MATCHED ESC/POS PORT: ${validChar.uuid}`);
                 break;
               }
               if (!fallbackChar) fallbackChar = char;
@@ -299,21 +326,24 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!validChar && fallbackChar) {
+          console.log(`🖥️ [WebBLE]   ⚠️ No perfect match found. Using fallback port: ${fallbackChar.uuid}`);
           validChar = fallbackChar; 
         }
 
-        if (!validChar) throw new Error("Could not find a printing port on this device.");
+        if (!validChar) throw new Error("Could not find a writable printing port on this device.");
 
         webDeviceRef.current = device;
         webCharRef.current = validChar;
         setIsPrinterConnected(true);
         setIsConnecting(false);
+        console.log("🖥️ [WebBLE] SETUP COMPLETE & READY TO PRINT.");
         if (!silent) toast({ title: 'Web Printer Connected!' });
         return true;
       } catch (err: unknown) {
         setIsConnecting(false);
         const errorMsg = err instanceof Error ? err.message : String(err);
         const errorName = err instanceof Error ? err.name : '';
+        console.error(`🖥️ [WebBLE ERROR] Connection Failed: ${errorName} - ${errorMsg}`);
         if (!silent && errorName !== 'NotFoundError') toast({ title: 'Connection Error', description: errorMsg, variant: 'destructive' });
         return false;
       }
@@ -340,15 +370,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
             if (!resolved) { resolved = true; clearTimeout(timeoutId); setIsPrinterConnected(false); setIsConnecting(false); if (!silent) toast({ title: 'Connection Failed', variant: 'destructive' }); resolve(false); }
           };
 
-          const initiateConnection = () => {
-            window.bluetoothSerial!.connect(address, onSuccess, onError);
-          };
-
-          // 🦅 CORDOVA RAW CONNECTION (Kept exactly as you provided)
-          window.bluetoothSerial!.disconnect(
-            () => setTimeout(initiateConnection, 500), 
-            () => setTimeout(initiateConnection, 500)
-          );
+          window.bluetoothSerial!.connect(address, onSuccess, onError);
         };
 
         if (macToDial) {
@@ -367,6 +389,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     setIsPrinterConnected(false); 
     
     if (isWebMode && webDeviceRef.current?.gatt?.connected) {
+      console.log("🖥️ [WebBLE] Intentional disconnect triggered.");
       webDeviceRef.current.gatt.disconnect();
       toast({ title: 'Disconnected' });
     } else if (!isWebMode && window.bluetoothSerial) {
@@ -381,6 +404,9 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     if (isWebMode || typeof window === 'undefined' || !window.bluetoothSerial) return;
 
     const watchdog = setInterval(() => {
+      // 🛡️ ENTERPRISE FIX: Do not poll connection status while actively printing to prevent buffer jams
+      if (isPrintingRef.current) return;
+
       window.bluetoothSerial!.isConnected(
         () => {
           if (!isConnectedRef.current) setIsPrinterConnected(true);
@@ -398,53 +424,111 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(watchdog);
   }, [isWebMode, connectPrinter, savedMacAddress]);
 
+  const releasePrintLock = () => {
+    isPrintingRef.current = false;
+    setIsPrinting(false);
+  };
+
   const printTicket = useCallback(async (orderData: OrderData): Promise<boolean> => {
-    if (!isPrinterConnected) {
-      toast({ title: 'Print Failed', description: 'Printer is not connected.', variant: 'destructive' });
+    // 🛡️ ENTERPRISE FIX: Concurrency Lock (Mutex)
+    // If a print job is already processing, ignore all other incoming print requests immediately.
+    if (isPrintingRef.current) {
+      console.warn("🖨️ [Mutex] Print job rejected. Printer is currently busy.");
       return false;
     }
-    
-    setIsPrinting(true);
-    
-    try {
-      const printData = createESCPOSCommands(orderData);
 
-      if (isWebMode && webCharRef.current) {
-        const CHUNK_SIZE = 20; 
-        const useWriteWithResponse = webCharRef.current.properties.write;
+    if (!isWebMode && window.bluetoothSerial) {
+      return new Promise((resolve) => {
+        window.bluetoothSerial!.isConnected(
+          async () => {
+            // Lock the printer
+            isPrintingRef.current = true;
+            setIsPrinting(true);
+            
+            try {
+              const printData = createESCPOSCommands(orderData);
+              const buffer = printData.buffer.slice(printData.byteOffset, printData.byteOffset + printData.byteLength) as ArrayBuffer;
+              
+              // 🦅 ENTERPRISE FIX: 8-Second Timeout Failsafe for Native Android Write
+              const writeTimeout = setTimeout(() => {
+                releasePrintLock();
+                toast({ title: 'Printer Busy/Jammed', description: 'Ensure paper is loaded and try again.', variant: 'destructive' });
+                resolve(false);
+              }, 8000);
 
-        for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
-          const chunk = printData.slice(i, i + CHUNK_SIZE);
-          
-          if (useWriteWithResponse) {
-            await webCharRef.current.writeValue(chunk); 
-          } else {
-            await webCharRef.current.writeValueWithoutResponse(chunk);
-            await new Promise(r => setTimeout(r, 40)); 
-          }
-        }
-        setIsPrinting(false);
-        return true;
-      } else if (!isWebMode && window.bluetoothSerial) {
-        return new Promise((resolve) => {
-          window.bluetoothSerial!.write(printData, 
-            () => { setIsPrinting(false); resolve(true); },
-            (err: unknown) => { 
-              setIsPrinting(false); 
-              toast({ title: 'Bluetooth Print Failed', description: String(err), variant: 'destructive' }); 
-              resolve(false); 
+              window.bluetoothSerial!.write(buffer, 
+                () => { 
+                  clearTimeout(writeTimeout); 
+                  releasePrintLock(); 
+                  resolve(true); 
+                },
+                (err: unknown) => { 
+                  clearTimeout(writeTimeout); 
+                  releasePrintLock(); 
+                  toast({ title: 'Print Failed', description: 'Bluetooth connection dropped.', variant: 'destructive' }); 
+                  resolve(false); 
+                }
+              );
+            } catch (err) {
+              releasePrintLock();
+              resolve(false);
             }
-          );
-        });
+          },
+          () => {
+             setIsPrinterConnected(false);
+             toast({ title: 'Printer Asleep', description: 'Waking printer up... try again in 3 seconds.', variant: 'destructive' });
+             if (savedMacAddress) connectPrinter(savedMacAddress, true);
+             resolve(false);
+          }
+        );
+      });
+    } else if (isWebMode) {
+      // 🦅 WEB BLE LAPTOP PRINTING ENGINE - THE GOLDILOCKS ZONE
+      if (!isPrinterConnected) {
+        console.warn("🖥️ [WebBLE] Aborted Print: Printer state says disconnected.");
+        return false;
       }
-    } catch (err: unknown) {
-      console.error("Print Command Error:", err);
-      toast({ title: 'Data Format Error', description: 'Could not generate receipt data.', variant: 'destructive' });
-    }
+      
+      // Lock the printer
+      isPrintingRef.current = true;
+      setIsPrinting(true);
+      
+      try {
+        const printData = createESCPOSCommands(orderData);
+        console.log(`🖨️ [WebBLE] Generated payload. Total size: ${printData.length} bytes`);
+        
+        if (webCharRef.current) {
+          const CHUNK_SIZE = 100; 
+          const useWriteWithResponse = webCharRef.current.properties.write;
+          console.log(`🖨️ [WebBLE] Output Method: ${useWriteWithResponse ? 'write (with response)' : 'writeWithoutResponse'} | Chunk Size: ${CHUNK_SIZE}`);
 
-    setIsPrinting(false);
+          for (let i = 0; i < printData.length; i += CHUNK_SIZE) {
+            const chunk = printData.slice(i, i + CHUNK_SIZE);
+            console.log(`🖨️ [WebBLE] Writing chunk: bytes ${i} to ${i + chunk.length}...`);
+            
+            if (useWriteWithResponse) {
+              await webCharRef.current.writeValue(chunk); 
+            } else {
+              await webCharRef.current.writeValueWithoutResponse(chunk);
+              await new Promise(r => setTimeout(r, 20)); 
+            }
+          }
+          console.log("🖨️ [WebBLE] 🟢 Print Job Completed Successfully!");
+          releasePrintLock();
+          return true;
+        } else {
+           console.error("🖨️ [WebBLE ERROR] webCharRef is null. Lost reference to the printer characteristic!");
+           releasePrintLock();
+           return false;
+        }
+      } catch (err) {
+        console.error("🖨️ [WebBLE ERROR] Failed during write loop:", err);
+        releasePrintLock();
+        return false;
+      }
+    }
     return false;
-  }, [isPrinterConnected, isWebMode, createESCPOSCommands, toast]);
+  }, [isPrinterConnected, isWebMode, createESCPOSCommands, toast, savedMacAddress, connectPrinter]);
 
   useEffect(() => {
     if (!isWebMode) {
