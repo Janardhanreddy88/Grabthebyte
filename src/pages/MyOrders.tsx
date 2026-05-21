@@ -37,8 +37,8 @@ export default function MyOrders() {
   const [retryingOrderIds, setRetryingOrderIds] = useState<Set<string>>(new Set());
   const processingExpiryIds = useRef<Set<string>>(new Set());
   
-  // 🦅 THE FIX: Changed from 10 minutes to exactly 3 minutes (180 seconds)
-  const PAYMENT_TIMEOUT_MS = 3 * 60 * 1000;
+  // 🦅 THE FIX: Increased payment retry time limit to exactly 12 minutes
+  const PAYMENT_TIMEOUT_MS = 12 * 60 * 1000;
 
   const fetchOrders = async () => {
     try {
@@ -97,8 +97,8 @@ export default function MyOrders() {
     if (processingExpiryIds.current.has(id)) return;
     processingExpiryIds.current.add(id);
     try { 
-      // 🦅 THE FIX: Updated the rejection reason string to reflect the 3-minute rule
-      await supabase.from('orders').update({ status: 'failed' as any, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 3 minutes expired' }).eq('id', id); 
+      // 🦅 THE FIX: Updated the rejection reason string to reflect the 12-minute rule
+      await supabase.from('orders').update({ status: 'failed' as any, payment_status: 'not_confirmed', rejection_reason: 'Payment timeout - 12 minutes expired' }).eq('id', id); 
     } catch { 
       processingExpiryIds.current.delete(id); 
     }

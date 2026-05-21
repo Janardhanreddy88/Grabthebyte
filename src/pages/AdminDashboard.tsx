@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,9 +31,10 @@ import { useWeeklyAnalytics } from "@/hooks/useWeeklyAnalytics";
 import { useTodayAnalytics } from "@/hooks/useTodayAnalytics";
 import {
   LogOut, QrCode, LayoutDashboard, UtensilsCrossed, TrendingUp,
-  Package, Users, User, Mail, Phone, Building2, BellRing, Printer, 
+  Package, Users, User, Mail, Phone, Building2, Printer, 
   BluetoothOff, Settings, Landmark, ShieldCheck, Edit, Lock, Info, CalendarClock, CheckCircle2,
-  CalendarDays, CheckCircle, Clock, AlertCircle, ChevronDown, ChevronUp, CornerDownRight, Wallet, RefreshCw, Receipt, Loader2, Calendar as CalendarIcon
+  CalendarDays, CheckCircle, Clock, Wallet, RefreshCw, Receipt, Loader2, Calendar as CalendarIcon,
+  Zap, Tag, Gift, IndianRupee
 } from "lucide-react";
 import { AdminAnalyticsTab } from "@/components/admin/AdminAnalyticsTab";
 import { AdminOrdersTab } from "@/components/admin/AdminOrdersTab";
@@ -54,6 +55,26 @@ const getTrueCanteenRevenue = (o: any) => {
   }
   return Math.max(0, baseEarnings);
 };
+
+// 🦅 NEW INTERFACES FOR OFFERS
+interface CampusOffer {
+  id: string;
+  promo_code: string;
+  discount_type: string;
+  discount_value: number;
+  min_order_value: number;
+  max_discount_amount: number | null;
+  sponsored_by: string;
+  banner_text: string | null;
+  background_image_url: string | null;
+  campus_id: string | null;
+}
+
+interface OfferEarning {
+  promo_code: string;
+  amount_owed: number;
+  uses: number;
+}
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -90,10 +111,10 @@ export default function AdminDashboard() {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSettlementInfoOpen, setIsSettlementInfoOpen] = useState(false); 
-  const [showHolidayExample, setShowHolidayExample] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'profile' | 'settlements' | 'payments'>('profile');
+  // 🦅 ADDED 'offers' TO ACTIVE SETTINGS TAB
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'profile' | 'settlements' | 'payments' | 'offers'>('profile');
   
   const [settlements, setSettlements] = useState<any[]>([]);
   
@@ -101,6 +122,12 @@ export default function AdminDashboard() {
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   
   const [paymentDateFilter, setPaymentDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+
+  // 🦅 NEW OFFER STATES
+  const [activeOffers, setActiveOffers] = useState<CampusOffer[]>([]);
+  const [offerEarnings, setOfferEarnings] = useState<OfferEarning[]>([]);
+  const [totalPlatformDebt, setTotalPlatformDebt] = useState(0);
+  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
 
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -167,7 +194,6 @@ export default function AdminDashboard() {
     try {
       let query = supabase
         .from('orders')
-        // 🦅 THE FIX: We added platform_fee, discount_amount, and discount_sponsor!
         .select('id, order_number, total, platform_fee, discount_amount, discount_sponsor, payment_status, status, notes, rejection_reason, created_at, customer_name, customer_phone, customer_email, razorpay_payment_id')
         .eq('campus_id', profileData.campus_id)
         .order('created_at', { ascending: false });
@@ -200,6 +226,72 @@ export default function AdminDashboard() {
       fetchPaymentsList();
     }
   }, [activeSettingsTab, fetchPaymentsList]);
+
+  // 🦅 NEW: FETCH OFFERS & PLATFORM DEBT DATA
+// 🦅 BULLETPROOF OFFERS & PLATFORM DEBT DATA FETCH
+  const fetchOffersData = useCallback(async () => {
+    if (!profileData?.campus_id) return;
+    setIsLoadingOffers(true);
+    try {
+      // 1. Fetch active campaigns
+      const { data: offersData, error: offersError } = await supabase
+        .from('offers')
+        .select('*')
+        .eq('is_active', true)
+        .or(`campus_id.eq.${profileData.campus_id},campus_id.is.null`) as any;
+
+      if (offersError) throw offersError;
+      if (offersData) setActiveOffers(offersData as CampusOffer[]);
+
+      // 2. Fetch platform debt (Safely filtering in Javascript to prevent Supabase silent failures)
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('discount_amount, promo_code, status')
+        .eq('campus_id', profileData.campus_id)
+        .eq('discount_sponsor', 'platform');
+
+      if (ordersError) throw ordersError;
+      if (ordersData) {
+        let total = 0;
+        const earningsMap: Record<string, OfferEarning> = {};
+        
+        ordersData.forEach((o) => {
+          // Force lowercase to ignore DB casing issues (e.g., 'CONFIRMED' vs 'confirmed')
+          const currentStatus = (o.status || '').toLowerCase();
+          
+          // Only count orders that were successfully processed
+          const validStatuses = ['confirmed', 'preparing', 'ready', 'delivered', 'collected', 'completed'];
+          if (!validStatuses.includes(currentStatus)) return;
+
+          // Force numeric conversion
+          const amt = Number(o.discount_amount) || 0;
+          if (amt <= 0) return;
+
+          const code = o.promo_code || 'UNKNOWN';
+          total += amt;
+          
+          if (!earningsMap[code]) {
+            earningsMap[code] = { promo_code: code, amount_owed: 0, uses: 0 };
+          }
+          earningsMap[code].amount_owed += amt;
+          earningsMap[code].uses += 1;
+        });
+        
+        setTotalPlatformDebt(total);
+        setOfferEarnings(Object.values(earningsMap).sort((a, b) => b.amount_owed - a.amount_owed));
+      }
+    } catch (error) {
+      console.error("Error fetching offers data:", error);
+    } finally {
+      setIsLoadingOffers(false);
+    }
+  }, [profileData?.campus_id]);
+
+  useEffect(() => {
+    if (activeSettingsTab === 'offers') {
+      fetchOffersData();
+    }
+  }, [activeSettingsTab, fetchOffersData]);
 
   useEffect(() => {
     if (!profileData?.campus_id) return;
@@ -332,13 +424,18 @@ export default function AdminDashboard() {
                const todayStr = format(new Date(), 'yyyy-MM-dd');
                if (paymentDateFilter === todayStr) fetchPaymentsList();
             }
+            
+            // 🦅 Refresh offer earnings if an order comes in while on the Offers tab
+            if (activeSettingsTab === 'offers') {
+               fetchOffersData();
+            }
           }
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [profileData?.campus_id, queryClient, toast, playNotificationSound, activeSettingsTab, fetchPaymentsList, paymentDateFilter]);
+  }, [profileData?.campus_id, queryClient, toast, playNotificationSound, activeSettingsTab, fetchPaymentsList, paymentDateFilter, fetchOffersData]);
 
   const { data: menuItems = [], isLoading: menuLoading } = useAdminMenuItems();
   const { data: orders = [], isLoading: ordersLoading } = useAdminOrders();
@@ -379,13 +476,14 @@ export default function AdminDashboard() {
 
   const handleRestockClick = (itemId: string) => {};
 
+  // 🦅 THE INSTANT SETTLEMENT FIX
   const formatSettlementDates = (settledDateStr: string) => {
     if (!settledDateStr) return { depositDate: 'Pending', salesDate: 'N/A' };
     const settledDate = new Date(settledDateStr);
     const depositDate = settledDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
-    const salesDateObj = new Date(settledDate);
-    salesDateObj.setDate(salesDateObj.getDate() - 2);
-    const salesDate = salesDateObj.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+    
+    // With instant settlements, the sales date is the exact same as the deposit date!
+    const salesDate = depositDate; 
     return { depositDate, salesDate };
   };
 
@@ -534,6 +632,14 @@ export default function AdminDashboard() {
                 >
                   <Wallet size={18} /> Payments
                 </Button>
+                {/* 🦅 NEW OFFERS TAB BUTTON */}
+                <Button 
+                  variant={activeSettingsTab === 'offers' ? "default" : "ghost"} 
+                  className={cn("w-full justify-start gap-3 h-11", activeSettingsTab === 'offers' ? "shadow-sm font-bold bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50")}
+                  onClick={() => setActiveSettingsTab('offers')}
+                >
+                  <Tag size={18} /> Offers & Promos
+                </Button>
               </div>
 
               <div className="flex-1 min-w-0">
@@ -648,13 +754,10 @@ export default function AdminDashboard() {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => {
-                          setIsSettlementInfoOpen(true);
-                          setShowHolidayExample(false); 
-                        }}
+                        onClick={() => setIsSettlementInfoOpen(true)}
                         className="gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 bg-blue-50/50 shrink-0 shadow-sm"
                       >
-                        <CalendarDays className="h-4 w-4" /> My Settlement Cycle
+                        <Zap className="h-4 w-4" /> My Settlement Cycle
                       </Button>
                     </div>
 
@@ -684,7 +787,7 @@ export default function AdminDashboard() {
                                   </h4>
                                   
                                   <p className="text-xs text-blue-800/80 bg-blue-50/50 border border-blue-100 px-2 py-1 rounded-md flex items-center gap-1.5 mt-1.5 w-fit">
-                                    <CalendarClock size={12} className="opacity-70 text-blue-600" />
+                                    <Zap size={12} className="opacity-70 text-blue-600" />
                                     <span>Sales from: <strong className="text-blue-900">{dates.salesDate}</strong></span>
                                   </p>
                                   
@@ -710,7 +813,6 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {/* VIEW 3: SEPARATED PAYMENTS & ORDERS LEDGER 🔥 */}
                 {activeSettingsTab === 'payments' && (
                   <div className="space-y-4 animate-in fade-in duration-300">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
@@ -831,7 +933,6 @@ export default function AdminDashboard() {
                                   </span>
                                 </div>
 
-                                {/* 🦅 THE FIX: The UI now maps the correct net earning per order! */}
                                 <div className={cn("text-right font-black text-base", isCancelled ? "text-muted-foreground line-through opacity-50" : "text-foreground")}>
                                   ₹{getTrueCanteenRevenue(payment).toFixed(2)}
                                 </div>
@@ -843,11 +944,137 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* 🦅 NEW OFFERS TAB CONTENT */}
+                {activeSettingsTab === 'offers' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                      <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                          <Gift className="h-6 w-6 text-emerald-600" /> 
+                          Offers & Promo Campaigns
+                        </h2>
+                        <p className="text-sm text-muted-foreground">View active discounts and track your platform reimbursements.</p>
+                      </div>
+                    </div>
+
+                    {isLoadingOffers ? (
+                       <div className="flex justify-center p-12">
+                         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+                       </div>
+                    ) : (
+                      <>
+                        {/* THE MONEY OWED CARD */}
+                        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 border-none shadow-xl text-white">
+                          <CardContent className="p-8 flex items-center justify-between">
+                            <div>
+                              <p className="text-slate-300 font-bold uppercase tracking-wider text-sm mb-2 flex items-center gap-2">
+                                <IndianRupee size={16} /> GrabTheByte Owes You
+                              </p>
+                              <div className="text-5xl font-black text-emerald-400">
+                                ₹{totalPlatformDebt.toFixed(2)}
+                              </div>
+                              <p className="text-slate-400 text-sm mt-2 max-w-sm leading-relaxed">
+                                This is the total amount of money GrabTheByte will reimburse your canteen for covering platform-sponsored promo codes.
+                              </p>
+                            </div>
+                            <div className="w-24 h-24 bg-white/10 rounded-full items-center justify-center hidden md:flex">
+                              <Receipt className="w-12 h-12 text-emerald-400" />
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* EARNINGS BREAKDOWN BY PROMO CODE */}
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Reimbursement Breakdown</h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {offerEarnings.length === 0 ? (
+                              <div className="col-span-full p-6 text-center text-sm text-slate-500 bg-muted/50 rounded-xl border border-dashed">
+                                No platform discounts have been used at your canteen yet.
+                              </div>
+                            ) : (
+                              offerEarnings.map((earning) => (
+                                <Card key={earning.promo_code} className="border shadow-sm">
+                                  <CardContent className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div className="font-bold text-slate-700 flex items-center gap-1.5">
+                                        <Tag size={14} className="text-emerald-500" /> {earning.promo_code}
+                                      </div>
+                                    </div>
+                                    <div className="text-2xl font-black text-slate-900">
+                                      ₹{earning.amount_owed.toFixed(2)}
+                                    </div>
+                                    <div className="text-xs font-semibold text-slate-500 mt-1">
+                                      Claimed {earning.uses} times
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <Separator className="my-6" />
+
+                        {/* ACTIVE CAMPAIGNS VIEWER */}
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Live Campaigns at your Campus</h3>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {activeOffers.length === 0 ? (
+                              <div className="col-span-full p-8 text-center text-sm text-slate-500 bg-muted/50 rounded-xl border border-dashed flex flex-col items-center">
+                                <Gift className="h-8 w-8 text-slate-300 mb-2" />
+                                No active promotional campaigns are currently running.
+                              </div>
+                            ) : (
+                              activeOffers.map((offer) => (
+                                <Card key={offer.id} className="overflow-hidden border shadow-sm flex flex-col sm:flex-row">
+                                  {offer.background_image_url && (
+                                    <div className="sm:w-32 h-32 sm:h-auto shrink-0 relative bg-slate-100">
+                                      <img src={offer.background_image_url} alt="Offer Banner" className="w-full h-full object-cover" />
+                                    </div>
+                                  )}
+                                  <CardContent className="p-4 flex-1">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <Badge variant="secondary" className="font-black tracking-widest uppercase bg-emerald-100 text-emerald-800 border-none">
+                                        {offer.promo_code}
+                                      </Badge>
+                                      {offer.sponsored_by === 'platform' ? (
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Platform Sponsored</span>
+                                      ) : (
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Canteen Sponsored</span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="mt-3">
+                                      <div className="text-lg font-black text-slate-900">
+                                        {offer.discount_type === 'fixed' ? `₹${offer.discount_value} OFF` : `${offer.discount_value}% OFF`}
+                                      </div>
+                                      {offer.banner_text && (
+                                        <p className="text-sm font-medium text-slate-600 mt-0.5">{offer.banner_text}</p>
+                                      )}
+                                      <div className="flex flex-wrap gap-2 mt-3 text-xs font-semibold text-slate-500">
+                                        <span className="bg-slate-100 px-2 py-1 rounded-md">Min Order: ₹{offer.min_order_value}</span>
+                                        {offer.max_discount_amount && (
+                                          <span className="bg-slate-100 px-2 py-1 rounded-md">Max Cap: ₹{offer.max_discount_amount}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
               </div>
             </div>
             
             <Dialog open={isSettlementInfoOpen} onOpenChange={setIsSettlementInfoOpen}>
-              <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden">
+              <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
                 <div className="px-6 pt-6 pb-6">
                   <DialogHeader>
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -857,102 +1084,56 @@ export default function AdminDashboard() {
                   </DialogHeader>
                   
                   <div className="flex border-b mb-6 mt-4">
-                    <div className="pb-2 border-b-2 border-foreground px-1">
-                      <span className="text-sm font-semibold">2 day settlement (T+2)</span>
+                    <div className="pb-2 border-b-2 border-emerald-600 px-1 flex items-center gap-2">
+                       <span className="text-sm font-bold text-emerald-600 flex items-center gap-1"><Zap className="w-4 h-4" /> Instant Settlement Active</span>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-4 mb-8">
-                    <div className="bg-emerald-500 text-white rounded-md p-1.5 shrink-0 mt-0.5">
-                      <CheckCircle className="h-5 w-5" />
+                    <div className="bg-emerald-500 text-white rounded-md p-1.5 shrink-0 mt-0.5 shadow-sm">
+                      <Wallet className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-base">Payments received reach your bank account in 2 working days</h3>
+                      <h3 className="font-semibold text-base">Payments received are transferred to your bank instantly, 24/7.</h3>
                     </div>
                   </div>
 
-                  <div className="relative flex justify-between items-start mb-10 px-2">
-                    <div className="absolute top-4 left-14 right-14 h-[2px] bg-border border-dashed border-t-2 z-0"></div>
+                  <div className="relative flex justify-between items-start mb-8 px-6">
+                    <div className="absolute top-5 left-20 right-20 h-[2px] bg-emerald-500 z-0"></div>
 
-                    <div className="relative z-10 flex flex-col items-center w-1/3">
-                      <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-xs font-semibold">DAY 0</span>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <div className="bg-background border-2 border-emerald-500 text-emerald-600 rounded-full px-4 py-2 flex items-center gap-2 mb-3 shadow-sm">
+                        <QrCode className="h-4 w-4" />
+                        <span className="text-xs font-bold">Student Pays</span>
                       </div>
-                      <p className="text-xs text-center text-muted-foreground px-2">Payment received from students</p>
+                      <p className="text-xs text-center text-muted-foreground w-28 leading-tight">Payment received via Razorpay</p>
                     </div>
 
-                    <div className="relative z-10 flex flex-col items-center w-1/3">
-                      <div className="bg-background border border-border rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs font-semibold text-muted-foreground">DAY 1</span>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <div className="bg-emerald-500 border-2 border-emerald-500 text-white rounded-full px-4 py-2 flex items-center gap-2 mb-3 shadow-md">
+                        <Landmark className="h-4 w-4" />
+                        <span className="text-xs font-bold">Money in Bank</span>
                       </div>
-                    </div>
-
-                    <div className="relative z-10 flex flex-col items-center w-1/3">
-                      <div className="bg-background border border-emerald-500 text-emerald-600 rounded-full px-3 py-1.5 flex items-center gap-1.5 mb-3">
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-xs font-semibold">DAY 2</span>
-                      </div>
-                      <p className="text-xs text-center text-muted-foreground px-2">Money transferred to your bank before 9 pm</p>
+                      <p className="text-xs text-center text-muted-foreground w-28 leading-tight">Instantly deposited via IMPS/NEFT</p>
                     </div>
                   </div>
 
-                  <div className="bg-amber-900/5 rounded-lg border border-amber-900/10 transition-all duration-300">
-                    <div 
-                      className="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-900/10 rounded-lg transition-colors"
-                      onClick={() => setShowHolidayExample(!showHolidayExample)}
-                    >
-                      <div className="bg-amber-700 text-white rounded-md p-1.5 shrink-0">
-                        <AlertCircle className="h-4 w-4" />
+                  <div className="bg-blue-50 rounded-lg border border-blue-100 p-4 mt-2">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-blue-600 text-white rounded-md p-1.5 shrink-0">
+                        <Info className="h-4 w-4" />
                       </div>
-                      <p className="text-sm font-medium text-foreground flex-1">
-                        Pay outs on bank holidays and weekends will be processed on the next working day.
-                      </p>
-                      <div className="flex items-center text-sm font-semibold text-blue-600 hover:underline whitespace-nowrap select-none">
-                        View example {showHolidayExample ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                      <div>
+                        <p className="text-sm font-bold text-blue-900 mb-1">
+                          Instant Processing Fees
+                        </p>
+                        <p className="text-xs text-blue-800">
+                          Razorpay applies a nominal charge of <strong className="font-bold">0.30% + 18% GST</strong> per transaction for instant 24/7 bank transfers. Settlements occur automatically throughout the day.
+                        </p>
                       </div>
                     </div>
-
-                    {showHolidayExample && (
-                      <div className="px-2 pb-6 pt-2 animate-in slide-in-from-top-2">
-                        <div className="relative flex justify-between items-start px-2 mt-4">
-                          <div className="absolute top-4 left-10 right-10 h-[2px] bg-amber-900/20 border-dashed border-t-2 z-0"></div>
-
-                          <div className="relative z-10 flex flex-col items-center w-1/4">
-                            <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
-                              <CheckCircle className="h-3 w-3" />
-                              <span className="text-[10px] font-semibold">DAY 0</span>
-                            </div>
-                            <p className="text-[10px] text-center text-muted-foreground leading-tight">Payment received from students</p>
-                          </div>
-
-                          <div className="relative z-10 flex flex-col items-center w-1/4">
-                            <div className="bg-[#fef9f1] border border-border rounded-full px-2 py-1 flex items-center gap-1 mb-2 text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              <span className="text-[10px] font-semibold">DAY 1</span>
-                            </div>
-                          </div>
-
-                          <div className="relative z-10 flex flex-col items-center w-1/4">
-                            <div className="bg-amber-600 border border-amber-600 text-white rounded-full px-2 py-1 flex items-center gap-1 mb-2 shadow-sm">
-                              <CornerDownRight className="h-3 w-3" />
-                              <span className="text-[10px] font-semibold tracking-wide">SKIPPED</span>
-                            </div>
-                            <p className="text-[10px] text-center text-muted-foreground leading-tight">If non-working day (bank holiday)</p>
-                          </div>
-
-                          <div className="relative z-10 flex flex-col items-center w-1/4">
-                            <div className="bg-[#fef9f1] border border-emerald-500 text-emerald-600 rounded-full px-2 py-1 flex items-center gap-1 mb-2">
-                              <CheckCircle className="h-3 w-3" />
-                              <span className="text-[10px] font-semibold">DAY 2</span>
-                            </div>
-                            <p className="text-[10px] text-center text-muted-foreground leading-tight">Money transferred to your bank before 9 pm</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
+                  
                 </div>
               </DialogContent>
             </Dialog>

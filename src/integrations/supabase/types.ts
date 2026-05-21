@@ -439,6 +439,8 @@ offers: {
           created_at: string
           campus_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
           target_item_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          banner_text: string | null     // 🦅 ADDED
+          background_image_url: string | null // 🦅 ADDED
         }
         Insert: {
           id?: string
@@ -457,6 +459,8 @@ offers: {
           created_at?: string
           campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
           target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          banner_text?: string | null    // 🦅 ADDED
+          background_image_url?: string | null // 🦅 ADDED
         }
         Update: {
           id?: string
@@ -475,6 +479,8 @@ offers: {
           created_at?: string
           campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block '?'
           target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
+          banner_text?: string | null    // 🦅 ADDED
+          background_image_url?: string | null // 🦅 ADDED
         }
         Relationships: []
       }
