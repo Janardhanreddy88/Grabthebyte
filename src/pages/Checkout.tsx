@@ -12,7 +12,7 @@ import {
   AlertOctagon,
   Tag,
   X,
-  Trash2 // 🦅 NEW IMPORT FOR DELETE BUTTON!
+  Trash2 
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,7 +36,6 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { cart, totalPrice, totalItems, updateQuantity, removeFromCart } = useCart();
   
-  // 🦅 THE UPGRADE: PULL IN THE isAnonymous FLAG
   const { user, isAnonymous } = useAuth(); 
   
   const { campus } = useCampus(); 
@@ -59,7 +58,7 @@ export default function Checkout() {
   const [promoMessage, setPromoMessage] = useState({ text: "", type: "" });
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
-  // 🦅 THE BULLETPROOF PRICING LOGIC
+  // THE BULLETPROOF PRICING LOGIC
   const basePlatformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
   const discountedFoodCost = Math.max(0, totalPrice - appliedDiscount);
   const targetBankAmount = discountedFoodCost + basePlatformFee; 
@@ -120,20 +119,27 @@ export default function Checkout() {
         return;
       }
 
-      // 🦅 THE UPGRADE: Count EXACTLY how many times the user has used this code!
+      // 🦅 UPGRADED MULTI-USER TARGETING CHECK
+      // If the array exists and has length > 0, we must check if the user is in it.
+      if (offer.target_user_ids && offer.target_user_ids.length > 0) {
+        if (!offer.target_user_ids.includes(user.id)) {
+          setPromoMessage({ text: "This promo code is exclusive to specific students.", type: "error" });
+          setAppliedDiscount(0);
+          setAppliedPromoCode(null);
+          return;
+        }
+      }
+
+      // Anti-Fraud Usage Limit Check
       const { data: pastOrders } = await supabase
         .from('orders')
         .select('id')
         .eq('user_id', user.id)
         .eq('promo_code', offer.promo_code)
-        // IGNORE any orders that failed, expired, cancelled, or refunded!
         .not('status', 'in', '("failed","cancelled","expired","rejected","refunded")');
-        // Notice we removed .limit(1) so we can count them all!
 
-      // Read the limit from the database (default to 1 if the cell is accidentally empty)
       const maxUsesAllowed = offer.max_uses_per_user || 1;
 
-      // Now we do real math! Have they reached or exceeded their specific limit?
       if (pastOrders && pastOrders.length >= maxUsesAllowed) {
         setPromoMessage({ 
           text: `You have reached the maximum limit (${maxUsesAllowed} uses) for this code.`, 
@@ -144,13 +150,7 @@ export default function Checkout() {
         return;
       }
 
-      if (offer.campus_id && offer.campus_id !== campus?.id) {
-        setPromoMessage({ text: "This promo code is not valid at this canteen location.", type: "error" });
-        setAppliedDiscount(0);
-        setAppliedPromoCode(null);
-        return;
-      }
-
+      // Check specific item target
       if (offer.target_item_id) {
         const hasTargetItem = cart.some(item => item.id === offer.target_item_id);
         if (!hasTargetItem) {
@@ -161,6 +161,7 @@ export default function Checkout() {
         }
       }
 
+      // Check min order value
       if (totalPrice < offer.min_order_value) {
         setPromoMessage({ text: `Add ₹${offer.min_order_value - totalPrice} more to unlock!`, type: "error" });
         setAppliedDiscount(0);
@@ -168,6 +169,7 @@ export default function Checkout() {
         return;
       }
 
+      // Calculate Discount Base
       let discountBase = totalPrice;
       if (offer.target_item_id) {
         const targetItem = cart.find(item => item.id === offer.target_item_id);
@@ -176,6 +178,7 @@ export default function Checkout() {
         }
       }
 
+      // Calculate Final Discount Amount
       let finalDiscountAmount = 0;
       if (offer.discount_type === "fixed") {
         finalDiscountAmount = offer.discount_value;
@@ -275,7 +278,7 @@ export default function Checkout() {
         return; 
       }
 
-      // 🦅 STRICT GUEST CHECK: Only inject dummy data if they are a visitor!
+      // STRICT GUEST CHECK: Only inject dummy data if they are a visitor!
       const safePhone = user.phone || (user as any)?.user_metadata?.phone || (isAnonymous ? "0000000000" : "");
       const safeEmail = user.email || (isAnonymous ? "guest@grabthebyte.com" : "");
       const safeName = user.fullName || (isAnonymous ? "Guest Visitor" : "Student");
@@ -359,7 +362,6 @@ export default function Checkout() {
             </div>
             <div className="bg-card rounded-xl shadow-sm border border-border/50 divide-y divide-border/50 overflow-hidden">
               {cart.map((item) => {
-                // 🦅 Identify if it's a token to clean up the UI display!
                 const isToken = item.category === 'token' || item.name.toLowerCase().includes('token');
 
                 return (
@@ -376,12 +378,10 @@ export default function Checkout() {
                         <span className="font-bold text-sm whitespace-nowrap">₹{(item.price * item.quantity).toFixed(2)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2">
-                        {/* Hide the '₹1/item' text for tokens to maintain the illusion */}
                         <p className="text-xs text-muted-foreground">
                           {isToken ? "Custom Amount" : `₹${item.price.toFixed(2)} / item`}
                         </p>
                         
-                        {/* 🦅 THE FIX: Added a Trash button alongside the quantity steppers! */}
                         <div className="flex items-center gap-2">
                           <motion.button 
                             whileTap={{ scale: 0.9 }} 

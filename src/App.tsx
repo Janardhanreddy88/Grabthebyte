@@ -67,6 +67,7 @@ const Analytics = lazy(() => import("./pages/super-admin/Analytics").then(m => (
 const Operations = lazy(() => import("./pages/super-admin/Operations").then(m => ({ default: m.Operations })));
 // 🦅 NEW: OFFERS DASHBOARDS IMPORTS
 const AdminOffers = lazy(() => import("./pages/super-admin/AdminOffers")); 
+const AdminAds = lazy(() => import("./pages/super-admin/AdminAds")); // 🦅 ADDED: AdminAds Import
 const OfferSettlements = lazy(() => import("./pages/super-admin/OfferSettlements").then(m => ({ default: m.OfferSettlements }))); 
 import { SuperAdminLayout } from "@/components/super-admin/SuperAdminLayout";
 
@@ -251,8 +252,9 @@ const App = () => (
                                     <Route path="/super-admin/analytics" element={<SuperAdminRoute><SuperAdminLayout><Analytics /></SuperAdminLayout></SuperAdminRoute>} />
                                     <Route path="/super-admin/operations" element={<SuperAdminRoute><SuperAdminLayout><Operations /></SuperAdminLayout></SuperAdminRoute>} />
                                     
-                                    {/* 🦅 NEW: OFFERS DASHBOARD ROUTES */}
+                                    {/* 🦅 NEW: OFFERS & ADS DASHBOARD ROUTES */}
                                     <Route path="/super-admin/offers" element={<SuperAdminRoute><SuperAdminLayout><AdminOffers /></SuperAdminLayout></SuperAdminRoute>} />
+                                    <Route path="/super-admin/ads" element={<SuperAdminRoute><SuperAdminLayout><AdminAds /></SuperAdminLayout></SuperAdminRoute>} />
                                     <Route path="/super-admin/offer-payouts" element={<SuperAdminRoute><SuperAdminLayout><OfferSettlements /></SuperAdminLayout></SuperAdminRoute>} />
                                     
                                     <Route path="*" element={<NotFound />} />

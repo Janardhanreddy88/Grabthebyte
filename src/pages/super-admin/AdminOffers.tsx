@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed, UploadCloud, Image as ImageIcon,CheckCircle2 } from 'lucide-react';
+import { Loader2, Plus, Tag, ToggleLeft, ToggleRight, Building2, Globe, UtensilsCrossed, UploadCloud, Image as ImageIcon, CheckCircle2, Users } from 'lucide-react';
 import { useSuperAdmin } from '@/context/SuperAdminContext';
 
 interface Offer {
@@ -16,6 +16,7 @@ interface Offer {
   sponsored_by: 'platform' | 'canteen';
   campus_id: string | null;
   target_item_id: string | null;
+  target_user_ids: string[] | null; // 🦅 UPDATED: Now supports an array of users!
   current_uses: number;
   max_global_uses: number | null;
   is_active: boolean;
@@ -34,7 +35,6 @@ export default function AdminOffers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   
-  // 🦅 NEW STATE FOR UPLOADER
   const [isUploading, setIsUploading] = useState(false);
   
   const [menuItems, setMenuItems] = useState<{id: string, name: string}[]>([]);
@@ -48,6 +48,7 @@ export default function AdminOffers() {
     sponsored_by: 'platform' as 'platform' | 'canteen',
     campus_id: 'all',
     target_item_id: 'all', 
+    target_user_emails: '', // 🦅 UPDATED: Now supports comma-separated emails
     max_global_uses: '',
     valid_until: '',
     valid_from: '',
@@ -89,7 +90,6 @@ export default function AdminOffers() {
     setLoading(false);
   };
 
-  // 🦅 NEW: DIRECT SUPABASE IMAGE UPLOAD FUNCTION
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,23 +97,19 @@ export default function AdminOffers() {
     setIsUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
-      // Generate a random math string to prevent duplicate file name errors
       const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // 1. Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('offer_banners')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // 2. Grab the Public URL
       const { data: publicUrlData } = supabase.storage
         .from('offer_banners')
         .getPublicUrl(filePath);
 
-      // 3. Save it to form state
       setFormData(prev => ({ ...prev, background_image_url: publicUrlData.publicUrl }));
       toast({ title: 'Banner Uploaded!', description: 'Image successfully attached to promo code.' });
     } catch (error: any) {
@@ -128,6 +124,41 @@ export default function AdminOffers() {
     setIsSubmitting(true);
 
     try {
+      // 🦅 SMART MULTI-USER LOOKUP
+      let resolvedUserIds: string[] | null = null;
+      
+      if (formData.target_user_emails.trim()) {
+        // 1. Split the string by commas and clean up extra spaces
+        const emailsArray = formData.target_user_emails.split(',').map(email => email.trim()).filter(email => email);
+        
+        if (emailsArray.length > 0) {
+          // 2. Query the profiles table for ALL matching emails at once using .in()
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('user_id, email')
+            .in('email', emailsArray); // 🦅 Supabase 'in' operator searches multiple!
+
+          if (profileError) throw profileError;
+
+          // 3. Optional: Check if any emails were not found to warn the admin
+          if (profileData && profileData.length !== emailsArray.length) {
+            const foundEmails = profileData.map(p => p.email);
+            const missingEmails = emailsArray.filter(e => !foundEmails.includes(e));
+            toast({ 
+              title: 'Warning: Some users not found!', 
+              description: `Could not find accounts for: ${missingEmails.join(', ')}`, 
+              variant: 'destructive' 
+            });
+            // Decide if you want to abort or continue. Let's abort so the admin can fix it.
+            throw new Error('Please fix the missing emails before launching the offer.');
+          }
+
+          if (profileData && profileData.length > 0) {
+            resolvedUserIds = profileData.map(profile => profile.user_id);
+          }
+        }
+      }
+
       const isFixed = formData.discount_type === 'fixed';
       const cleanMaxDiscount = (isFixed || !formData.max_discount_amount) 
         ? null 
@@ -142,6 +173,7 @@ export default function AdminOffers() {
         sponsored_by: formData.sponsored_by,
         campus_id: formData.campus_id === 'all' ? null : formData.campus_id,
         target_item_id: formData.target_item_id === 'all' ? null : formData.target_item_id,
+        target_user_ids: resolvedUserIds, // 🎯 Attached the array of verified User IDs here
         max_global_uses: formData.max_global_uses ? Math.abs(Number(formData.max_global_uses)) : null,
         
         valid_from: formData.valid_from ? new Date(formData.valid_from).toISOString() : new Date().toISOString(),
@@ -163,7 +195,7 @@ export default function AdminOffers() {
       setFormData({ 
         promo_code: '', discount_type: 'fixed', discount_value: '', max_discount_amount: '', 
         min_order_value: '0', sponsored_by: 'platform', campus_id: 'all', target_item_id: 'all', 
-        max_global_uses: '', valid_until: '', valid_from: '', max_uses_per_user: '1', banner_text: '', background_image_url: '' 
+        target_user_emails: '', max_global_uses: '', valid_until: '', valid_from: '', max_uses_per_user: '1', banner_text: '', background_image_url: '' 
       });
       fetchOffers();
     } catch (error: any) {
@@ -277,7 +309,21 @@ export default function AdminOffers() {
               </select>
             </div>
 
-            {/* ROW 3 */}
+            {/* 🦅 ROW 3 - TARGET MULTIPLE USERS */}
+            <div className="space-y-1 col-span-full md:col-span-2">
+              <label className="text-xs font-bold text-purple-600 uppercase flex items-center gap-1">
+                <Users size={14} /> Target Specific Students (Optional)
+              </label>
+              <Input 
+                type="text" 
+                value={formData.target_user_emails} 
+                onChange={e => setFormData({...formData, target_user_emails: e.target.value})} 
+                placeholder="email1@college.edu, email2@college.edu" 
+                className="border-purple-200 focus-visible:ring-purple-500 placeholder:text-slate-300"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Separate multiple emails with commas. Leave blank for everyone.</p>
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">Sponsored By</label>
               <select className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 bg-slate-50" value={formData.sponsored_by} onChange={e => setFormData({...formData, sponsored_by: e.target.value as any})}>
@@ -291,41 +337,12 @@ export default function AdminOffers() {
               <Input type="number" min="1" value={formData.max_uses_per_user} onChange={e => setFormData({...formData, max_uses_per_user: e.target.value})} placeholder="e.g. 1" />
             </div>
 
+            {/* ROW 4 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Total Global Uses</label>
               <Input type="number" min="1" value={formData.max_global_uses} onChange={e => setFormData({...formData, max_global_uses: e.target.value})} placeholder="e.g. 100 max" />
             </div>
 
-            {/* 🦅 THE UPGRADED IMAGE UPLOADER UI */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                <ImageIcon size={12} className="text-slate-400" /> Canva Banner Upload
-              </label>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleImageUpload} 
-                    disabled={isUploading}
-                    className="cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 text-xs w-full"
-                  />
-                  {isUploading && <Loader2 className="w-5 h-5 animate-spin text-emerald-600 flex-shrink-0" />}
-                </div>
-                {/* Image Preview Block */}
-                {formData.background_image_url && (
-                  <div className="relative h-16 w-full rounded-md overflow-hidden border border-slate-200 shadow-sm">
-                    <img src={formData.background_image_url} alt="Banner Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
-                    <div className="absolute bottom-1 right-2 text-[9px] font-bold text-white tracking-wider flex items-center gap-1">
-                      <CheckCircle2 size={10} className="text-emerald-400" /> READY
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ROW 4 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase">Start Date (Valid From)</label>
               <Input type="datetime-local" value={formData.valid_from} onChange={e => setFormData({...formData, valid_from: e.target.value})} />
@@ -336,8 +353,36 @@ export default function AdminOffers() {
               <Input type="datetime-local" value={formData.valid_until} onChange={e => setFormData({...formData, valid_until: e.target.value})} />
             </div>
 
-            <div className="col-span-full md:col-span-2 mt-auto">
-              <Button type="submit" disabled={isSubmitting || isUploading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 rounded-md">
+            {/* IMAGE UPLOAD UI */}
+            <div className="space-y-1 col-span-full border-t pt-4">
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1 mb-2">
+                <ImageIcon size={14} className="text-slate-400" /> Canva Banner Upload (Optional)
+              </label>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleImageUpload} 
+                    disabled={isUploading}
+                    className="cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 text-xs w-full"
+                  />
+                  {isUploading && <Loader2 className="w-5 h-5 animate-spin text-emerald-600 flex-shrink-0" />}
+                </div>
+                {formData.background_image_url && (
+                  <div className="relative h-16 w-32 rounded-md overflow-hidden border border-slate-200 shadow-sm shrink-0">
+                    <img src={formData.background_image_url} alt="Banner Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-1 right-2 text-[9px] font-bold text-white tracking-wider flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-400" /> READY
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="col-span-full mt-4 flex justify-end">
+              <Button type="submit" disabled={isSubmitting || isUploading} className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-8 rounded-md">
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Launch Offer'}
               </Button>
             </div>
@@ -377,7 +422,7 @@ export default function AdminOffers() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {offer.campus_id ? (
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                             <Building2 size={12} className="text-slate-400" /> {getCampusName(offer.campus_id)}
@@ -387,13 +432,17 @@ export default function AdminOffers() {
                             <Globe size={12} /> Global
                           </div>
                         )}
-                        {offer.target_item_id ? (
+
+                        {offer.target_item_id && (
                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 w-max px-2 py-0.5 rounded-md">
                              <UtensilsCrossed size={10} /> Specific Item Only
                            </div>
-                        ) : (
-                           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                             🛒 Entire Cart
+                        )}
+
+                        {/* 🦅 UPDATED: NEW MULTI-USER BADGE */}
+                        {offer.target_user_ids && offer.target_user_ids.length > 0 && (
+                           <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-600 bg-purple-50 w-max px-2 py-0.5 rounded-md border border-purple-100 shadow-sm">
+                             <Users size={10} /> Restricted to {offer.target_user_ids.length} Students
                            </div>
                         )}
                       </div>

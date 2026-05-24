@@ -14,6 +14,37 @@ export type Database = {
   }
   public: {
     Tables: {
+      // 🦅 ADDED: The new ad_banners table definition!
+      ad_banners: {
+        Row: {
+          id: string
+          title: string
+          image_url: string
+          target_campus_id: string | null
+          redirect_url: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          image_url: string
+          target_campus_id?: string | null
+          redirect_url?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          image_url?: string
+          target_campus_id?: string | null
+          redirect_url?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       app_versions: {
           Row: {
             id: string
@@ -421,15 +452,15 @@ export type Database = {
           },
         ]
       }
-offers: {
+      offers: {
         Row: {
           id: string
           promo_code: string
-          discount_type: "fixed" | "percentage" // 🦅 STRICT TYPE
+          discount_type: "fixed" | "percentage" 
           discount_value: number
           max_discount_amount: number | null
           min_order_value: number
-          sponsored_by: "platform" | "canteen" // 🦅 STRICT TYPE
+          sponsored_by: "platform" | "canteen" 
           current_uses: number
           max_global_uses: number | null
           max_uses_per_user: number | null
@@ -437,10 +468,11 @@ offers: {
           valid_until: string | null
           is_active: boolean
           created_at: string
-          campus_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
-          target_item_id: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
-          banner_text: string | null     // 🦅 ADDED
-          background_image_url: string | null // 🦅 ADDED
+          campus_id: string | null 
+          target_item_id: string | null 
+          banner_text: string | null     
+          background_image_url: string | null 
+          target_user_ids: string[] | null // 🦅 UPDATED
         }
         Insert: {
           id?: string
@@ -457,10 +489,11 @@ offers: {
           valid_until?: string | null
           is_active?: boolean
           created_at?: string
-          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
-          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
-          banner_text?: string | null    // 🦅 ADDED
-          background_image_url?: string | null // 🦅 ADDED
+          campus_id?: string | null 
+          target_item_id?: string | null 
+          banner_text?: string | null    
+          background_image_url?: string | null 
+          target_user_ids?: string[] | null // 🦅 UPDATED
         }
         Update: {
           id?: string
@@ -477,10 +510,11 @@ offers: {
           valid_until?: string | null
           is_active?: boolean
           created_at?: string
-          campus_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block '?'
-          target_item_id?: string | null // 🦅 ADD THIS TO Row, Insert, AND Update in the offers block
-          banner_text?: string | null    // 🦅 ADDED
-          background_image_url?: string | null // 🦅 ADDED
+          campus_id?: string | null 
+          target_item_id?: string | null 
+          banner_text?: string | null    
+          background_image_url?: string | null 
+          target_user_ids?: string[] | null // 🦅 UPDATED
         }
         Relationships: []
       }
@@ -539,8 +573,8 @@ offers: {
           customer_email: string | null
           customer_name: string | null
           customer_phone: string | null
-          discount_amount: number | null // 🦅 ADDED HERE
-          discount_sponsor: string | null // 🦅 ADDED HERE
+          discount_amount: number | null 
+          discount_sponsor: string | null 
           id: string
           is_used: boolean
           notes: string | null
@@ -548,7 +582,7 @@ offers: {
           payment_method: string | null
           payment_status: string | null
           platform_fee: number | null
-          promo_code: string | null // 🦅 ADDED HERE
+          promo_code: string | null 
           qr_code: string | null
           razorpay_order_id: string | null
           razorpay_payment_id: string | null
@@ -562,8 +596,8 @@ offers: {
           canteen_revenue: number | null;
         }
         Insert: {
-          discount_amount?: number | null // ✅ Added '?'
-          discount_sponsor?: string | null // ✅ Added '?'
+          discount_amount?: number | null 
+          discount_sponsor?: string | null 
           amount?: number | null
           campus_id: string
           collection_token?: string | null
@@ -579,7 +613,7 @@ offers: {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
-          promo_code?: string | null // 🦅 ADDED HERE
+          promo_code?: string | null 
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
@@ -593,8 +627,8 @@ offers: {
           canteen_revenue?: number | null;
         }
         Update: {
-         discount_amount?: number | null // ✅ Added '?'
-          discount_sponsor?: string | null // ✅ Added '?'
+         discount_amount?: number | null 
+          discount_sponsor?: string | null 
           amount?: number | null
           campus_id?: string
           collection_token?: string | null
@@ -610,7 +644,7 @@ offers: {
           payment_method?: string | null
           payment_status?: string | null
           platform_fee?: number | null
-          promo_code?: string | null // 🦅 ADDED HERE
+          promo_code?: string | null 
           qr_code?: string | null
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
