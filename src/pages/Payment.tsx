@@ -168,12 +168,9 @@ export default function Payment() {
         key: currentKeyId,
         amount: Math.round(parseFloat(amount) * 100),
         currency: "INR",
-        name: "GrabTheByte",
         description: `Order #${displayOrderNumber}`,
-        image: "/pwa-192x192.png",
         order_id: currentRzpOrderId,
         prefill: { name: customerName, email: customerEmail, contact: cleanPhone },
-        theme: { color: "#EA580C" }
       };
 
       if (Capacitor.isNativePlatform()) {
