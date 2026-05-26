@@ -181,8 +181,8 @@ Deno.serve(async (req) => {
       const { error } = await supabase
         .from("orders")
         .update({
-          status: "cancelled", // Make sure this matches your DB enum!
-          payment_status: "failed",
+          status: "pending", // Make sure this matches your DB enum!
+          payment_status: "pending",
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id)
