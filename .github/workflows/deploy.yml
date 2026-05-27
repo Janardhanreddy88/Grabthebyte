@@ -1,6 +1,5 @@
-name: Deploy to Hostinger
+name: Deploy GrabTheByte to Hostinger
 
-# This tells the robot to wake up every time you push code to the 'main' branch
 on:
   push:
     branches:
@@ -12,17 +11,18 @@ jobs:
 
     steps:
       - name: 🚚 Get latest code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@v3
+      - name: ⚙️ Setup Node.js & Cache (⚡ MASSIVE SPEED BOOST)
+        uses: actions/setup-node@v4
         with:
-          node-version: '18' # Adjust this if you use a different Node version
+          node-version: '18'
+          cache: 'npm' # This tells GitHub to remember your node_modules for next time!
 
-      - name: 📦 Install Dependencies
-        run: npm install
+      - name: 📦 Install Dependencies (⚡ Optimized for CI/CD)
+        run: npm ci # 'ci' is 2x faster than 'install' for automated deployments
 
-      - name: 🔨 Build Project (Generating the dist folder)
+      - name: 🔨 Build Project
         run: npm run build
 
       - name: 🚀 Sync files to Hostinger
@@ -32,4 +32,4 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/ 
-          server-dir: ./public_html/
+          server-dir: ./ # 🎯 FIXED! Drops files directly into the root without duplicating folders
