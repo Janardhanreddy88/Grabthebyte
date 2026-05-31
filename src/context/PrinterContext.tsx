@@ -530,15 +530,36 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     return false;
   }, [isPrinterConnected, isWebMode, createESCPOSCommands, toast, savedMacAddress, connectPrinter]);
 
+// 🛡️ THE URL GATEKEEPER BOOT SCRIPT (Browser-Testable Version)
   useEffect(() => {
+    // 1. Check the route FIRST so we can see it in the Chrome Console!
+    const isKioskRoute = window.location.href.toLowerCase().includes('kiosk');
+    
+    if (isKioskRoute) {
+      console.log("🟢 GATEKEEPER: Kiosk route detected! Authorized for hardware check.");
+    } else {
+      console.log("🔴 GATEKEEPER: Not on Kiosk route. Skipping Bluetooth entirely.");
+    }
+
+    // 2. Now run the native Android hardware checks
     if (!isWebMode) {
       checkBluetoothStatus();
+      
       if (window.bluetoothSerial && savedMacAddress) {
-        window.bluetoothSerial.isEnabled(() => connectPrinter(savedMacAddress, true), () => {});
+        if (isKioskRoute) {
+          window.bluetoothSerial.isEnabled(
+            () => {
+              console.log("Hardware awake. Connecting to Kiosk Printer...");
+              connectPrinter(savedMacAddress, true);
+            }, 
+            () => {
+              console.warn("Kiosk Bluetooth is disabled. Bypassing connection to prevent crash.");
+            }
+          );
+        }
       }
     }
   }, [isWebMode, connectPrinter, checkBluetoothStatus, savedMacAddress]);
-
   return (
     <PrinterContext.Provider value={{ 
       isPrinterConnected, isConnecting, isPrinting, isBluetoothEnabled, isScanningBluetooth, 
