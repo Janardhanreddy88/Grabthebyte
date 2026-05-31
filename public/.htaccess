@@ -67,9 +67,11 @@ RewriteRule . /index.html [L]
     # Forces browsers to always use HTTPS
     Header set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
-    # Content Security Policy (Allows Supabase & Razorpay, blocks everything else)
-    Header set Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com; img-src 'self' data: https:; font-src 'self' data: https:;"
-</IfModule>
+    # Content Security Policy (Upgraded for OneSignal & Sentry VIP Access)
+# Content Security Policy (Fully Unlocked for OneSignal API & CDN)
+# Content Security Policy (Fully Unlocked for OneSignal API, CDN, & CSS)
+    Header set Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://onesignal.com https://api.onesignal.com https://cdn.onesignal.com https://*.sentry.io; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://cdn.onesignal.com https://api.onesignal.com blob:; style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com; frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com; img-src 'self' data: https:; font-src 'self' data: https:;"
+        </IfModule>
 
 # Prevent directory listing
 Options -Indexes
