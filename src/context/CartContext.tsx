@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+/* @refresh reset */
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { CartItem, MenuItem, Order } from '@/types/canteen';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CartContextType {
   cart: CartItem[];
@@ -33,6 +35,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
 
+  // ─── EXISTING: Save to localStorage ────────────────────────
   useEffect(() => {
     try {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
@@ -40,6 +43,64 @@ export function CartProvider({ children }: { children: ReactNode }) {
       console.error("Failed to save cart to storage:", error);
     }
   }, [cart]);
+
+  // ─── NEW: Sync cart to Supabase ─────────────────────────────
+  const syncCartToSupabase = useCallback(async (updatedCart: CartItem[]) => {
+    try {
+      // Get current session directly — no AuthContext dependency
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const isAnonymous = session?.user?.is_anonymous ?? false;
+
+      console.log("🛒 Sync attempt — user:", userId, "items:", updatedCart.length);
+
+      // Only sync for logged-in non-anonymous users
+      if (!userId || isAnonymous) return;
+
+      const total = updatedCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      if (updatedCart.length === 0) {
+        // Cart is empty — delete their cart row from DB
+        await supabase
+          .from('carts')
+          .delete()
+          .eq('user_id', userId);
+        return;
+      }
+
+      // Upsert — insert if not exists, update if exists
+      const { error } = await supabase
+        .from('carts')
+        .upsert(
+          {
+            user_id: userId,
+            items: updatedCart,
+            total: total,
+            updated_at: new Date().toISOString(),
+            notified_at: null,
+          },
+          { onConflict: 'user_id' }
+        );
+
+      if (error) {
+        console.error("Cart sync error:", error.message);
+      }
+
+    } catch (err) {
+      // Silent fail — localStorage is the source of truth
+      console.error("Cart sync to Supabase failed (non-critical):", err);
+    }
+  }, []);
+
+  // ─── NEW: Debounced sync on cart change ──────────────────────
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      syncCartToSupabase(cart);
+    }, 1500);
+    return () => clearTimeout(debounceTimer);
+  }, [cart, syncCartToSupabase]);
+
+  // ─── EXISTING: All cart operations — UNTOUCHED ───────────────
 
   // 🦅 UPGRADE 4: Smart limits & Bulk Additions
   const addToCart = (item: MenuItem, quantityToAdd: number = 1) => {
@@ -86,6 +147,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => {
     setCart([]);
     localStorage.removeItem(CART_STORAGE_KEY);
+    // Also clear from Supabase
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) {
+        supabase.from('carts').delete().eq('user_id', session.user.id);
+      }
+    });
   };
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
