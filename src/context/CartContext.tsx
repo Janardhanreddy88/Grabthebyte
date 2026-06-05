@@ -69,19 +69,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
 
       // Upsert — insert if not exists, update if exists
-      const { error } = await supabase
-        .from('carts')
-        .upsert(
-          {
-            user_id: userId,
-            items: updatedCart,
-            total: total,
-            updated_at: new Date().toISOString(),
-            notified_at: null,
-          },
-          { onConflict: 'user_id' }
-        );
-
+ const { error } = await supabase
+  .from('carts')
+  .upsert(
+    {
+      user_id: userId,
+      campus_id: session?.user?.user_metadata?.campus_id ?? null,
+      items: updatedCart,
+      total: total,
+      updated_at: new Date().toISOString(),
+      notified_at: null,
+    },
+    { onConflict: 'user_id' }
+  );
       if (error) {
         console.error("Cart sync error:", error.message);
       }
