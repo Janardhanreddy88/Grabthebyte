@@ -118,8 +118,8 @@ serve(async (req) => {
       .from('carts')
       .select('*')
       .lt('updated_at', fifteenMinsAgo)           // idle for 15+ mins
-      .or(`notified_at.is.null,notified_at.lt.${twoHoursAgo}`) // never notified OR notified 2+ hrs ago
-      .gt('total', 0)                              // cart has items with value
+// ✅ Fix — only notify carts that have NEVER been notified
+.is('notified_at', null)
       .limit(50);                                  // process max 50 at a time
 
     if (cartsErr) throw new Error(`Failed to fetch carts: ${cartsErr.message}`);

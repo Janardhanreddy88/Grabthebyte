@@ -78,7 +78,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       items: updatedCart,
       total: total,
       updated_at: new Date().toISOString(),
-      notified_at: null,
+      // ✅ notified_at REMOVED — never touch it from frontend
     },
     { onConflict: 'user_id' }
   );
