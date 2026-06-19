@@ -4,7 +4,8 @@ import {
   ArrowLeft, Bell, BellOff, Moon, Sun, Monitor,
   Lock, KeyRound, Trash2, ShoppingBag, FileText, Shield,
   ChevronRight, LogOut, Loader2, Info, HelpCircle, RotateCcw,
-  Eye, EyeOff, User, Mail, Phone, Building2, Save
+  Eye, EyeOff, User, Mail, Phone, Building2, Save,
+  Smartphone // 🦅 Added Smartphone icon here
 } from 'lucide-react';
 import OneSignalNative from 'onesignal-cordova-plugin';
 import { Capacitor } from '@capacitor/core';
@@ -89,6 +90,30 @@ export default function Settings() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+ // 🦅 NEW: Bulletproof state for showing the App Download section
+  // Default to FALSE so it never accidentally flashes on the screen
+  const [showAppDownload, setShowAppDownload] = useState(false);
+
+  useEffect(() => {
+    // 1. Capacitor Native Check
+    const platform = Capacitor.getPlatform(); // returns 'web', 'android', or 'ios'
+    
+    // 2. PWA Check (Added to homescreen)
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+
+    // 3. The "Paranoia" Check: Detects Android WebViews directly via User-Agent
+    // Capacitor runs your app inside an Android WebView. WebViews have 'wv' in their user agent.
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isWebView = userAgent.includes('wv') || (userAgent.includes('android') && userAgent.includes('version/'));
+
+    // ONLY show the button if it's 100% purely on the Web AND not a PWA AND not a WebView
+    if (platform === 'web' && !isPWA && !isWebView) {
+      setShowAppDownload(true);
+    } else {
+      setShowAppDownload(false); // Force hide
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -360,6 +385,12 @@ export default function Settings() {
   const handleLogout = async () => {
     await logout();
     navigate('/auth');
+  };
+
+  // 🦅 NEW: Handler for opening the App Download link
+  const handleDownloadApp = () => {
+    const apkUrl = 'https://grabthebyte.com/download/app.apk'; 
+    window.open(apkUrl, '_blank');
   };
 
   const themeOptions: { value: ThemeOption; icon: React.ElementType; label: string }[] = [
@@ -668,6 +699,22 @@ export default function Settings() {
             onClick={() => navigate('/my-orders')}
           />
         </div>
+
+        {/* ─── GET THE APP ─── */}
+        {/* 🦅 NEW: Now wrapped in our bulletproof state check! */}
+        {showAppDownload && (
+          <>
+            <SectionHeader title="Get the App" />
+            <div className="px-1">
+              <SettingRow 
+                icon={Smartphone} 
+                label="Download for Android" 
+                description="Get the native GrabTheByte Android app"
+                onClick={handleDownloadApp} 
+              />
+            </div>
+          </>
+        )}
 
         {/* ─── ABOUT & LEGAL ─── */}
         <SectionHeader title="About & Legal" />

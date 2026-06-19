@@ -23,10 +23,11 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
 // 🦅 IMPORT YOUR SMART SPLASH SCREEN!
-// Make sure this path points exactly to where you saved SplashScreen.tsx
 import { SplashScreen } from "@/components/SplashScreen"; 
 
-// 🦅 MAKE SURE THIS PATH MATCHES YOUR SUPABASE CLIENT FILE!
+// 🦅 ADDED: IMPORT YOUR NEW APP PROMO POPUP
+import { AppPromoPopup } from "@/components/AppPromoPopup"; 
+
 import { supabase } from "@/integrations/supabase/client";
 
 // INSTANT LOAD FOR SPLASH SCREEN
@@ -81,11 +82,8 @@ const queryClient = new QueryClient({
   },
 });
 
-// 🦅 THE UPGRADED PAGE LOADER
-// This now directly uses your glitch-free SplashScreen component!
 const PageLoader = () => <SplashScreen />;
 
-// 🌟 THE NATIVE HARDWARE BACK BUTTON CONTROLLER 🌟
 function HardwareBackButtonHandler() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -113,8 +111,6 @@ function HardwareBackButtonHandler() {
   return null; 
 }
 
-// 🛡️ THE GRABTHEBYTE VERSION VAULT INTERCEPTOR 🛡️
-// Update this number when you push a new APK/AAB to the Play Store
 const CURRENT_APP_VERSION = '1.0.0'; 
 
 const VersionGuard = ({ children }: { children: React.ReactNode }) => {
@@ -123,15 +119,13 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     async function checkVersion() {
-      // 1. IF ON WEB: Instantly skip the check and let them in!
       if (!Capacitor.isNativePlatform()) {
         setIsChecking(false);
         return; 
       }
 
-      // 2. IF ON NATIVE APP: Check the Supabase Vault
       try {
-        const platform = Capacitor.getPlatform(); // 'android' or 'ios'
+        const platform = Capacitor.getPlatform(); 
         const { data, error } = await supabase
           .from('app_versions')
           .select('minimum_required_version')
@@ -140,7 +134,6 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
 
         if (error) throw error;
 
-        // Enterprise version math comparison
         const isOld = CURRENT_APP_VERSION.localeCompare(
           data.minimum_required_version, 
           undefined, 
@@ -160,8 +153,6 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
     checkVersion();
   }, []);
 
-  // 🦅 THIS IS WHERE THE MAGIC HAPPENS! 
-  // While checking version, we show your beautiful Splash Screen!
   if (isChecking) {
     return <PageLoader />;
   }
@@ -175,8 +166,8 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
         </p>
         <button 
           onClick={() => {
-            alert("🚀 Google Play Store link coming soon! GrabTheByte is in stealth mode.");
-            // window.location.href = 'YOUR_ACTUAL_LINK_GOES_HERE_LATER';
+            // Use '_system' to force the native OS browser to handle the APK download
+            window.open('https://grabthebyte.com/download/app.apk', '_system');
           }}
           className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform"
         >
@@ -208,10 +199,14 @@ const App = () => (
                             
                             {/* 🛡️ WRAPPING THE ROUTER IN THE VERSION GUARD 🛡️ */}
                             <VersionGuard>
+
+                              {/* 🦅 YOUR NEW SMART APP POPUP SITS RIGHT HERE */}
+                              {/* It watches every single page, but only fires for Android Web Users */}
+                              <AppPromoPopup />
+
                               <BrowserRouter>
                                 <HardwareBackButtonHandler /> 
                                 
-                                {/* 🦅 Suspense also uses your Splash Screen when lazy loading chunks! */}
                                 <Suspense fallback={<PageLoader />}>
                                   <Routes>
                                     {/* Public routes */}
