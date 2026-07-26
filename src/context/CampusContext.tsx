@@ -8,16 +8,15 @@ interface CampusContextType {
   error: string | null;
   settings: CampusSettings | null;
   setCampusByCode: (code: string) => Promise<{ success: boolean; error?: string }>;
-  switchCampus: () => void; // RENAME: Changed from clearCampus to switchCampus
+  switchCampus: () => void; 
   hasCampus: boolean;
 }
 
 const CampusContext = createContext<CampusContextType | undefined>(undefined);
 
 const CAMPUS_CODE_KEY = 'campus_code';
-const CAMPUS_DATA_CACHE_KEY = 'campus_data_cache'; // 🚀 THE OFFLINE MEMORY BANK
+const CAMPUS_DATA_CACHE_KEY = 'campus_data_cache'; 
 
-// Default settings fallback
 const defaultSettings: CampusSettings = {
   payment: {
     provider: 'upi',
@@ -99,6 +98,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       logo_url: publicData.logo_url,
       address: publicData.address,
       is_active: publicData.is_active,
+      status: publicData.status, // 🚀 FIX 2: Added status so the bouncer can read it
       settings,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -110,7 +110,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       .from('campuses')
       .select('*')
       .eq('id', id)
-      .eq('is_active', true)
+      // 🚀 FIX 3: Removed .eq('is_active', true) so we intentionally fetch archived campuses to kick them!
       .single();
 
     if (fullData) {
@@ -154,13 +154,14 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       logo_url: publicData.logo_url,
       address: publicData.address,
       is_active: publicData.is_active,
+      status: publicData.status, // 🚀 FIX 2: Added status here too
       settings,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as Campus;
   }, []);
 
-  // Real-time subscription for campus changes (propagates Super Admin toggles)
+  // Real-time subscription for campus changes
   useEffect(() => {
     if (!campus?.id) return;
 
@@ -199,18 +200,16 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       try {
         const savedCode = localStorage.getItem(CAMPUS_CODE_KEY);
         
-        // 🚀 1. INSTANT OFFLINE LOAD: If we have the cache, load it and STOP!
+        // 🚀 FIX 1: We load the cache to show UI instantly, but we DON'T stop. 
+        // We let the code continue down to fetch the live data in the background to ensure it wasn't archived!
         const cachedData = localStorage.getItem(CAMPUS_DATA_CACHE_KEY);
         if (cachedData) {
           try {
             const parsedCampus = JSON.parse(cachedData);
             setCampus(parsedCampus);
-            setIsLoading(false);
-            return; // STOP HERE!
           } catch (e) { console.error("Cache parse failed"); }
         }
 
-        // 🚀 2. NETWORK ASSASSIN PROTECTION: Do not attempt network if offline
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           setIsLoading(false);
           return;
@@ -221,19 +220,18 @@ export function CampusProvider({ children }: { children: ReactNode }) {
           if (campusData) {
             setCampus(campusData);
             localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData)); 
-            setIsLoading(false);
-            return;
           }
-        }
-
-        const { data: { session } } = await supabase.auth.getSession();
-        const campusId = session?.user?.user_metadata?.campus_id;
-        if (typeof campusId === 'string' && campusId) {
-          const campusData = await fetchCampusById(campusId);
-          if (campusData) {
-            setCampus(campusData);
-            localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
-            localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData));
+        } else {
+          // If no code, check session
+          const { data: { session } } = await supabase.auth.getSession();
+          const campusId = session?.user?.user_metadata?.campus_id;
+          if (typeof campusId === 'string' && campusId) {
+            const campusData = await fetchCampusById(campusId);
+            if (campusData) {
+              setCampus(campusData);
+              localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
+              localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData));
+            }
           }
         }
       } catch (err) {

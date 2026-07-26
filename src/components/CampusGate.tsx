@@ -10,14 +10,13 @@ interface CampusGateProps {
 
 /**
  * CampusGate ensures a campus is selected before allowing access to protected routes.
- * If no campus is selected, redirects to /select-campus.
+ * If no campus is selected, or if the campus is archived, it boots the user.
  */
 export function CampusGate({ children }: CampusGateProps) {
-  // 🚀 UPDATED: Using switchCampus and renaming isLoading for clarity
   const { hasCampus, isLoading: isCampusLoading, campus, switchCampus } = useCampus();
   
-  // 🚀 UPDATED: Grabbing isLoading from Auth to prevent premature redirects
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  // 🚀 UPDATED: Pulled in `logout` so we can destroy the session if they get booted
+  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
   const location = useLocation();
 
   const isCampusMismatch = useMemo(() => {
@@ -27,13 +26,32 @@ export function CampusGate({ children }: CampusGateProps) {
     return campus.id !== user.campusId;
   }, [isAuthenticated, user, campus?.id]);
 
-  // If someone selects a different campus after logging in, force them back to campus selection.
-  useEffect(() => {
-    if (!isCampusMismatch) return;
-    switchCampus(); // 🚀 UPDATED: Calling the new function name
-  }, [isCampusMismatch, switchCampus]);
+  // 🛡️ THE TRAPDOOR: Check if the campus has been shut down
+  const isCampusArchived = useMemo(() => {
+    if (!campus) return false;
+    // If it's archived OR marked inactive, it triggers the trapdoor
+    return campus.status === 'archived' || campus.is_active === false;
+  }, [campus]);
 
-  // 🚀 THE SMART BOUNCER: Show loading while checking BOTH campus AND auth status
+  // 💥 THE KICKER: Boot them out if there is a mismatch OR the campus is archived
+  useEffect(() => {
+    // Super admins are immune to getting kicked out
+    if (user?.role === 'super_admin') return;
+
+    if (isCampusMismatch) {
+      switchCampus();
+    }
+
+    // If the campus is archived, clear the campus AND log them out instantly
+    if (isCampusArchived) {
+      switchCampus(); 
+      if (logout) {
+        logout();
+      }
+    }
+  }, [isCampusMismatch, isCampusArchived, switchCampus, logout, user?.role]);
+
+  // Show loading while checking BOTH campus AND auth status
   if (isCampusLoading || isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -50,11 +68,16 @@ export function CampusGate({ children }: CampusGateProps) {
     return <Navigate to="/select-campus" state={{ from: location }} replace />;
   }
 
+  // 🛑 BLOCKED: If the campus is archived, redirect them out (Admins bypass this)
+  if (isCampusArchived && user?.role !== 'super_admin') {
+    return <Navigate to="/select-campus" replace />;
+  }
+
   // Campus mismatch - redirect to selector (user's account belongs elsewhere)
   if (isCampusMismatch) {
     return <Navigate to="/select-campus" replace />;
   }
 
-  // Campus is set and user is verified - render children
+  // Campus is set, active, and user is verified - render children!
   return <>{children}</>;
 }

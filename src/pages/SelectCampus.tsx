@@ -9,9 +9,12 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client"; // Check this path!
 
+// 🚀 FIX 1: Added is_active and status to the interface
 interface CampusData {
   name: string;
   code: string;
+  is_active: boolean;
+  status: string;
 }
 
 export default function SelectCampus() {
@@ -31,7 +34,8 @@ export default function SelectCampus() {
       try {
         const { data, error } = await supabase
           .from('campuses')
-          .select('name, code')
+          // 🚀 FIX 2: Ask Supabase for the status and is_active columns
+          .select('name, code, is_active, status')
           .order('name'); 
           
         if (error) throw error;
@@ -60,7 +64,17 @@ export default function SelectCampus() {
       return; 
     }
     
-    // The value passed here is ALREADY just the code (e.g., "CMRTC")
+    // 🚀 FIX 3: THE GATEKEEPER LOGIC
+    // Find the exact campus they selected from our array
+    const selectedCampus = campuses.find(c => c.code === campusCode);
+    
+    // If we found it, but it's archived or inactive, throw the error and STOP!
+    if (selectedCampus && (selectedCampus.status === 'archived' || selectedCampus.is_active === false)) {
+      setError("Campus not found. Please contact administration.");
+      return;
+    }
+    
+    // If it passes the check, proceed to login
     const result = await setCampusByCode(campusCode);
     if (result.success) { 
       toast({ title: "Campus Selected!", description: "Redirecting to login..." }); 
@@ -117,7 +131,6 @@ export default function SelectCampus() {
                   
                   {campuses.map((campus) => (
                     <option key={campus.code} value={campus.code}>
-                      {/* 🧠 THE CTO HACK: Show just the code if selected, otherwise show Name - Code */}
                       {campusCode === campus.code 
                         ? campus.code 
                         : `${campus.name} - ${campus.code}`}
