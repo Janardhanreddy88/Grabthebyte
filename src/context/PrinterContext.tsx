@@ -177,8 +177,15 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     commands.push(GS, 0x21, 0x10); 
     commands.push(...textEncoder.encode(`Order No: #${sanitizeText(orderData.orderNumber)}\n`));
     
+    // 🦅 ADD DATE AND TIME FIX
     commands.push(GS, 0x21, 0x00); 
     commands.push(ESC, 0x45, 0x00); 
+    
+    const now = new Date();
+    const dateString = now.toLocaleDateString('en-IN');
+    const timeString = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    commands.push(...textEncoder.encode(`Date: ${dateString}  Time: ${timeString}\n`));
+    
     commands.push(...textEncoder.encode(`${separator}\n`));
 
     // 🦅 ITEM HEADERS: BOLD
@@ -187,10 +194,26 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
 
-    // 🦅 ITEMS LIST: BOLD
+    // 🦅 ITEMS LIST: BOLD WITH TOKEN OVERRIDE FIX
     commands.push(ESC, 0x45, 0x01); 
     orderData.items.forEach(item => {
-      commands.push(...textEncoder.encode(formatRow(item.name, String(item.quantity), String(item.price * item.quantity))));
+      
+      const isToken = item.name.toLowerCase().includes('token');
+      
+      let displayQty;
+      let displayPrice;
+      
+      if (isToken) {
+        // Force Token to print as QTY 1, and use the 'quantity' state as the Rupees amount
+        displayQty = 1;
+        displayPrice = item.quantity; 
+      } else {
+        // Standard food items print normally
+        displayQty = item.quantity;
+        displayPrice = item.price * item.quantity;
+      }
+
+      commands.push(...textEncoder.encode(formatRow(item.name, String(displayQty), String(displayPrice))));
     });
     commands.push(ESC, 0x45, 0x00); 
     commands.push(...textEncoder.encode(`${separator}\n`));
