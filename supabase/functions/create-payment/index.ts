@@ -136,22 +136,15 @@ Deno.serve(async (req) => {
 
     const discountedFoodCost = Math.max(0, rawFoodTotal - (order.discount_amount || 0));
 
-    // Calculate the base platform fee based on RAW food total
-    let basePlatformFeeINR = 0;
-    if (rawFoodTotal <= 40) { basePlatformFeeINR = 2; }
-    else if (rawFoodTotal <= 100) { basePlatformFeeINR = 5; }
-    else { basePlatformFeeINR = 6; }
-
-    const targetBankAmount = discountedFoodCost + basePlatformFeeINR; 
-
-    // Calculate gross-up to cover the 2.5% Razorpay fee
-    const rawFinalTotal = targetBankAmount / 0.975;
-    const finalChargeINR = Math.round(rawFinalTotal * 100) / 100;
+    // 🦅 NEW 3% FLAT PLATFORM FEE LOGIC
+    // Calculates exactly 3% of the food cost and rounds to 2 decimals
+    const exactHandlingFeeINR = rawFoodTotal === 0 ? 0 : Number((discountedFoodCost * 0.03).toFixed(2));
+    
+    const finalChargeINR = rawFoodTotal === 0 ? 0 : Number((discountedFoodCost + exactHandlingFeeINR).toFixed(2));
     const finalChargePaisa = Math.round(finalChargeINR * 100);
     
     // The Canteen only gets the exact food cost minus any promo codes
     const canteenSharePaisa = Math.round(discountedFoodCost * 100); 
-    const exactHandlingFeeINR = Math.round((finalChargeINR - discountedFoodCost) * 100) / 100;
 
     const razorpayPayload: any = {
       amount: finalChargePaisa, 

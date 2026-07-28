@@ -58,13 +58,11 @@ export default function Checkout() {
   const [promoMessage, setPromoMessage] = useState({ text: "", type: "" });
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
-  // THE BULLETPROOF PRICING LOGIC
-  const basePlatformFee = cart.length === 0 ? 0 : (totalPrice <= 40 ? 2 : totalPrice <= 100 ? 5 : 6);
+  // 🦅 THE NEW BULLETPROOF 3% PRICING LOGIC
   const discountedFoodCost = Math.max(0, totalPrice - appliedDiscount);
-  const targetBankAmount = discountedFoodCost + basePlatformFee; 
-  const rawFinalTotal = cart.length === 0 ? 0 : (targetBankAmount / 0.975);
-  const finalAmountToPay = Math.round(rawFinalTotal * 100) / 100;
-  const totalHandlingFee = cart.length === 0 ? 0 : Math.round((finalAmountToPay - discountedFoodCost) * 100) / 100;
+  // Calculates exactly 3% of the food cost and rounds to 2 decimals
+  const totalHandlingFee = cart.length === 0 ? 0 : Number((discountedFoodCost * 0.03).toFixed(2));
+  const finalAmountToPay = cart.length === 0 ? 0 : Number((discountedFoodCost + totalHandlingFee).toFixed(2));
 
   useEffect(() => {
     if (appliedPromoCode) {
