@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react'; // ✅ FIX: Canvas is immune to OS dark mode inversion
 import { CheckCircle2, Receipt, Loader2, MapPin, XCircle, Clock, ShoppingBag, ArrowLeft, Ban, RefreshCw, Landmark, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -135,8 +135,29 @@ export default function OrderDetails() {
           {order.status === 'confirmed' && (
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
               <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-black/[0.03] p-6 text-center flex flex-col items-center">
-                <div className="bg-white p-3.5 rounded-2xl border-2 border-dashed border-gray-200 mb-5 shadow-sm">
-                  <QRCodeSVG value={order.collection_token} size={150} level="H" />
+                {/* ✅ FIX: QRCodeCanvas is pixel-rendered so OS dark mode cannot invert its colors.
+                    The outer div uses isolation:isolate + colorScheme:light as additional shields
+                    for any CSS-level dark mode filters applied by the browser itself. */}
+                <div
+                  className="mb-5 inline-block"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    padding: '14px',
+                    borderRadius: '16px',
+                    border: '2px dashed #E5E7EB',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                    colorScheme: 'light',
+                    isolation: 'isolate',
+                  }}
+                >
+                  <QRCodeCanvas
+                    value={order.collection_token}
+                    size={150}
+                    level="H"
+                    fgColor="#000000"
+                    bgColor="#FFFFFF"
+                    style={{ display: 'block', borderRadius: '4px' }}
+                  />
                 </div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order Number</p>
                 <p className="text-4xl font-black text-gray-900 tracking-tighter">#{order.order_number}</p>
