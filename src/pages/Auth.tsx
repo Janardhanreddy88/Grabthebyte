@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/Logo';
 import { useCampus } from '@/context/CampusContext';
+import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
-import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer, Info } from 'lucide-react'; // 🦅 Added Info icon
+import { Mail, Lock, User, ArrowRight, Loader2, RefreshCw, AlertTriangle, Phone, Timer, Info } from 'lucide-react';
 import { sanitizeEmail } from '@/lib/sanitize';
 import { motion } from 'framer-motion';
 
@@ -35,34 +36,38 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { campus } = useCampus();
-  
+
+  // 🛡️ FIX: Use AuthContext instead of raw supabase calls
+  // This eliminates the duplicate session check and the competing
+  // onAuthStateChange listener that was causing role confusion
+  const { login: authLogin, isAuthenticated, user, isInitializing } = useAuth();
+
   const [isLoading, setIsLoading] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  
+
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  
+
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
-  
+
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpToken, setOtpToken] = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
     if (resendCountdown > 0) {
-      timer = setInterval(() => {
-        setResendCountdown((prev) => prev - 1);
-      }, 1000);
+      timer = setInterval(() => setResendCountdown((prev) => prev - 1), 1000);
     }
     return () => clearInterval(timer);
   }, [resendCountdown]);
 
+  // Handle logout param
   useEffect(() => {
     const shouldLogout = searchParams.get('logout') === 'true';
     if (!shouldLogout) return;
@@ -70,70 +75,32 @@ export default function Auth() {
     (async () => {
       setIsLoggingOut(true);
       await supabase.auth.signOut();
-      const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       setIsLoggingOut(false);
-      if (!session) navigate('/auth', { replace: true });
     })();
     return () => { cancelled = true; };
-  }, [searchParams, navigate]);
+  }, [searchParams]);
 
-  // 🌟 THE BOUNCER (Part 1): Initial load check
+  // 🛡️ FIX: Single redirect effect using AuthContext user + isInitializing
+  // REMOVED: duplicate supabase.auth.getSession() check
+  // REMOVED: own onAuthStateChange listener
+  // Both were competing with AuthContext and causing role confusion
   useEffect(() => {
     if (isLoggingOut) return;
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data: roles } = await supabase.from('user_roles').select('role, campus_id').eq('user_id', session.user.id).maybeSingle();
-        if (roles?.role !== 'super_admin' && campus?.id) {
-          if (roles?.campus_id && roles.campus_id !== campus.id) {
-            await supabase.auth.signOut();
-            toast({ title: 'Wrong Campus', description: 'Your account is registered with a different campus.', variant: 'destructive' });
-            return;
-          }
-        }
-        
-        if (roles?.role === 'super_admin') navigate('/super-admin', { replace: true });
-        else if (roles?.role === 'admin') navigate('/admin', { replace: true });
-        else if (roles?.role === 'kiosk') navigate('/kiosk-scanner', { replace: true });
-        else navigate('/menu', { replace: true });
-      }
-    };
-    checkSession();
-  }, [navigate, isLoggingOut, campus, toast]);
+    if (isInitializing) return; // Wait for real role to be fetched
+    if (!isAuthenticated || !user) return; // Not logged in — stay on auth page
 
-  // 🌟 THE BOUNCER (Part 2): Live listener
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        setTimeout(async () => {
-          const [rolesResult, profileResult] = await Promise.all([
-            supabase.from('user_roles').select('role, campus_id').eq('user_id', session.user.id).maybeSingle(),
-            supabase.from('profiles').select('campus_id').eq('user_id', session.user.id).maybeSingle(),
-          ]);
-          const userRole = rolesResult.data?.role;
-          const userCampusId = rolesResult.data?.campus_id || profileResult.data?.campus_id;
-          
-          if (userRole !== 'super_admin' && campus?.id) {
-            if (userCampusId && userCampusId !== campus.id) {
-              await supabase.auth.signOut();
-              toast({ title: 'Wrong Campus', description: 'Your account is registered with a different campus.', variant: 'destructive' });
-              return;
-            }
-          }
-          
-          if (userRole === 'super_admin') {
-             navigate('/super-admin', { replace: true });
-          } else if (userRole === 'admin' || userRole === 'kiosk') {
-             navigate(userRole === 'admin' ? '/admin' : '/kiosk-scanner', { replace: true });
-          } else {
-             navigate('/menu', { replace: true });
-          }
-        }, 0);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [navigate, campus, toast]);
+    // ✅ Role-based redirect — uses the verified role from AuthContext
+    if (user.role === 'super_admin') {
+      navigate('/super-admin', { replace: true });
+    } else if (user.role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (user.role === 'kiosk') {
+      navigate('/kiosk-scanner', { replace: true });
+    } else {
+      navigate('/menu', { replace: true });
+    }
+  }, [isInitializing, isAuthenticated, user, isLoggingOut, navigate]);
 
   const clearErrors = () => setErrors({});
 
@@ -155,96 +122,125 @@ export default function Auth() {
     return Object.keys(newErrors).length === 0;
   };
 
+  // 🛡️ FIX: Use AuthContext login instead of raw supabase.auth.signInWithPassword
+  // AuthContext.login() fetches the real role and saves to cache
+  // The redirect is handled by the useEffect above — not here
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); clearErrors();
+    e.preventDefault();
+    clearErrors();
     if (!validateLoginForm()) return;
-    
-    if (!campus?.id) { 
-      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
-      navigate('/select-campus', { replace: true }); 
-      return; 
+
+    if (!campus?.id) {
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
+      navigate('/select-campus', { replace: true });
+      return;
     }
-    
+
     const sanitizedEmail = sanitizeEmail(loginEmail);
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: loginPassword });
-      if (error) { 
-        toast({ title: 'Login Failed', description: 'Invalid email or password.', variant: 'destructive' }); 
-        return; 
+      const result = await authLogin(sanitizedEmail, loginPassword);
+      if (!result.success) {
+        toast({ title: 'Login Failed', description: result.error || 'Invalid email or password.', variant: 'destructive' });
+        return;
       }
-      if (data.user) toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
-    } catch { 
-      toast({ title: 'Login Failed', description: 'Error occurred.', variant: 'destructive' }); 
-    } finally { 
-      setIsLoading(false); 
+
+      // ✅ Campus mismatch check using the role returned from AuthContext
+      if (result.role !== 'super_admin' && campus?.id) {
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('campus_id')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id || '')
+          .maybeSingle();
+
+        if (roleData?.campus_id && roleData.campus_id !== campus.id) {
+          await supabase.auth.signOut();
+          toast({
+            title: 'Wrong Campus',
+            description: 'Your account is registered with a different campus.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
+      toast({ title: 'Welcome back!', description: 'Successfully logged in.' });
+      // Redirect handled by useEffect above
+    } catch {
+      toast({ title: 'Login Failed', description: 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault(); clearErrors();
+    e.preventDefault();
+    clearErrors();
     if (!validateSignupForm()) return;
-    
-    if (!campus?.id) { 
-      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
-      navigate('/select-campus', { replace: true }); 
-      return; 
+
+    if (!campus?.id) {
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
+      navigate('/select-campus', { replace: true });
+      return;
     }
-    
+
     setIsLoading(true);
-    
     try {
       const { data: phoneExists } = await supabase.rpc('check_phone_exists' as any, { phone_input: signupPhone.trim() });
-      if (phoneExists) { toast({ title: 'Phone Already Registered', description: 'This number is already in use.', variant: 'destructive' }); setIsLoading(false); return; }
-      
+      if (phoneExists) {
+        toast({ title: 'Phone Already Registered', description: 'This number is already in use.', variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
-        email: signupEmail.trim(), 
+        email: signupEmail.trim(),
         password: signupPassword,
-        options: { 
-          data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() } 
+        options: {
+          data: { campus_id: campus.id, full_name: signupName.trim(), phone: signupPhone.trim() },
         },
       });
-      
-      if (error) { 
-        let msg = error.message; 
-        if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered.'; 
-        toast({ title: 'Signup Failed', description: msg, variant: 'destructive' }); 
-        return; 
+
+      if (error) {
+        let msg = error.message;
+        if (msg.includes('already registered') || msg.includes('unique')) msg = 'This email is already registered.';
+        toast({ title: 'Signup Failed', description: msg, variant: 'destructive' });
+        return;
       }
-      
+
       setIsVerifyingOtp(true);
       setResendCountdown(60);
       toast({ title: 'Check your email!', description: 'We sent a 6-digit verification code to your inbox.' });
-      
-    } catch { toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' }); }
-    finally { setIsLoading(false); }
+    } catch {
+      toast({ title: 'Signup Failed', description: 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // 🦅 THE ANONYMOUS GUEST LOGIN GENERATOR
   const handleVisitorLogin = async () => {
-    if (!campus?.id) { 
-      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' }); 
-      navigate('/select-campus', { replace: true }); 
-      return; 
+    if (!campus?.id) {
+      toast({ title: 'Campus Required', description: 'Please select a campus first.', variant: 'destructive' });
+      navigate('/select-campus', { replace: true });
+      return;
     }
 
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInAnonymously();
-
       if (error) throw error;
 
       if (data.user) {
-        // Create a temporary guest profile so RLS and the Bouncer don't panic!
         await supabase.from('profiles').upsert({
           user_id: data.user.id,
           full_name: 'Guest Visitor',
-          phone: '0000000000', // Dummy phone placeholder
+          phone: '0000000000',
           campus_id: campus.id,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
         toast({ title: 'Welcome, Guest!', description: 'You can now browse and order.' });
+        // Redirect handled by useEffect above after AuthContext updates
       }
     } catch (error: any) {
       toast({ title: 'Guest Login Failed', description: error.message || 'Error occurred.', variant: 'destructive' });
@@ -257,10 +253,7 @@ export default function Auth() {
     if (resendCountdown > 0) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: signupEmail.trim(),
-      });
+      const { error } = await supabase.auth.resend({ type: 'signup', email: signupEmail.trim() });
       if (error) throw error;
       setResendCountdown(60);
       toast({ title: 'Code Resent!', description: 'Check your inbox for a new code.', className: "bg-green-600 text-white border-none" });
@@ -278,7 +271,7 @@ export default function Auth() {
       const { data, error } = await supabase.auth.verifyOtp({
         email: signupEmail.trim(),
         token: otpToken.trim(),
-        type: 'signup'
+        type: 'signup',
       });
 
       if (error) {
@@ -287,21 +280,16 @@ export default function Auth() {
       }
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            user_id: data.user.id,
-            full_name: signupName.trim(),
-            phone: signupPhone.trim(), 
-            campus_id: campus?.id!,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id' });
-
-        if (profileError) {
-          console.error("Profile save error:", profileError);
-        }
+        await supabase.from('profiles').upsert({
+          user_id: data.user.id,
+          full_name: signupName.trim(),
+          phone: signupPhone.trim(),
+          campus_id: campus?.id!,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
 
         toast({ title: 'Account Verified!', description: 'Welcome to GrabTheByte.' });
+        // Redirect handled by useEffect above
       }
     } catch {
       toast({ title: 'Error', description: 'Could not verify OTP.', variant: 'destructive' });
@@ -330,7 +318,7 @@ export default function Auth() {
         </div>
 
         <div className="bg-card rounded-2xl shadow-soft border border-border p-4">
-          <Tabs defaultValue="login" className="w-full" onValueChange={(v) => { clearErrors(); setIsVerifyingOtp(false); }}>
+          <Tabs defaultValue="login" className="w-full" onValueChange={() => { clearErrors(); setIsVerifyingOtp(false); }}>
             <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-xl bg-muted p-1">
               <TabsTrigger value="login" className="rounded-lg text-sm font-bold">Login</TabsTrigger>
               <TabsTrigger value="signup" className="rounded-lg text-sm font-bold">Sign Up</TabsTrigger>
@@ -369,46 +357,24 @@ export default function Auth() {
                   </div>
                   <h3 className="font-bold text-base text-foreground">Check your email</h3>
                   <p className="text-sm text-muted-foreground px-2">
-                    We sent a 6-digit code to <br/><span className="font-bold text-foreground">{signupEmail}</span>
+                    We sent a 6-digit code to <br /><span className="font-bold text-foreground">{signupEmail}</span>
                   </p>
-                  
                   <div className="pt-2 px-4">
-                    <InputField 
-                      id="otp-input" 
-                      label="" 
-                      icon={Lock} 
-                      type="text" 
-                      maxLength={6}
-                      placeholder="Enter 6-digit code" 
-                      value={otpToken} 
-                      onChange={(e: any) => setOtpToken(e.target.value.replace(/\D/g, ''))}
-                      disabled={isLoading} 
-                    />
+                    <InputField id="otp-input" label="" icon={Lock} type="text" maxLength={6} placeholder="Enter 6-digit code"
+                      value={otpToken} onChange={(e: any) => setOtpToken(e.target.value.replace(/\D/g, ''))} disabled={isLoading} />
                   </div>
-                  
                   <div className="space-y-3 px-4">
                     <Button type="submit" className="w-full font-bold rounded-xl gap-2 text-sm btn-glow mt-2" disabled={isLoading || otpToken.length !== 6}>
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Verify & Enter <ArrowRight size={16} /></>}
                     </Button>
-
-                    <button 
-                      type="button" 
-                      onClick={handleResendOtp} 
-                      disabled={isLoading || resendCountdown > 0} 
-                      className={`text-xs w-full flex items-center justify-center gap-1.5 font-bold transition-colors ${resendCountdown > 0 ? 'text-muted-foreground' : 'text-primary hover:text-primary/80'}`}
-                    >
-                      {resendCountdown > 0 ? (
-                        <><Timer size={14} /> Resend in {resendCountdown}s</>
-                      ) : (
-                        <><RefreshCw size={14} /> Resend Code</>
-                      )}
+                    <button type="button" onClick={handleResendOtp} disabled={isLoading || resendCountdown > 0}
+                      className={`text-xs w-full flex items-center justify-center gap-1.5 font-bold transition-colors ${resendCountdown > 0 ? 'text-muted-foreground' : 'text-primary hover:text-primary/80'}`}>
+                      {resendCountdown > 0 ? <><Timer size={14} /> Resend in {resendCountdown}s</> : <><RefreshCw size={14} /> Resend Code</>}
                     </button>
                   </div>
-                  
                   <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-xs text-muted-foreground hover:text-primary mt-4 font-medium underline block w-full">
                     Change Email
                   </button>
-                  
                   <button type="button" onClick={() => setIsVerifyingOtp(false)} className="text-xs text-muted-foreground hover:text-primary mt-2 font-medium">
                     ← Back to Sign Up
                   </button>
@@ -417,7 +383,6 @@ export default function Auth() {
             </TabsContent>
           </Tabs>
 
-          {/* 🦅 THE GUEST CHECKOUT BUTTON WITH WARNING */}
           {!isVerifyingOtp && (
             <div className="mt-4">
               <div className="relative mb-4">
@@ -428,19 +393,12 @@ export default function Auth() {
                   <span className="bg-card px-2 text-muted-foreground font-semibold">Or</span>
                 </div>
               </div>
-              
-              <Button
-                type="button"
-                variant="outline"
+              <Button type="button" variant="outline"
                 className="w-full font-bold rounded-xl gap-2 text-sm border-dashed hover:bg-primary/5 hover:text-primary transition-colors"
-                onClick={handleVisitorLogin}
-                disabled={isLoading}
-              >
+                onClick={handleVisitorLogin} disabled={isLoading}>
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <User size={16} />}
                 Continue as Visitor
               </Button>
-              
-              {/* 🦅 STRICT VISITOR DISCLAIMER */}
               <div className="mt-3 flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-500/20">
                 <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <p className="text-[10px] leading-tight text-amber-800 dark:text-amber-200 font-medium">
@@ -449,7 +407,6 @@ export default function Auth() {
               </div>
             </div>
           )}
-
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-5">

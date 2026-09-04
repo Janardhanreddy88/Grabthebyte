@@ -11,17 +11,21 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated } = useAuth();
-  const { campus } = useCampus();
+  const { user, isInitializing, isAuthenticated } = useAuth();
+  const { campus, isLoading: campusLoading } = useCampus();
   const location = useLocation();
 
-  // Show loading state while checking auth
-  if (isLoading) {
+  // 🛡️ CRITICAL FIX: Wait for the very first boot check to complete.
+  // isInitializing is true only during initial app load — never redirect
+  // before we've had a chance to restore the immortal cache.
+  // Without this, ProtectedRoute sees isAuthenticated=false for ~200ms
+  // and redirects the user to /auth on every app open.
+  if (isInitializing || campusLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Verifying access...</p>
+          <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -33,30 +37,29 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   // Enforce campus isolation for all non-super-admin users
-  if (user.role !== 'super_admin' && campus?.id && user.campusId && user.campusId !== campus.id) {
+  if (
+    user.role !== 'super_admin' &&
+    campus?.id &&
+    user.campusId &&
+    user.campusId !== campus.id
+  ) {
     return <Navigate to="/select-campus" replace />;
   }
 
   // Check role if required
   if (allowedRoles && allowedRoles.length > 0) {
     if (!allowedRoles.includes(user.role)) {
-      // Redirect based on their actual role
-      if (user.role === 'admin') {
-        return <Navigate to="/admin" replace />;
-      }
-      if (user.role === 'kiosk') {
-        return <Navigate to="/kiosk-scanner" replace />;
-      }
-      // Students go to menu
+      if (user.role === 'admin') return <Navigate to="/admin" replace />;
+      if (user.role === 'kiosk') return <Navigate to="/kiosk-scanner" replace />;
       return <Navigate to="/menu" replace />;
     }
   }
 
-  // Authorized - render children
   return <>{children}</>;
 }
 
-// Convenience wrappers
+// ─── Convenience wrappers ────────────────────────────────────────────────────
+
 export function AdminRoute({ children }: { children: ReactNode }) {
   return (
     <ProtectedRoute allowedRoles={['admin']}>

@@ -6,32 +6,39 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function Index() {
   const navigate = useNavigate();
-  const { hasCampus } = useCampus();
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { hasCampus, isLoading: isCampusLoading } = useCampus();
+  const { user, isAuthenticated, isInitializing } = useAuth();
 
   useEffect(() => {
-    // 🦅 1. The Gatekeeper: Wait for Auth/Supabase to finish checking
-    if (isAuthLoading) return;
+    // 🛡️ FIX: Wait for BOTH auth AND campus to finish initializing
+    // isInitializing = true until the very first boot check completes
+    // Without this, we redirect before the real role is fetched
+    if (isInitializing || isCampusLoading) return;
 
-    // 🦅 2. Instant Routing: Teleport the user the second checking is done
+    // No campus selected yet → go to campus selection
     if (!hasCampus) {
       navigate('/select-campus', { replace: true });
-    } else if (isAuthenticated && user) {
-      // Route based on exact role
-      if (user.role === 'admin') {
-        navigate('/admin', { replace: true });
-      } else if (user.role === 'kiosk') {
-        navigate('/kiosk-scanner', { replace: true });
-      } else if (user.role === 'super_admin') {
-        navigate('/super-admin', { replace: true });
-      } else {
-        navigate('/menu', { replace: true });
-      }
-    } else {
-      navigate('/auth', { replace: true });
+      return;
     }
-  }, [isAuthLoading, isAuthenticated, user, hasCampus, navigate]);
 
-  // 🦅 3. The Visuals: Render the smart Splash Screen while the useEffect waits!
+    // Campus exists but not logged in → go to auth
+    if (!isAuthenticated || !user) {
+      navigate('/auth', { replace: true });
+      return;
+    }
+
+    // ✅ Role-based routing — runs only after real role is confirmed
+    if (user.role === 'super_admin') {
+      navigate('/super-admin', { replace: true });
+    } else if (user.role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (user.role === 'kiosk') {
+      navigate('/kiosk-scanner', { replace: true });
+    } else {
+      navigate('/menu', { replace: true });
+    }
+  }, [isInitializing, isCampusLoading, isAuthenticated, user, hasCampus, navigate]);
+
+  // Show splash screen while waiting for auth + campus to initialize
   return <SplashScreen />;
 }

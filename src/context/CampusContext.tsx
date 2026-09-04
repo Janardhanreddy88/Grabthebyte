@@ -8,14 +8,14 @@ interface CampusContextType {
   error: string | null;
   settings: CampusSettings | null;
   setCampusByCode: (code: string) => Promise<{ success: boolean; error?: string }>;
-  switchCampus: () => void; 
+  switchCampus: () => void;
   hasCampus: boolean;
 }
 
 const CampusContext = createContext<CampusContextType | undefined>(undefined);
 
 const CAMPUS_CODE_KEY = 'campus_code';
-const CAMPUS_DATA_CACHE_KEY = 'campus_data_cache'; 
+const CAMPUS_DATA_CACHE_KEY = 'campus_data_cache';
 
 const defaultSettings: CampusSettings = {
   payment: {
@@ -41,8 +41,21 @@ const defaultSettings: CampusSettings = {
   },
 };
 
+// ─── Safe cache helpers ──────────────────────────────────────────────────────
+const safeGetCampusCache = (): Campus | null => {
+  try {
+    const raw = localStorage.getItem(CAMPUS_DATA_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
+const safeSaveCampusCache = (campus: Campus) => {
+  try { localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campus)); } catch {}
+};
+
 export function CampusProvider({ children }: { children: ReactNode }) {
-  const [campus, setCampus] = useState<Campus | null>(null);
+  // 🛡️ FIX 1: Initialize directly from cache so there's NEVER a blank state
+  const [campus, setCampus] = useState<Campus | null>(() => safeGetCampusCache());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +68,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (publicError || !publicData) {
-      console.error('[Campus] Lookup failed:', publicError?.message || 'Not found', publicError);
+      console.error('[Campus] Lookup failed:', publicError?.message || 'Not found');
       return null;
     }
 
@@ -70,10 +83,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
         ...defaultSettings,
         ...(fullData.settings as unknown as Partial<CampusSettings>),
       };
-      return {
-        ...fullData,
-        settings,
-      } as Campus;
+      return { ...fullData, settings } as Campus;
     }
 
     const publicBranding = publicData.branding as Partial<CampusSettings['branding']> | null;
@@ -81,14 +91,8 @@ export function CampusProvider({ children }: { children: ReactNode }) {
 
     const settings: CampusSettings = {
       ...defaultSettings,
-      branding: {
-        ...defaultSettings.branding,
-        ...(publicBranding || {}),
-      },
-      operational: {
-        ...defaultSettings.operational,
-        ...(publicOperational || {}),
-      },
+      branding: { ...defaultSettings.branding, ...(publicBranding || {}) },
+      operational: { ...defaultSettings.operational, ...(publicOperational || {}) },
     };
 
     return {
@@ -98,7 +102,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       logo_url: publicData.logo_url,
       address: publicData.address,
       is_active: publicData.is_active,
-      status: publicData.status, // 🚀 FIX 2: Added status so the bouncer can read it
+      status: publicData.status,
       settings,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -110,7 +114,6 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       .from('campuses')
       .select('*')
       .eq('id', id)
-      // 🚀 FIX 3: Removed .eq('is_active', true) so we intentionally fetch archived campuses to kick them!
       .single();
 
     if (fullData) {
@@ -118,10 +121,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
         ...defaultSettings,
         ...(fullData.settings as unknown as Partial<CampusSettings>),
       };
-      return {
-        ...fullData,
-        settings,
-      } as Campus;
+      return { ...fullData, settings } as Campus;
     }
 
     const { data: publicData, error: publicError } = await supabase
@@ -137,14 +137,8 @@ export function CampusProvider({ children }: { children: ReactNode }) {
 
     const settings: CampusSettings = {
       ...defaultSettings,
-      branding: {
-        ...defaultSettings.branding,
-        ...(publicBranding || {}),
-      },
-      operational: {
-        ...defaultSettings.operational,
-        ...(publicOperational || {}),
-      },
+      branding: { ...defaultSettings.branding, ...(publicBranding || {}) },
+      operational: { ...defaultSettings.operational, ...(publicOperational || {}) },
     };
 
     return {
@@ -154,7 +148,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       logo_url: publicData.logo_url,
       address: publicData.address,
       is_active: publicData.is_active,
-      status: publicData.status, // 🚀 FIX 2: Added status here too
+      status: publicData.status,
       settings,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -181,61 +175,64 @@ export function CampusProvider({ children }: { children: ReactNode }) {
             ...defaultSettings,
             ...(updated.settings as unknown as Partial<CampusSettings>),
           };
-          setCampus({
-            ...updated,
-            settings,
-          } as Campus);
-          localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify({ ...updated, settings }));
+          const updatedCampus = { ...updated, settings } as Campus;
+          setCampus(updatedCampus);
+          safeSaveCampusCache(updatedCampus);
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [campus?.id]);
 
   useEffect(() => {
     const initCampus = async () => {
       try {
-        const savedCode = localStorage.getItem(CAMPUS_CODE_KEY);
-        
-        // 🚀 FIX 1: We load the cache to show UI instantly, but we DON'T stop. 
-        // We let the code continue down to fetch the live data in the background to ensure it wasn't archived!
-        const cachedData = localStorage.getItem(CAMPUS_DATA_CACHE_KEY);
-        if (cachedData) {
-          try {
-            const parsedCampus = JSON.parse(cachedData);
-            setCampus(parsedCampus);
-          } catch (e) { console.error("Cache parse failed"); }
-        }
+        // 🛡️ FIX 2: Cache is already loaded in useState initializer above
+        // so the UI is never blank. Now try to refresh from network silently.
 
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        // 🛡️ FIX 3: If offline, just use the cache and stop — no network calls
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (isOffline) {
+          console.log('[Campus] Offline — using cached campus data.');
           setIsLoading(false);
           return;
         }
 
+        const savedCode = localStorage.getItem(CAMPUS_CODE_KEY);
+
         if (savedCode) {
-          const campusData = await fetchCampusByCode(savedCode);
-          if (campusData) {
-            setCampus(campusData);
-            localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData)); 
-          }
-        } else {
-          // If no code, check session
-          const { data: { session } } = await supabase.auth.getSession();
-          const campusId = session?.user?.user_metadata?.campus_id;
-          if (typeof campusId === 'string' && campusId) {
-            const campusData = await fetchCampusById(campusId);
+          // Refresh from network in background — but DON'T clear campus if it fails
+          try {
+            const campusData = await fetchCampusByCode(savedCode);
             if (campusData) {
               setCampus(campusData);
-              localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
-              localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData));
+              safeSaveCampusCache(campusData);
             }
+            // If campusData is null (network error), keep the cached campus — DON'T clear it
+          } catch {
+            console.warn('[Campus] Background refresh failed — keeping cached campus.');
+          }
+        } else {
+          // No saved code — check if session has campus_id
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const campusId = session?.user?.user_metadata?.campus_id;
+            if (typeof campusId === 'string' && campusId) {
+              const campusData = await fetchCampusById(campusId);
+              if (campusData) {
+                setCampus(campusData);
+                localStorage.setItem(CAMPUS_CODE_KEY, campusData.code);
+                safeSaveCampusCache(campusData);
+              }
+            }
+          } catch {
+            console.warn('[Campus] Session campus lookup failed — keeping cached campus.');
           }
         }
       } catch (err) {
-        console.error("Boot error:", err);
+        console.error('[Campus] Boot error:', err);
+        // 🛡️ FIX 4: Never clear campus on error — cache is the source of truth
       } finally {
         setIsLoading(false);
       }
@@ -255,7 +252,7 @@ export function CampusProvider({ children }: { children: ReactNode }) {
       }
       setCampus(campusData);
       localStorage.setItem(CAMPUS_CODE_KEY, code.toUpperCase());
-      localStorage.setItem(CAMPUS_DATA_CACHE_KEY, JSON.stringify(campusData)); 
+      safeSaveCampusCache(campusData);
       return { success: true };
     } catch (err) {
       setError('Failed to fetch campus details');
@@ -265,14 +262,27 @@ export function CampusProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchCampusByCode]);
 
+  // Only called from explicit "Switch Campus" button — never called automatically
   const switchCampus = useCallback(() => {
     setCampus(null);
-    localStorage.removeItem(CAMPUS_CODE_KEY);
-    localStorage.removeItem(CAMPUS_DATA_CACHE_KEY); 
+    try {
+      localStorage.removeItem(CAMPUS_CODE_KEY);
+      localStorage.removeItem(CAMPUS_DATA_CACHE_KEY);
+    } catch {}
   }, []);
 
   return (
-    <CampusContext.Provider value={{ campus, isLoading, error, settings: campus?.settings || null, setCampusByCode, switchCampus, hasCampus: !!campus }}>
+    <CampusContext.Provider
+      value={{
+        campus,
+        isLoading,
+        error,
+        settings: campus?.settings || null,
+        setCampusByCode,
+        switchCampus,
+        hasCampus: !!campus,
+      }}
+    >
       {children}
     </CampusContext.Provider>
   );

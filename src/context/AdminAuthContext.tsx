@@ -22,7 +22,9 @@ const SESSION_TOKEN_KEY = 'canteen_admin_session_token';
 const ADMIN_EMAIL_KEY = 'canteen_admin_email';
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const { user, isAdmin } = useAuth();
+  // 🛡️ FIX: Pull isInitializing so we never check isAdmin too early
+  const { user, isAdmin, isInitializing } = useAuth();
+
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasPin, setHasPin] = useState(false);
@@ -30,33 +32,27 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   const getStoredAdminEmail = (): string | null => {
-    try {
-      return localStorage.getItem(ADMIN_EMAIL_KEY);
-    } catch {
-      return null;
-    }
+    try { return localStorage.getItem(ADMIN_EMAIL_KEY); } catch { return null; }
   };
 
   const storedAdminEmail = getStoredAdminEmail();
 
-  // Get auth token for API calls
   const getAuthToken = async (): Promise<string | null> => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token || null;
   };
 
-  // Call admin-auth edge function
-  const callAdminAuth = async (action: string, data: Record<string, string> = {}): Promise<{ success?: boolean; error?: string; [key: string]: unknown }> => {
+  const callAdminAuth = async (
+    action: string,
+    data: Record<string, string> = {}
+  ): Promise<{ success?: boolean; error?: string; [key: string]: unknown }> => {
     const token = await getAuthToken();
-    if (!token) {
-      return { error: 'Not authenticated' };
-    }
+    if (!token) return { error: 'Not authenticated' };
 
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${token}`,
     };
 
-    // Add session token if available
     const storedSession = localStorage.getItem(SESSION_TOKEN_KEY);
     if (storedSession) {
       headers['X-Admin-Session'] = storedSession;
@@ -75,9 +71,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     return response;
   };
 
-  // Check if user has PIN and verify session on mount
+  // 🛡️ FIX: Wait for isInitializing to be false before checking isAdmin
+  // Previously this ran immediately and saw isAdmin=false (role not loaded yet)
+  // causing admin to be treated as student briefly
   useEffect(() => {
+    // Don't run until AuthContext has finished its first boot check
+    if (isInitializing) return;
+
     const checkPinAndSession = async () => {
+      // Not an admin — clear everything and stop
       if (!user || !isAdmin) {
         setIsAdminAuthenticated(false);
         setHasPin(false);
@@ -90,7 +92,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         const pinResult = await callAdminAuth('check-pin');
         setHasPin(!!pinResult.hasPin);
 
-        // Verify existing session
+        // Verify existing session token
         const storedSession = localStorage.getItem(SESSION_TOKEN_KEY);
         if (storedSession) {
           const sessionResult = await callAdminAuth('verify-session');
@@ -111,7 +113,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     };
 
     checkPinAndSession();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isInitializing]); // 🛡️ FIX: Added isInitializing to deps
 
   // Periodically verify session and extend it
   useEffect(() => {
@@ -126,15 +128,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       } else {
         setLastActivity(new Date());
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
+    }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [isAdminAuthenticated, sessionToken]);
 
-  const authenticate = useCallback(async (pin: string): Promise<{ success: boolean; error?: string; remainingAttempts?: number }> => {
-    if (!user || !isAdmin) {
-      return { success: false, error: 'Not authorized' };
-    }
+  const authenticate = useCallback(async (
+    pin: string
+  ): Promise<{ success: boolean; error?: string; remainingAttempts?: number }> => {
+    if (!user || !isAdmin) return { success: false, error: 'Not authorized' };
 
     const result = await callAdminAuth('verify-pin', { pin });
 
@@ -147,64 +149,46 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
 
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: result.error as string,
-      remainingAttempts: result.remainingAttempts as number | undefined
+      remainingAttempts: result.remainingAttempts as number | undefined,
     };
   }, [user, isAdmin]);
 
   const createPin = useCallback(async (pin: string): Promise<{ success: boolean; error?: string }> => {
-    if (!user || !isAdmin) {
-      return { success: false, error: 'Not authorized' };
-    }
-
-    if (pin.length < 4 || pin.length > 8) {
-      return { success: false, error: 'PIN must be 4-8 digits' };
-    }
+    if (!user || !isAdmin) return { success: false, error: 'Not authorized' };
+    if (pin.length < 4 || pin.length > 8) return { success: false, error: 'PIN must be 4-8 digits' };
 
     const result = await callAdminAuth('create-pin', { pin });
-
     if (result.success) {
       setHasPin(true);
-      // After creating PIN, authenticate automatically
       return authenticate(pin);
     }
 
     return { success: false, error: result.error as string };
   }, [user, isAdmin, authenticate]);
 
-  const changePin = useCallback(async (oldPin: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
-    if (!user || !isAdmin) {
-      return { success: false, error: 'Not authorized' };
-    }
-
-    if (newPin.length < 4 || newPin.length > 8) {
-      return { success: false, error: 'New PIN must be 4-8 digits' };
-    }
+  const changePin = useCallback(async (
+    oldPin: string,
+    newPin: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!user || !isAdmin) return { success: false, error: 'Not authorized' };
+    if (newPin.length < 4 || newPin.length > 8) return { success: false, error: 'New PIN must be 4-8 digits' };
 
     const result = await callAdminAuth('change-pin', { pin: oldPin, newPin });
-
-    if (result.success) {
-      return { success: true };
-    }
-
+    if (result.success) return { success: true };
     return { success: false, error: result.error as string };
   }, [user, isAdmin]);
 
   const logout = useCallback(async () => {
-    // Try to call the edge function, but don't fail if auth is already invalid
     try {
       const token = await getAuthToken();
-      if (token) {
-        await callAdminAuth('logout');
-      }
-    } catch (error) {
-      // Ignore errors - the main goal is to clear local state
+      if (token) await callAdminAuth('logout');
+    } catch {
       console.log('Admin logout cleanup (auth may already be invalidated)');
     }
-    
-    // Always clear local state regardless of edge function result
+
     localStorage.removeItem(SESSION_TOKEN_KEY);
     setSessionToken(null);
     setIsAdminAuthenticated(false);
@@ -212,16 +196,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetPin = useCallback(async () => {
-    // Try to call the edge function, but don't fail if auth is already invalid
     try {
       const token = await getAuthToken();
-      if (token) {
-        await callAdminAuth('reset-pin');
-      }
-    } catch (error) {
+      if (token) await callAdminAuth('reset-pin');
+    } catch {
       console.log('Admin reset cleanup (auth may already be invalidated)');
     }
-    
+
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(ADMIN_EMAIL_KEY);
     setSessionToken(null);
@@ -251,8 +232,6 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
 export function useAdminAuth() {
   const context = useContext(AdminAuthContext);
-  if (!context) {
-    throw new Error('useAdminAuth must be used within an AdminAuthProvider');
-  }
+  if (!context) throw new Error('useAdminAuth must be used within an AdminAuthProvider');
   return context;
 }

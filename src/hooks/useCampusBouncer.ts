@@ -2,101 +2,104 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 
 export function useCampusBouncer() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, isInitializing } = useAuth();
 
   useEffect(() => {
+    // 🛡️ FIX 1: Never run while auth is still initializing
+    if (isInitializing) return;
+
+    // 🛡️ FIX 2: Never run when offline — offline doesn't mean archived
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log("🛡️ Bouncer: Offline detected. Skipping campus check — user stays logged in.");
+      return;
+    }
+
+    // 🛡️ FIX 3: No user = nothing to bounce
+    if (!user) return;
+
+    // Super admins are immune
+    if (user.role === 'super_admin') return;
+
     let bouncerChannel: any = null;
+    let mounted = true;
 
     const enforceCampusStatus = async () => {
       try {
-        // 1. Check if someone is currently logged in
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) return;
+        // 🛡️ FIX 4: Use the user from AuthContext (already verified)
+        // instead of calling supabase.auth.getSession() again
+        const campusId = user.campusId;
+        if (!campusId) return;
 
-        // 🌟 2. VIP BYPASS: Check if the user is a Super Admin
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-
-        // If they are the CEO (super_admin), they are immune. Let them stay.
-        if (roleData?.role === 'super_admin') {
-          return; 
-        }
-
-        // 3. For everyone else, find out which campus they belong to
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('campus_id')
-          .eq('user_id', session.user.id)
-          .single();
-
-        if (profileError || !profile?.campus_id) return;
-
-        // 🌟 THE KICK-OUT FUNCTION (Defined once to use statically and real-time)
+        // THE KICK-OUT FUNCTION
         const executeKickOut = async () => {
-          console.warn("🛡️ Security Bouncer: Campus is offline. Forcing logout.");
-          
-          // Destroy the session in the backend
-          await supabase.auth.signOut();
-          
-          // Wipe the browser memory completely
-          localStorage.removeItem('campus_code'); 
-          localStorage.removeItem('campus_name'); 
-          localStorage.removeItem('campus_id'); 
-          localStorage.removeItem('selected_campus'); 
+          if (!mounted) return;
+          console.warn("🛡️ Bouncer: Campus archived. Executing logout.");
 
-          // Show the error message to the user
+          // Clear caches
+          try {
+            localStorage.removeItem('campus_code');
+            localStorage.removeItem('campus_name');
+            localStorage.removeItem('campus_id');
+            localStorage.removeItem('selected_campus');
+            localStorage.removeItem('gtb_cached_user');
+            localStorage.removeItem('selected_campus_id');
+            localStorage.removeItem('campus_data_cache');
+          } catch {}
+
+          // Sign out from Supabase
+          await supabase.auth.signOut().catch(() => {});
+
           toast({
             title: "Campus Offline",
             description: "This campus is currently inactive or has been archived.",
             variant: "destructive",
             duration: 6000,
           });
-          
-          // Redirect to the Select Campus screen
-          navigate('/'); 
+
+          navigate('/');
         };
 
-        // 4. INITIAL STATIC CHECK: When they first load the page
+        // INITIAL STATIC CHECK
         const { data, error: campusError } = await supabase
           .from('campuses')
           .select('status, is_active')
-          .eq('id', profile.campus_id)
+          .eq('id', campusId)
           .single();
 
+        if (!mounted) return;
+
+        // 🛡️ FIX 5: If the DB call itself fails (network error),
+        // do NOT kick the user — it's a network issue, not an archive event
         if (campusError) {
-          console.error("Failed to fetch campus status:", campusError);
+          console.warn("🛡️ Bouncer: Campus check failed (network error). User stays logged in.");
           return;
         }
 
-        const campus = data as any; 
+        const campus = data as any;
 
-        // If ALREADY archived, kick them out!
         if (campus?.status === 'archived' || campus?.is_active === false) {
           await executeKickOut();
-          return; // Stop running the rest of the script
+          return;
         }
 
-        // 🌟 5. REAL-TIME RADAR: Watch the database LIVE
+        // REAL-TIME RADAR: Watch for live archive events
         bouncerChannel = supabase
-          .channel(`bouncer-${profile.campus_id}`)
+          .channel(`bouncer-${campusId}`)
           .on(
             'postgres_changes',
-            { 
-              event: 'UPDATE', 
-              schema: 'public', 
-              table: 'campuses', 
-              filter: `id=eq.${profile.campus_id}` 
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'campuses',
+              filter: `id=eq.${campusId}`,
             },
             async (payload) => {
               const updatedCampus = payload.new as any;
-              
-              // If the Super Admin archives it while the student is looking at the app:
               if (updatedCampus.status === 'archived' || updatedCampus.is_active === false) {
                 await executeKickOut();
               }
@@ -105,17 +108,18 @@ export function useCampusBouncer() {
           .subscribe();
 
       } catch (error) {
-        console.error("Bouncer check failed:", error);
+        // 🛡️ FIX 6: Any unexpected error → stay logged in, don't kick
+        console.warn("🛡️ Bouncer: Unexpected error during campus check. User stays logged in.", error);
       }
     };
 
     enforceCampusStatus();
 
-    // 🌟 CLEANUP: Turn off the radar if the user navigates away safely
     return () => {
+      mounted = false;
       if (bouncerChannel) {
         supabase.removeChannel(bouncerChannel);
       }
     };
-  }, [navigate, toast]);
+  }, [navigate, toast, user, isInitializing]);
 }

@@ -10,7 +10,6 @@ import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { PrinterProvider } from "@/context/PrinterContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { SuperAdminProvider } from "@/context/SuperAdminContext";
-
 import { MenuProvider } from "@/context/MenuContext";
 import { OrdersProvider } from "@/context/OrdersContext";
 import { CampusProvider } from "@/context/CampusContext";
@@ -18,20 +17,14 @@ import { ProtectedRoute, AdminRoute, KioskRoute, SuperAdminRoute } from "@/compo
 import { CampusGate } from "@/components/CampusGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
-
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-
-// 🦅 IMPORT YOUR SMART SPLASH SCREEN!
-import { SplashScreen } from "@/components/SplashScreen"; 
-
-// 🦅 ADDED: IMPORT YOUR NEW APP PROMO POPUP
-import { AppPromoPopup } from "@/components/AppPromoPopup"; 
-
+import { SplashScreen } from "@/components/SplashScreen";
+import { AppPromoPopup } from "@/components/AppPromoPopup";
 import { supabase } from "@/integrations/supabase/client";
 
 // INSTANT LOAD FOR SPLASH SCREEN
-import Index from "./pages/Index"; 
+import Index from "./pages/Index";
 
 // Lazy loaded pages
 const Auth = lazy(() => import("./pages/Auth"));
@@ -39,7 +32,6 @@ const SelectCampus = lazy(() => import("./pages/SelectCampus"));
 const Menu = lazy(() => import("./pages/Menu"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
-
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const DedicatedScanner = lazy(() => import("./pages/DedicatedScanner"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
@@ -52,7 +44,6 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
-// 🌟 NEW HELP & SUPPORT PAGE LAZY IMPORT 🌟
 const HelpSupport = lazy(() => import("./pages/HelpSupport"));
 const Settings = lazy(() => import("./pages/Settings"));
 
@@ -66,11 +57,13 @@ const UserManagement = lazy(() => import("./pages/super-admin/UserManagement").t
 const AuditLogs = lazy(() => import("./pages/super-admin/AuditLogs").then(m => ({ default: m.AuditLogs })));
 const Analytics = lazy(() => import("./pages/super-admin/Analytics").then(m => ({ default: m.Analytics })));
 const Operations = lazy(() => import("./pages/super-admin/Operations").then(m => ({ default: m.Operations })));
-// 🦅 NEW: OFFERS DASHBOARDS IMPORTS
-const AdminOffers = lazy(() => import("./pages/super-admin/AdminOffers")); 
-const AdminAds = lazy(() => import("./pages/super-admin/AdminAds")); // 🦅 ADDED: AdminAds Import
-const OfferSettlements = lazy(() => import("./pages/super-admin/OfferSettlements").then(m => ({ default: m.OfferSettlements }))); 
+const AdminOffers = lazy(() => import("./pages/super-admin/AdminOffers"));
+const AdminAds = lazy(() => import("./pages/super-admin/AdminAds"));
+const OfferSettlements = lazy(() => import("./pages/super-admin/OfferSettlements").then(m => ({ default: m.OfferSettlements })));
 import { SuperAdminLayout } from "@/components/super-admin/SuperAdminLayout";
+
+// ADDED: Revenue Recovery Dashboard
+const RecoveryDashboard = lazy(() => import("./pages/RecoveryDashboard"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,7 +87,12 @@ function HardwareBackButtonHandler() {
     let listener: { remove: () => void } | null = null;
 
     CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-      if (location.pathname === '/menu' || location.pathname === '/auth' || location.pathname === '/admin' || location.pathname === '/') {
+      if (
+        location.pathname === '/menu' ||
+        location.pathname === '/auth' ||
+        location.pathname === '/admin' ||
+        location.pathname === '/'
+      ) {
         CapacitorApp.exitApp();
       } else if (canGoBack) {
         navigate(-1);
@@ -103,15 +101,13 @@ function HardwareBackButtonHandler() {
       }
     }).then(handle => { listener = handle; });
 
-    return () => {
-      listener?.remove();
-    };
+    return () => { listener?.remove(); };
   }, [location, navigate]);
 
-  return null; 
+  return null;
 }
 
-const CURRENT_APP_VERSION = '1.0.0'; 
+const CURRENT_APP_VERSION = '1.0.0';
 
 const VersionGuard = ({ children }: { children: React.ReactNode }) => {
   const [isOutdated, setIsOutdated] = useState(false);
@@ -121,11 +117,10 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
     async function checkVersion() {
       if (!Capacitor.isNativePlatform()) {
         setIsChecking(false);
-        return; 
+        return;
       }
-
       try {
-        const platform = Capacitor.getPlatform(); 
+        const platform = Capacitor.getPlatform();
         const { data, error } = await supabase
           .from('app_versions')
           .select('minimum_required_version')
@@ -135,40 +130,32 @@ const VersionGuard = ({ children }: { children: React.ReactNode }) => {
         if (error) throw error;
 
         const isOld = CURRENT_APP_VERSION.localeCompare(
-          data.minimum_required_version, 
-          undefined, 
+          data.minimum_required_version,
+          undefined,
           { numeric: true }
         ) < 0;
 
-        if (isOld) {
-          setIsOutdated(true);
-        }
+        if (isOld) setIsOutdated(true);
       } catch (error) {
-        console.error("Version check failed, letting user in for now:", error);
+        console.error("Version check failed, letting user in:", error);
       } finally {
         setIsChecking(false);
       }
     }
-
     checkVersion();
   }, []);
 
-  if (isChecking) {
-    return <PageLoader />;
-  }
+  if (isChecking) return <PageLoader />;
 
   if (isOutdated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
         <h1 className="text-3xl font-bold text-destructive mb-4">🚨 Critical Update</h1>
         <p className="text-muted-foreground mb-8 text-lg">
-          Bro, your app is out of date! We upgraded our servers to process orders faster. Update GrabTheByte to continue ordering Biryani.
+          Your app is out of date! Update GrabTheByte to continue ordering.
         </p>
-        <button 
-          onClick={() => {
-            // Use '_system' to force the native OS browser to handle the APK download
-            window.open('https://grabthebyte.com/download/app.apk', '_system');
-          }}
+        <button
+          onClick={() => window.open('https://grabthebyte.com/download/app.apk', '_system')}
           className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform"
         >
           Update Now
@@ -184,89 +171,90 @@ const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <CampusProvider>
-          <AuthProvider>
+        {/* 🛡️ FIX: AuthProvider is now OUTSIDE CampusProvider so that
+            useCampusBouncer can safely call useAuth() from within Menu.tsx.
+            CampusProvider is inside AuthProvider so campus checks happen
+            only after auth is ready. */}
+        <AuthProvider>
+          <CampusProvider>
             <AdminAuthProvider>
               <SuperAdminProvider>
                 <MenuProvider>
                   <OrdersProvider>
                     <CartProvider>
-                        <PrinterProvider>
-                          <TooltipProvider>
-                            <Toaster />
-                            <Sonner />
-                            <OfflineDetector />
-                            
-                            {/* 🛡️ WRAPPING THE ROUTER IN THE VERSION GUARD 🛡️ */}
-                            <VersionGuard>
+                      <PrinterProvider>
+                        <TooltipProvider>
+                          <Toaster />
+                          <Sonner />
+                          <OfflineDetector />
 
-                              {/* 🦅 YOUR NEW SMART APP POPUP SITS RIGHT HERE */}
-                              {/* It watches every single page, but only fires for Android Web Users */}
-                              <AppPromoPopup />
+                          <VersionGuard>
+                            <AppPromoPopup />
 
-                              <BrowserRouter>
-                                <HardwareBackButtonHandler /> 
-                                
-                                <Suspense fallback={<PageLoader />}>
-                                  <Routes>
-                                    {/* Public routes */}
-                                    <Route path="/" element={<Index />} />
-                                    <Route path="/select-campus" element={<SelectCampus />} />
-                                    
-                                    {/* Campus-gated routes */}
-                                    <Route path="/auth" element={<CampusGate><Auth /></CampusGate>} />
-                                    <Route path="/menu" element={<CampusGate><Menu /></CampusGate>} />
-                                    <Route path="/checkout" element={<CampusGate><Checkout /></CampusGate>} />
-                                    <Route path="/payment" element={<CampusGate><Payment /></CampusGate>} />
-                                    <Route path="/forgot-password" element={<ForgotPassword />} />
-                                    <Route path="/reset-password" element={<ResetPassword />} />
-                                    <Route path="/verify-email" element={<VerifyEmail />} />
-                                    
-                                    {/* Policy & Support Routes */}
-                                    <Route path="/terms" element={<TermsAndConditions />} />
-                                    <Route path="/privacy" element={<PrivacyPolicy />} />
-                                    <Route path="/refund-policy" element={<RefundPolicy />} />
-                                    <Route path="/support" element={<HelpSupport />} />
-                                    <Route path="/settings" element={<CampusGate><Settings /></CampusGate>} />
-                                    
-                                    <Route path="/my-orders" element={<CampusGate><MyOrders /></CampusGate>} />
-                                    <Route path="/order/:orderId" element={<CampusGate><OrderDetails /></CampusGate>} />
-                                    <Route path="/profile" element={<CampusGate><Profile /></CampusGate>} />
-                                    
-                                    <Route path="/admin" element={<CampusGate><AdminRoute><AdminDashboard /></AdminRoute></CampusGate>} />
-                                    <Route path="/kiosk-scanner" element={<CampusGate><KioskRoute><DedicatedScanner /></KioskRoute></CampusGate>} />
-                                    
-                                    {/* Super Admin Routes */}
-                                    <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/orders" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminOrders /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/settlements" element={<SuperAdminRoute><SuperAdminLayout><Settlements /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/campuses" element={<SuperAdminRoute><SuperAdminLayout><CampusManagement /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/settings" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/users" element={<SuperAdminRoute><SuperAdminLayout><UserManagement /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/audit-logs" element={<SuperAdminRoute><SuperAdminLayout><AuditLogs /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/analytics" element={<SuperAdminRoute><SuperAdminLayout><Analytics /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/operations" element={<SuperAdminRoute><SuperAdminLayout><Operations /></SuperAdminLayout></SuperAdminRoute>} />
-                                    
-                                    {/* 🦅 NEW: OFFERS & ADS DASHBOARD ROUTES */}
-                                    <Route path="/super-admin/offers" element={<SuperAdminRoute><SuperAdminLayout><AdminOffers /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/ads" element={<SuperAdminRoute><SuperAdminLayout><AdminAds /></SuperAdminLayout></SuperAdminRoute>} />
-                                    <Route path="/super-admin/offer-payouts" element={<SuperAdminRoute><SuperAdminLayout><OfferSettlements /></SuperAdminLayout></SuperAdminRoute>} />
-                                    
-                                    <Route path="*" element={<NotFound />} />
-                                  </Routes>
-                                </Suspense>
-                              </BrowserRouter>
-                            </VersionGuard>
+                            <BrowserRouter>
+                              <HardwareBackButtonHandler />
 
-                          </TooltipProvider>
-                        </PrinterProvider>
+                              <Suspense fallback={<PageLoader />}>
+                                <Routes>
+                                  {/* Public routes */}
+                                  <Route path="/" element={<Index />} />
+                                  <Route path="/select-campus" element={<SelectCampus />} />
+
+                                  {/* Campus-gated routes */}
+                                  <Route path="/auth" element={<CampusGate><Auth /></CampusGate>} />
+                                  <Route path="/menu" element={<CampusGate><Menu /></CampusGate>} />
+                                  <Route path="/checkout" element={<CampusGate><Checkout /></CampusGate>} />
+                                  <Route path="/payment" element={<CampusGate><Payment /></CampusGate>} />
+                                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                                  <Route path="/reset-password" element={<ResetPassword />} />
+                                  <Route path="/verify-email" element={<VerifyEmail />} />
+
+                                  {/* Policy & Support Routes */}
+                                  <Route path="/terms" element={<TermsAndConditions />} />
+                                  <Route path="/privacy" element={<PrivacyPolicy />} />
+                                  <Route path="/refund-policy" element={<RefundPolicy />} />
+                                  <Route path="/support" element={<HelpSupport />} />
+                                  <Route path="/settings" element={<CampusGate><Settings /></CampusGate>} />
+
+                                  <Route path="/my-orders" element={<CampusGate><MyOrders /></CampusGate>} />
+                                  <Route path="/order/:orderId" element={<CampusGate><OrderDetails /></CampusGate>} />
+                                  <Route path="/profile" element={<CampusGate><Profile /></CampusGate>} />
+
+                                  <Route path="/admin" element={<CampusGate><AdminRoute><AdminDashboard /></AdminRoute></CampusGate>} />
+                                  <Route path="/kiosk-scanner" element={<CampusGate><KioskRoute><DedicatedScanner /></KioskRoute></CampusGate>} />
+
+                                  {/* ADDED: Revenue Recovery Dashboard */}
+                                  <Route path="/recoverydashboard" element={<RecoveryDashboard />} />
+
+                                  {/* Super Admin Routes */}
+                                  <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/orders" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminOrders /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/settlements" element={<SuperAdminRoute><SuperAdminLayout><Settlements /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/campuses" element={<SuperAdminRoute><SuperAdminLayout><CampusManagement /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/settings" element={<SuperAdminRoute><SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/users" element={<SuperAdminRoute><SuperAdminLayout><UserManagement /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/audit-logs" element={<SuperAdminRoute><SuperAdminLayout><AuditLogs /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/analytics" element={<SuperAdminRoute><SuperAdminLayout><Analytics /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/operations" element={<SuperAdminRoute><SuperAdminLayout><Operations /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/offers" element={<SuperAdminRoute><SuperAdminLayout><AdminOffers /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/ads" element={<SuperAdminRoute><SuperAdminLayout><AdminAds /></SuperAdminLayout></SuperAdminRoute>} />
+                                  <Route path="/super-admin/offer-payouts" element={<SuperAdminRoute><SuperAdminLayout><OfferSettlements /></SuperAdminLayout></SuperAdminRoute>} />
+
+                                  <Route path="*" element={<NotFound />} />
+                                </Routes>
+                              </Suspense>
+                            </BrowserRouter>
+                          </VersionGuard>
+
+                        </TooltipProvider>
+                      </PrinterProvider>
                     </CartProvider>
                   </OrdersProvider>
                 </MenuProvider>
               </SuperAdminProvider>
             </AdminAuthProvider>
-          </AuthProvider>
-        </CampusProvider>
+          </CampusProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </ErrorBoundary>

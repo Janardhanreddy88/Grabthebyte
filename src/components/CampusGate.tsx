@@ -8,15 +8,13 @@ interface CampusGateProps {
   children: ReactNode;
 }
 
-/**
- * CampusGate ensures a campus is selected before allowing access to protected routes.
- * If no campus is selected, or if the campus is archived, it boots the user.
- */
 export function CampusGate({ children }: CampusGateProps) {
   const { hasCampus, isLoading: isCampusLoading, campus, switchCampus } = useCampus();
-  
-  // 🚀 UPDATED: Pulled in `logout` so we can destroy the session if they get booted
-  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
+
+  // 🛡️ FIX: Use isInitializing instead of isLoading
+  // isLoading is for explicit actions (login button etc.)
+  // isInitializing is true only during the very first boot check
+  const { user, isAuthenticated, isInitializing } = useAuth();
   const location = useLocation();
 
   const isCampusMismatch = useMemo(() => {
@@ -26,33 +24,31 @@ export function CampusGate({ children }: CampusGateProps) {
     return campus.id !== user.campusId;
   }, [isAuthenticated, user, campus?.id]);
 
-  // 🛡️ THE TRAPDOOR: Check if the campus has been shut down
   const isCampusArchived = useMemo(() => {
     if (!campus) return false;
-    // If it's archived OR marked inactive, it triggers the trapdoor
     return campus.status === 'archived' || campus.is_active === false;
   }, [campus]);
 
-  // 💥 THE KICKER: Boot them out if there is a mismatch OR the campus is archived
+  // 🛡️ FIX: Only handle campus mismatch here
+  // Campus archive logout is handled ONLY by useCampusBouncer
+  // Removed the logout() call here to prevent double logout race condition
   useEffect(() => {
-    // Super admins are immune to getting kicked out
     if (user?.role === 'super_admin') return;
 
     if (isCampusMismatch) {
       switchCampus();
     }
 
-    // If the campus is archived, clear the campus AND log them out instantly
+    // For archived campus — only clear campus data here
+    // useCampusBouncer handles the actual sign out
     if (isCampusArchived) {
-      switchCampus(); 
-      if (logout) {
-        logout();
-      }
+      switchCampus();
     }
-  }, [isCampusMismatch, isCampusArchived, switchCampus, logout, user?.role]);
+  }, [isCampusMismatch, isCampusArchived, switchCampus, user?.role]);
 
-  // Show loading while checking BOTH campus AND auth status
-  if (isCampusLoading || isAuthLoading) {
+  // 🛡️ FIX: Wait for BOTH isInitializing AND campusLoading
+  // before making any routing decisions
+  if (isInitializing || isCampusLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -63,21 +59,20 @@ export function CampusGate({ children }: CampusGateProps) {
     );
   }
 
-  // No campus selected - redirect to selector
+  // No campus selected → redirect to selector
   if (!hasCampus) {
     return <Navigate to="/select-campus" state={{ from: location }} replace />;
   }
 
-  // 🛑 BLOCKED: If the campus is archived, redirect them out (Admins bypass this)
+  // Campus is archived → redirect out (super_admin bypasses)
   if (isCampusArchived && user?.role !== 'super_admin') {
     return <Navigate to="/select-campus" replace />;
   }
 
-  // Campus mismatch - redirect to selector (user's account belongs elsewhere)
+  // Campus mismatch → redirect to selector
   if (isCampusMismatch) {
     return <Navigate to="/select-campus" replace />;
   }
 
-  // Campus is set, active, and user is verified - render children!
   return <>{children}</>;
 }
