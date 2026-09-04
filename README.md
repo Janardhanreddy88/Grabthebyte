@@ -79,11 +79,3 @@ npm run dev
 ```
 
 Then open the local URL provided by Vite.
-
-> The complete working Razorpay payment-recovery flow is demonstrated in the 5-minute video.
-
-## Demo
-
-**5-minute working demonstration**
-
-Failed payment → AI recovery → recovery Payment Link → customer retry → successful reconciliation.
