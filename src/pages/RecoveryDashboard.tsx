@@ -1966,27 +1966,27 @@ withTimeout,
      ======================================================= */
 
   const metrics = useMemo(() => {
-    const totalCases = cases.length;
+    // Batch summary is the single source of truth for the top-level
+    // financial metrics. The detailed case data below remains sourced
+    // from recovery logs/actions for queues, escalation, stopping rules,
+    // and audit visibility.
+    const totalCases = batches.reduce(
+      (sum, batch) =>
+        sum + Number(batch.total_cases || 0),
+      0
+    );
 
-    const amountAtRisk =
-      cases.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.log.original_amount || 0
-          ),
-        0
-      );
+    const amountAtRisk = batches.reduce(
+      (sum, batch) =>
+        sum + Number(batch.total_amount_at_risk || 0),
+      0
+    );
 
-    const recoveredAmount =
-      cases.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.log.recovered_amount || 0
-          ),
-        0
-      );
+    const recoveredAmount = batches.reduce(
+      (sum, batch) =>
+        sum + Number(batch.total_recovered_amount || 0),
+      0
+    );
 
     const remainingAmount =
       Math.max(
@@ -2148,7 +2148,7 @@ withTimeout,
 
       stoppedCases,
     };
-  }, [cases]);
+  }, [batches, cases]);
 
   /* =======================================================
      FILTERING
